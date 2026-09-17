@@ -101,18 +101,30 @@ function tone(
   };
 }
 
+function chime(notes: number[], spacing = 0.045, gain = 0.085): void {
+  const b = ensure();
+  if (!b) return;
+  notes.forEach((freq, i) => {
+    const at = i * spacing;
+    tone(freq, 0.18 + i * 0.018, "sine", gain, b.sfx, at);
+    tone(freq * 2, 0.1, "triangle", gain * 0.28, b.sfx, at + 0.012);
+  });
+}
+
 export function sfxClick(): void {
   const b = ensure();
   if (!b) return;
-  tone(880 + Math.random() * 60, 0.045, "triangle", 0.09, b.sfx);
+  tone(760 + Math.random() * 55, 0.055, "sine", 0.075, b.sfx);
+  tone(1160 + Math.random() * 45, 0.04, "triangle", 0.025, b.sfx, 0.012);
 }
 
 export function sfxPlace(): void {
   const b = ensure();
   if (!b) return;
-  noise(0.08, 0.16, b.sfx, 0, 900);
-  tone(210 + Math.random() * 30, 0.11, "sine", 0.16, b.sfx, 0, 140);
-  tone(540, 0.06, "triangle", 0.07, b.sfx, 0.02);
+  noise(0.055, 0.08, b.sfx, 0, 1200);
+  tone(250 + Math.random() * 24, 0.13, "sine", 0.13, b.sfx, 0, 165);
+  tone(620, 0.095, "triangle", 0.075, b.sfx, 0.018, 740);
+  tone(930, 0.12, "sine", 0.035, b.sfx, 0.05);
 }
 
 export function sfxClear(combo: number): void {
@@ -122,6 +134,7 @@ export function sfxClear(combo: number): void {
   tone(base, 0.14, "triangle", 0.18, b.sfx);
   tone(base * 1.26, 0.16, "sine", 0.12, b.sfx, 0.04);
   tone(base * 1.5, 0.2, "sine", 0.09, b.sfx, 0.08);
+  chime([base * 2, base * 2.5, base * 3], 0.052, 0.042 + Math.min(combo, 6) * 0.005);
 }
 
 export function sfxBomb(): void {
@@ -130,6 +143,7 @@ export function sfxBomb(): void {
   noise(0.28, 0.32, b.sfx, 0, 280);
   tone(90, 0.32, "sine", 0.28, b.sfx, 0, 46);
   tone(180, 0.18, "triangle", 0.1, b.sfx, 0.04, 70);
+  chime([294, 440, 587], 0.06, 0.035);
 }
 
 export function sfxRocket(): void {
@@ -138,6 +152,7 @@ export function sfxRocket(): void {
   tone(280, 0.22, "sawtooth", 0.1, b.sfx, 0, 720);
   tone(420, 0.18, "triangle", 0.08, b.sfx, 0.04, 980);
   noise(0.16, 0.12, b.sfx, 0.02, 1800);
+  chime([659, 880, 1175], 0.045, 0.038);
 }
 
 export function sfxBlast(): void {
@@ -159,6 +174,7 @@ export function sfxWin(): void {
   const b = ensure();
   if (!b) return;
   [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, "triangle", 0.16, b.sfx, i * 0.08));
+  chime([1046, 1318, 1568, 2093], 0.075, 0.055);
 }
 
 export function sfxOver(): void {
@@ -173,12 +189,14 @@ export function sfxCoin(): void {
   if (!b) return;
   tone(880, 0.08, "square", 0.08, b.sfx);
   tone(1320, 0.12, "square", 0.07, b.sfx, 0.05);
+  tone(1760, 0.16, "sine", 0.045, b.sfx, 0.09);
 }
 
 export function sfxUi(): void {
   const b = ensure();
   if (!b) return;
-  tone(720 + Math.random() * 40, 0.05, "sine", 0.09, b.sfx);
+  tone(700 + Math.random() * 40, 0.07, "sine", 0.065, b.sfx);
+  tone(1050, 0.065, "triangle", 0.022, b.sfx, 0.018);
 }
 
 function ensureTrack(): HTMLAudioElement | null {
