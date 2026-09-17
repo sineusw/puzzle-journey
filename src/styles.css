@@ -400,6 +400,47 @@
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
 }
 
+.pj-objective {
+  width: min(82%, 300px);
+  margin: 6px auto 0;
+  padding: 5px 9px 7px;
+  border: 1px solid rgba(255, 229, 154, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(31, 51, 84, 0.96), rgba(10, 25, 50, 0.96));
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.11);
+}
+
+.pj-objective-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-cream);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+}
+
+.pj-objective-copy strong { color: #ffe07a; }
+
+.pj-objective-track {
+  height: 6px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #071225;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.72);
+}
+
+.pj-objective-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #20d979, #7cf5ac);
+  box-shadow: 0 0 8px rgba(82, 240, 151, 0.6);
+  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .pj-play {
   position: relative;
   flex: 1;
@@ -498,6 +539,10 @@
   outline-offset: -2px;
 }
 
+.pj-well.is-landed .pj-cube {
+  animation: pj-land 340ms cubic-bezier(0.2, 1.5, 0.42, 1) both;
+}
+
 .pj-cube {
   position: relative;
   width: 100%;
@@ -516,10 +561,10 @@
 }
 .pj-cube-layers {
   position: absolute;
-  left: 10%;
-  right: 10%;
-  top: 7%;
-  height: 66%;
+  left: 8%;
+  right: 8%;
+  top: 5%;
+  bottom: 21%;
   z-index: 2;
   pointer-events: none;
 }
@@ -547,10 +592,29 @@
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.28));
 }
 .pj-sp.is-fill {
-  inset: 0;
+  inset: -3%;
   overflow: hidden;
-  border-radius: 18%;
+  border-radius: 12%;
   filter: none;
+}
+.pj-sp-arrow {
+  inset: -6%;
+  filter:
+    drop-shadow(0 2px 0 rgba(7, 22, 54, 0.72))
+    drop-shadow(0 0 5px rgba(126, 224, 255, 0.45));
+}
+.pj-sp-bomb {
+  inset: 8%;
+  filter:
+    drop-shadow(0 3px 2px rgba(0, 0, 0, 0.62))
+    drop-shadow(0 0 5px rgba(186, 91, 255, 0.3));
+}
+.pj-sp-stone {
+  inset: -7%;
+  border-radius: 13%;
+  filter:
+    drop-shadow(0 2px 0 rgba(24, 30, 29, 0.9))
+    contrast(1.05);
 }
 
 .pj-tray-wrap {
@@ -657,8 +721,8 @@
 }
 
 .pj-powers {
-  width: min(100%, 360px);
-  margin: 10px auto 0;
+  width: min(100%, 340px);
+  margin: 9px auto 0;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
@@ -667,34 +731,39 @@
 
 .pj-power-wrap {
   position: relative;
-  width: 58px;
-  height: 70px;
+  width: 62px;
+  height: 64px;
 }
 
 .pj-power {
   position: relative;
-  width: 58px;
-  height: 70px;
-  border-radius: 14px;
-  border: 0;
-  background: linear-gradient(180deg, #2a4068 0%, #152445 100%);
+  width: 62px;
+  height: 64px;
+  border-radius: 19px;
+  border: 1px solid rgba(135, 178, 237, 0.28);
+  background:
+    radial-gradient(circle at 38% 18%, rgba(92, 130, 190, 0.42), transparent 38%),
+    linear-gradient(155deg, #354c76 0%, #1b2b4c 48%, #101a30 100%);
   color: #fff8e8;
   box-shadow:
     0 5px 0 #070e1c,
-    0 10px 14px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 1px;
-  padding: 6px 3px 16px;
+    0 9px 15px rgba(0, 0, 0, 0.4),
+    inset 0 2px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -5px 9px rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  padding: 4px 5px 12px;
+  overflow: visible;
 }
 
 .pj-power .pj-ico {
-  width: 30px;
-  height: 30px;
-  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5));
+  width: 43px;
+  height: 43px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 4px 2px rgba(0, 0, 0, 0.55))
+    saturate(1.1)
+    contrast(1.05);
 }
 
 .pj-power-name {
@@ -728,15 +797,15 @@
   position: absolute;
   top: auto;
   right: auto;
-  left: 5px;
-  bottom: 5px;
-  min-width: 16px;
-  height: 15px;
-  padding: 0 5px;
+  left: 7px;
+  bottom: 4px;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
   border-radius: 999px;
   background: linear-gradient(180deg, #2a3650, #121a2c);
   box-shadow: 0 1px 0 #070e1c, inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   display: grid;
@@ -747,10 +816,10 @@
 
 .pj-add {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 18px;
-  height: 18px;
+  right: -4px;
+  bottom: -2px;
+  width: 23px;
+  height: 23px;
   border: 0;
   padding: 0;
   border-radius: 999px;
@@ -758,10 +827,11 @@
   color: #063018;
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1;
-  box-shadow: 0 2px 0 #0e7a32, inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(210, 255, 220, 0.62);
+  box-shadow: 0 3px 0 #0e7a32, 0 4px 7px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.78);
   z-index: 2;
 }
 
@@ -1102,6 +1172,13 @@
   100% { transform: scale(0); opacity: 0; }
 }
 
+@keyframes pj-land {
+  0% { transform: translateY(-18%) scale(0.88, 1.1); filter: brightness(1.25); }
+  58% { transform: translateY(3%) scale(1.08, 0.92); }
+  78% { transform: translateY(-2%) scale(0.97, 1.03); }
+  100% { transform: none; filter: none; }
+}
+
 @keyframes pj-combo {
   0% { transform: scale(0.7) translateY(8px); opacity: 0; }
   18% { transform: scale(1.08) translateY(0); opacity: 1; }
@@ -1138,6 +1215,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pj-cube.is-flash,
+  .pj-well.is-landed .pj-cube,
   .pj-combo,
   .pj-sheet,
   .pj-shake,
@@ -1154,7 +1232,7 @@
   .pj-rail { width: 48px; min-height: 56px; }
   .pj-rail .pj-ico { width: 28px; height: 28px; }
   .pj-power-wrap,
-  .pj-power { width: 52px; height: 64px; }
+  .pj-power { width: 56px; height: 59px; }
 }
 
 @media (min-width: 420px) {
@@ -1168,7 +1246,7 @@
   .pj-tray { min-height: 80px; margin-top: 8px; }
   .pj-slot { min-height: 74px; }
   .pj-power-wrap,
-  .pj-power { width: 52px; height: 64px; }
+  .pj-power { width: 56px; height: 59px; }
   .pj-powers { margin-top: 8px; }
   .pj-title { padding-top: 0; padding-bottom: 0; }
   .pj-nav-btn { min-height: 52px; }
