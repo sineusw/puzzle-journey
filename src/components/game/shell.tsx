@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Home, MapPin, MoreHorizontal, Music, Paintbrush, Trophy, Volume2, VolumeX } from "lucide-react";
-import { xpForLevel } from "@/lib/game/content";
+import { goalLabel, xpForLevel } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
 import { formatInt } from "@/lib/utils";
@@ -60,6 +60,9 @@ export function GameShell() {
 
   const xpNeed = xpForLevel(profile.level);
   const xpPct = Math.min(100, Math.round((profile.xp / xpNeed) * 100));
+  const goalPct = match.goal
+    ? Math.min(100, Math.round((match.goalProgress / match.goal.value) * 100))
+    : 0;
 
   return (
     <div className="pj-root" data-skin={profile.skin}>
@@ -120,12 +123,25 @@ export function GameShell() {
 
         <div className="pj-title">
           <Logo />
-          <div className="pj-score tabular-nums">
-            {formatInt(match.score)}
-            {match.combo > 1 ? `  ·  x${match.combo}` : ""}
-            {match.goal ? `  ·  ${Math.min(match.goalProgress, match.goal.value)}/${match.goal.value}` : ""}
-            {match.shield > 0 ? `  ·  frost ${match.shield}` : ""}
-          </div>
+          {match.goal ? (
+            <div className="pj-objective" aria-label={`${goalLabel(match.goal)}. ${goalPct}% complete.`}>
+              <div className="pj-objective-copy">
+                <span>{goalLabel(match.goal)}</span>
+                <strong className="tabular-nums">
+                  {Math.min(match.goalProgress, match.goal.value)}/{match.goal.value}
+                </strong>
+              </div>
+              <div className="pj-objective-track" aria-hidden="true">
+                <span style={{ width: `${goalPct}%` }} />
+              </div>
+            </div>
+          ) : (
+            <div className="pj-score tabular-nums">
+              {formatInt(match.score)}
+              {match.combo > 1 ? `  ·  x${match.combo}` : ""}
+              {match.shield > 0 ? `  ·  frost ${match.shield}` : ""}
+            </div>
+          )}
         </div>
 
         {tab === "home" ? (
