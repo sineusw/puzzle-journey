@@ -42,6 +42,7 @@ export type Panel =
 
 export type FlashCell = { r: number; c: number; cell: Cell };
 export type ComboPop = { id: number; label: string; score: number; combo: number };
+export type LandedCell = { r: number; c: number };
 
 type GameStore = {
   ready: boolean;
@@ -53,6 +54,7 @@ type GameStore = {
   selected: number | null;
   targeting: PowerId | null;
   flash: FlashCell[];
+  landed: LandedCell[];
   shake: boolean;
   comboPop: ComboPop | null;
   toast: string | null;
@@ -125,6 +127,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selected: 0,
   targeting: null,
   flash: [],
+  landed: [],
   shake: false,
   comboPop: null,
   toast: null,
@@ -187,6 +190,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   tryPlace: (trayIndex, row, col) => {
     const { match, profile } = get();
+    const placedPiece = match.tray[trayIndex];
     const result = placePiece(match, trayIndex, row, col);
     if (!result.ok) {
       audio.sfxBad();
@@ -255,11 +259,15 @@ export const useGame = create<GameStore>((set, get) => ({
             combo: result.combo,
           }
         : null;
+    const landed = placedPiece
+      ? placedPiece.cells.map(([dr, dc]) => ({ r: row + dr, c: col + dc }))
+      : [];
     set({
       match: result.match,
       profile: nextProfile,
       selected: result.match.tray.findIndex((p) => p),
       flash: result.clear?.cells ?? [],
+      landed,
       shake: Boolean(result.clear && profile.settings.shake && result.clear.lines >= 2),
       comboPop,
       levelUpTo: leveled.leveled,
@@ -269,6 +277,7 @@ export const useGame = create<GameStore>((set, get) => ({
     else if (result.match.over) audio.sfxOver();
     persistSoon(get);
     window.setTimeout(() => set({ flash: [], shake: false }), 520);
+    window.setTimeout(() => set({ landed: [] }), 360);
     window.setTimeout(() => set({ comboPop: null }), 900);
     return true;
   },
