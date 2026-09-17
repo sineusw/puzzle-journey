@@ -1,7 +1,7 @@
 import { newEndlessMatch, sanitizeMatch, type Match } from "./engine";
 import type { PowerId, QuestId, SkinId } from "./content";
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = "puzzle-journey-v1";
 
 export type PowerCounts = Record<PowerId, number>;
@@ -64,6 +64,7 @@ export function todayKey(d = new Date()): string {
 
 function migrate(raw: Profile): Profile {
   const base = defaultProfile();
+  const shouldRefreshShowcase = !raw.version || raw.version < SAVE_VERSION;
   const next: Profile = {
     ...base,
     ...raw,
@@ -76,6 +77,10 @@ function migrate(raw: Profile): Profile {
       unlocked: raw.adventure?.unlocked ?? 1,
       stars: raw.adventure?.stars ?? {},
     },
+    // Version 2 introduced the dimensional special-tile showcase. Keep the
+    // player's currency and progress, but replace the stale v1 board so the
+    // upgraded bomb, arrow and stone art is visible immediately.
+    match: shouldRefreshShowcase ? null : raw.match,
   };
   if (next.questDay !== todayKey()) {
     next.questDay = todayKey();
