@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Puzzle Journey",
+      "hasCanvas": false,
+      "bodyTextLen": 462,
+      "bodyTextHash": "e45aff0fc88435cfdc165e27f49f15152faa3202fcf998c53e83c4b5fcdad61d",
+      "bodyTextPrefix": "Lv. 1 240 + 80 + PUZZLE JOURNEY CLEAR · RELAX · LEVEL UP 0 SMALL",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Puzzle Journey",
+      "hasCanvas": false,
+      "bodyTextLen": 437,
+      "bodyTextHash": "dff4b872dbb1dfd39d911f8d0b5e04bba20dd44125ff186cc69b0b61da1dc26e",
+      "bodyTextPrefix": "Lv. 1 240 + 80 + PUZZLE JOURNEY CLEAR · RELAX · LEVEL UP 0 3 + 3",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
