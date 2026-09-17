@@ -31,6 +31,7 @@ export function PlayArea() {
   const selected = useGame((s) => s.selected);
   const targeting = useGame((s) => s.targeting);
   const flash = useGame((s) => s.flash);
+  const landed = useGame((s) => s.landed);
   const shake = useGame((s) => s.shake);
   const comboPop = useGame((s) => s.comboPop);
   const selectPiece = useGame((s) => s.selectPiece);
@@ -190,6 +191,7 @@ export function PlayArea() {
   };
 
   const flashAt = (r: number, c: number) => flash.find((f) => f.r === r && f.c === c);
+  const landedAt = (r: number, c: number) => landed.some((p) => p.r === r && p.c === c);
 
   const draggingPiece = drag ? match.tray[drag.index] : null;
   const ghostMetrics = (() => {
@@ -228,6 +230,7 @@ export function PlayArea() {
                 const key = `${r}-${c}`;
                 const col = colorOf(cell);
                 const ghost = flashAt(r, c);
+                const justLanded = landedAt(r, c);
                 const hinted = hintCells.has(key);
                 const willClear = clearSet.has(key);
                 const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
@@ -238,7 +241,7 @@ export function PlayArea() {
                     type="button"
                     data-cell={key}
                     data-testid={`cell-${r}-${c}`}
-                    className={`pj-well ${willClear ? "is-clear" : ""} ${hinted ? "is-hint" : ""} ${targeting ? "is-target" : ""} ${ghost ? "is-boom" : ""}`}
+                    className={`pj-well ${willClear ? "is-clear" : ""} ${hinted ? "is-hint" : ""} ${targeting ? "is-target" : ""} ${ghost ? "is-boom" : ""} ${justLanded ? "is-landed" : ""}`}
                     onClick={() => onCellClick(r, c)}
                     aria-label={`Row ${r + 1} column ${c + 1}`}
                   >
