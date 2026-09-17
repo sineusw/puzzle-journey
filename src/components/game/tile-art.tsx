@@ -26,7 +26,7 @@ export function PowerGlyph({ name }: { name: "hammer" | "refresh" | "bomb" | "fr
 function BombFace() {
   const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 32 32" className="pj-sp" aria-hidden="true">
+    <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true">
       <defs>
         <radialGradient id={`${id}-b`} cx="32%" cy="28%" r="72%">
           <stop offset="0%" stopColor="#7a628c" />
@@ -38,13 +38,15 @@ function BombFace() {
           <stop offset="100%" stopColor="#a07838" />
         </linearGradient>
       </defs>
-      <ellipse cx="16" cy="29.2" rx="9" ry="1.6" fill="#000" opacity="0.28" />
-      <circle cx="16" cy="18.4" r="11.4" fill={`url(#${id}-b)`} />
-      <circle cx="16" cy="18.4" r="11.4" fill="none" stroke="#d4b07a" strokeWidth="1.05" />
-      <ellipse cx="12.2" cy="14.2" rx="4.6" ry="2.8" fill="rgba(255,255,255,0.24)" />
-      <rect x="13.1" y="6.2" width="5.8" height="3.4" rx="0.9" fill={`url(#${id}-c)`} stroke="#f0e0b0" strokeWidth="0.4" />
-      <path d="M19 7.2c2.6-2.8 6-2.5 7.2.4" fill="none" stroke="#f0a030" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M26.6 4.4l.9 2 2.1.85-2.1.85-.9 2-.9-2-2.1-.85 2.1-.85z" fill="#ffe27a" stroke="#fff6c8" strokeWidth="0.35" />
+      <ellipse cx="15.3" cy="28.2" rx="10.6" ry="2.2" fill="#050208" opacity="0.5" />
+      <circle cx="15.4" cy="18.2" r="11.8" fill="#0b0610" stroke="#8f6aa8" strokeWidth="1.7" />
+      <circle cx="15.4" cy="18.2" r="10.5" fill={`url(#${id}-b)`} stroke="#e0b8f0" strokeWidth="0.55" />
+      <path d="M8.7 13.2c2.5-4.5 8.6-6.2 13.1-2.9" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" opacity="0.25" />
+      <ellipse cx="11.7" cy="13.7" rx="4" ry="2.4" fill="rgba(255,255,255,0.3)" />
+      <rect x="12.5" y="5.6" width="6.2" height="4.2" rx="1" fill={`url(#${id}-c)`} stroke="#fff1bf" strokeWidth="0.65" />
+      <path d="M18.7 7c3-3.1 6.8-2.4 7.6.4" fill="none" stroke="#d98822" strokeWidth="2.1" strokeLinecap="round" />
+      <path d="M26.5 3.1l1 2.3 2.4.95-2.4.95-1 2.3-1-2.3-2.4-.95 2.4-.95z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.5" />
+      <circle cx="26.5" cy="6.35" r="1.25" fill="#ff9f20" opacity="0.8" />
     </svg>
   );
 }
@@ -54,7 +56,7 @@ function ArrowFace({ dir }: { dir: "h" | "v" }) {
   return (
     <svg
       viewBox="0 0 32 32"
-      className="pj-sp"
+      className="pj-sp pj-sp-arrow"
       aria-hidden="true"
       style={{ transform: dir === "h" ? "rotate(90deg)" : undefined }}
     >
@@ -65,16 +67,11 @@ function ArrowFace({ dir }: { dir: "h" | "v" }) {
           <stop offset="100%" stopColor="#6aa8e0" />
         </linearGradient>
       </defs>
-      <path
-        d="M16 2.8 L28.2 16.6 H21.6 V29 H10.4 V16.6 H3.8 Z"
-        fill={`url(#${id}-a)`}
-        stroke="#f4fbff"
-        strokeWidth="1.15"
-        strokeLinejoin="round"
-      />
-      <path d="M16 5.4 L25.2 16.6 H20.2 V27.2 H16 Z" fill="rgba(20,50,110,0.28)" />
-      <path d="M16 5.2 L7.4 16.6 H11.6" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.35" strokeLinejoin="round" />
-      <path d="M16 3.6 V14" stroke="rgba(180,230,255,0.55)" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M16 1.8 L29.5 16.3 H22.4 V30 H9.6 V16.3 H2.5 Z" fill="#16376f" stroke="#87d5ff" strokeWidth="2.2" strokeLinejoin="round" />
+      <path d="M16 3.4 L27.5 16 H20.7 V28.2 H11.3 V16 H4.5 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.75" strokeLinejoin="round" />
+      <path d="M16 4.8 L25.1 15.8 H19.2 V26.8 H16 Z" fill="#3976b9" opacity="0.44" />
+      <path d="M15.8 4.3 L6.9 15.8 H11" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" opacity="0.92" />
+      <path d="M13 27.3 V17.2" stroke="#fff" strokeWidth="1.15" strokeLinecap="round" opacity="0.58" />
     </svg>
   );
 }
@@ -104,16 +101,18 @@ function BlastFace() {
 function StoneFace({ hp }: { hp: 1 | 2 }) {
   const heavy = hp === 1;
   return (
-    <svg viewBox="0 0 32 32" className="pj-sp is-fill" aria-hidden="true">
-      <path d="M3 4.2 L16.6 2.8 15 16.4 3.4 15.2 Z" fill="rgba(255,255,255,0.18)" />
-      <path d="M16.6 2.8 L29.2 5 28.4 17 15 16.4 Z" fill="rgba(20,24,32,0.18)" />
-      <path d="M3.4 15.2 L15 16.4 13.8 29.2 4 27.6 Z" fill="rgba(20,24,32,0.22)" />
-      <path d="M15 16.4 L28.4 17 27.4 29 13.8 29.2 Z" fill="rgba(255,255,255,0.06)" />
-      <path d="M6.6 5 L12.8 14.8 L7.2 23 L15 29.2" fill="none" stroke={heavy ? "#1a1e26" : "#2c323c"} strokeWidth={heavy ? 1.8 : 1.3} strokeLinecap="round" />
-      <path d="M12.8 14.8 L22.6 12.2 L26.8 21.6" fill="none" stroke={heavy ? "#1a1e26" : "#2c323c"} strokeWidth={heavy ? 1.5 : 1.1} strokeLinecap="round" />
-      <path d="M22.6 12.2 L20.6 5.2" fill="none" stroke="#2c323c" strokeWidth="1" strokeLinecap="round" />
-      {heavy ? <path d="M9 19 L19 21 L16.8 28" fill="none" stroke="#14181e" strokeWidth="1.4" strokeLinecap="round" /> : null}
-      <path d="M6.4 6.2 L15 4.8" fill="none" stroke="rgba(255,255,255,0.32)" strokeWidth="1.15" strokeLinecap="round" />
+    <svg viewBox="0 0 32 32" className="pj-sp is-fill pj-sp-stone" aria-hidden="true">
+      <path d="M2.2 3.2 L16.2 2 L14.7 15.6 L2.7 14.3 Z" fill="#c4c9c5" stroke="#59615f" strokeWidth="0.65" />
+      <path d="M16.2 2 L29.8 4.1 L28.4 16.3 L14.7 15.6 Z" fill="#969e9b" stroke="#4e5654" strokeWidth="0.65" />
+      <path d="M2.7 14.3 L14.7 15.6 L13.2 29.8 L3.5 27.9 Z" fill="#858e8b" stroke="#454d4b" strokeWidth="0.65" />
+      <path d="M14.7 15.6 L28.4 16.3 L27.7 29 L13.2 29.8 Z" fill="#adb3ae" stroke="#525a57" strokeWidth="0.65" />
+      <path d="M4.2 5.2 L12.5 14.4 L7.4 22.2 L13.2 29.2" fill="none" stroke={heavy ? "#202625" : "#343b39"} strokeWidth={heavy ? 2 : 1.45} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.5 14.4 L21.8 11.8 L27.1 19.8" fill="none" stroke={heavy ? "#202625" : "#343b39"} strokeWidth={heavy ? 1.8 : 1.25} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21.8 11.8 L19.9 4.2 M21.8 11.8 L27.7 8.3" fill="none" stroke="#343b39" strokeWidth="1.1" strokeLinecap="round" />
+      {heavy ? <path d="M7.4 22.2 L18.8 21 L16.2 29.2 M18.8 21 L24.2 26.3" fill="none" stroke="#181d1c" strokeWidth="1.55" strokeLinecap="round" /> : null}
+      <path d="M4.9 5.5 L14.4 4" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+      <path d="M17.8 3.9 L27.6 5.5" fill="none" stroke="#fff" strokeWidth="0.9" strokeLinecap="round" opacity="0.28" />
+      <path d="M25.2 23.5c-2.2-1-3.9-.2-5.2 1.2" fill="none" stroke="#6f8664" strokeWidth="1.1" strokeLinecap="round" opacity="0.75" />
     </svg>
   );
 }
