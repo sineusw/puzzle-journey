@@ -1239,6 +1239,116 @@
   .pj-frame { max-width: 332px; }
 }
 
+/* The approved art direction is a broad portrait game canvas, not a tiny
+   phone strip floating in the middle of a laptop. Scale the same playable UI
+   into that composition whenever the viewport has room, while retaining the
+   compact mobile layout above. */
+@media (min-width: 700px) and (min-height: 760px) {
+  .pj-root {
+    width: min(100%, 790px);
+  }
+
+  .pj-stage {
+    width: min(100%, 760px);
+    padding: calc(14px + env(safe-area-inset-top)) 18px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .pj-hud {
+    gap: 12px;
+  }
+
+  .pj-chip {
+    min-height: 54px;
+    padding: 5px 10px 5px 6px;
+    gap: 9px;
+    font-size: 20px;
+  }
+
+  .pj-chip-wide {
+    flex: 1.2;
+  }
+
+  .pj-lv { font-size: 19px; }
+  .pj-avatar { width: 43px; height: 43px; }
+  .pj-chip-ico { width: 34px; height: 34px; }
+  .pj-plus { width: 29px; height: 29px; font-size: 20px; }
+  .pj-icon-btn { width: 52px; height: 52px; border-radius: 17px; }
+  .pj-gear { width: 30px; height: 30px; }
+  .pj-audio-btn { width: 34px; height: 40px; }
+  .pj-audio-btn svg { width: 22px; height: 22px; }
+
+  .pj-title {
+    padding: 4px 100px 8px;
+  }
+
+  .pj-crown svg { width: 31px; height: 31px; }
+  .pj-word-a { font-size: 3.25rem; -webkit-text-stroke-width: 5px; }
+  .pj-word-b { font-size: 3.4rem; -webkit-text-stroke-width: 5px; }
+  .pj-tag { padding: 6px 22px 7px; font-size: 14px; }
+  .pj-score { font-size: 1.4rem; }
+
+  .pj-play { gap: 14px; }
+  .pj-board-row { gap: 10px; }
+
+  .pj-frame {
+    width: min(100%, 470px);
+    max-width: 470px;
+    padding: 16px;
+    border-radius: 38px;
+  }
+
+  .pj-frame::before { inset: 10px; border-radius: 30px; }
+  .pj-grid { gap: 4px; padding: 8px; border-radius: 22px; }
+  .pj-rivet { width: 15px; height: 15px; }
+  .pj-rivet.tl { top: 10px; left: 10px; }
+  .pj-rivet.tr { top: 10px; right: 10px; }
+  .pj-rivet.bl { bottom: 10px; left: 10px; }
+  .pj-rivet.br { bottom: 10px; right: 10px; }
+
+  .pj-rails {
+    flex-basis: 68px;
+    gap: 12px;
+  }
+
+  .pj-rail {
+    width: 68px;
+    min-height: 76px;
+    border-radius: 20px;
+    font-size: 14px;
+  }
+
+  .pj-rail .pj-ico { width: 39px; height: 39px; }
+
+  .pj-tray-bar { padding: 0 12px 8px; }
+  .pj-tray-label { font-size: 17px; }
+  .pj-hint-btn { min-height: 42px; padding-inline: 18px; font-size: 15px; }
+  .pj-tray { min-height: 122px; padding: 15px 14px 13px; gap: 12px; border-radius: 30px; }
+  .pj-slot { min-height: 108px; border-radius: 22px; }
+  .pj-mini { transform: scale(1.25); }
+
+  .pj-powers {
+    width: min(100%, 460px);
+    gap: 18px;
+    margin-top: 12px;
+  }
+
+  .pj-power-wrap,
+  .pj-power { width: 82px; height: 84px; }
+  .pj-power { border-radius: 25px; padding: 5px 7px 15px; }
+  .pj-power .pj-ico { width: 58px; height: 58px; }
+  .pj-count { left: 8px; bottom: 5px; min-width: 25px; height: 22px; font-size: 14px; }
+  .pj-add { right: -5px; bottom: -3px; width: 29px; height: 29px; font-size: 20px; }
+
+  .pj-nav {
+    margin-top: 12px;
+    padding: 11px 8px 13px;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .pj-nav-btn { min-height: 67px; gap: 5px; font-size: 15px; }
+  .pj-nav-svg { width: 29px; height: 29px; }
+}
+
 @media (max-height: 820px) {
   .pj-word-a { font-size: 1.45rem; -webkit-text-stroke-width: 3px; }
   .pj-word-b { font-size: 1.55rem; -webkit-text-stroke-width: 3px; }
