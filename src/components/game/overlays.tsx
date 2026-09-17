@@ -104,7 +104,6 @@ export function PowerBar() {
             aria-label={item.label}
           >
             <GameIcon name={item.icon} />
-            <span className="pj-power-name">{item.label}</span>
             <span className="pj-count">{profile.powerups[item.id]}</span>
           </button>
           <button
