@@ -254,6 +254,56 @@ function stopFallbackMusic(): void {
   }
 }
 
+export function sfxVisitorWarn(): void {
+  const b = ensure();
+  if (!b) return;
+  chime([392, 494, 587], 0.07, 0.05);
+  noise(0.12, 0.06, b.sfx, 0.02, 900);
+}
+
+export function sfxVisitor(id: "milo" | "luna" | "kai" | "nia" | "pip"): void {
+  const b = ensure();
+  if (!b) return;
+  if (id === "milo") {
+    tone(420, 0.09, "triangle", 0.09, b.sfx, 0, 520);
+    tone(640, 0.1, "sine", 0.07, b.sfx, 0.08, 780);
+    noise(0.08, 0.05, b.sfx, 0.04, 1400);
+  } else if (id === "luna") {
+    chime([523, 659, 784, 988], 0.08, 0.055);
+    tone(1175, 0.22, "sine", 0.04, b.sfx, 0.12);
+  } else if (id === "kai") {
+    noise(0.1, 0.16, b.sfx, 0, 700);
+    tone(160, 0.12, "triangle", 0.12, b.sfx, 0, 90);
+    tone(240, 0.08, "sine", 0.06, b.sfx, 0.08);
+  } else if (id === "nia") {
+    chime([349, 440, 523], 0.09, 0.05);
+    tone(294, 0.16, "triangle", 0.05, b.sfx, 0.04);
+  } else {
+    tone(880, 0.07, "sine", 0.07, b.sfx);
+    tone(1320, 0.09, "triangle", 0.05, b.sfx, 0.06);
+    tone(1760, 0.08, "sine", 0.035, b.sfx, 0.12);
+  }
+}
+
+export function sfxVisitorAct(id: "milo" | "luna" | "kai" | "nia" | "pip"): void {
+  const b = ensure();
+  if (!b) return;
+  if (id === "milo") {
+    noise(0.06, 0.07, b.sfx, 0, 1100);
+    tone(300, 0.1, "sine", 0.08, b.sfx, 0, 220);
+  } else if (id === "luna") {
+    chime([784, 988, 1175], 0.05, 0.05);
+  } else if (id === "kai") {
+    noise(0.16, 0.2, b.sfx, 0, 500);
+    tone(110, 0.18, "sine", 0.14, b.sfx, 0, 55);
+  } else if (id === "nia") {
+    tone(520, 0.12, "triangle", 0.07, b.sfx);
+    tone(640, 0.12, "sine", 0.05, b.sfx, 0.08);
+  } else {
+    chime([659, 784, 988], 0.045, 0.048);
+  }
+}
+
 export function bindAudioLifecycle(): () => void {
   const onVis = () => {
     if (document.visibilityState === "visible") {

@@ -11,6 +11,7 @@ Clear · Relax · Level Up
 - Specials: **arrow** (row/column), **bomb** (3×3), **stone** (takes a hit)
 - Boosters: Hammer, Shuffle, Bomb, Freeze
 - Sound effects and music can be toggled separately in the top bar or Settings
+- **Island Visitors** occasionally hop in (Milo, Luna, Kai, Nia, Pip) to move, enchant, build, rearrange, or recolor a block — then leave. Summon them from Settings while testing.
 
 ## Run locally
 

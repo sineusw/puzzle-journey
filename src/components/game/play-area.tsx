@@ -4,6 +4,7 @@ import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, overlaysOf, pieceSize } from "./block";
 import { SideRails } from "./overlays";
+import { VisitorLayer } from "./visitors/visitor-layer";
 
 type Drag = {
   index: number;
@@ -38,6 +39,9 @@ export function PlayArea() {
   const rotateSelected = useGame((s) => s.rotateSelected);
   const tryPlace = useGame((s) => s.tryPlace);
   const usePowerOnCell = useGame((s) => s.usePowerOnCell);
+  const visitorBusy = useGame((s) => s.visitorBusy);
+  const visitorEvent = useGame((s) => s.visitorEvent);
+  const setPointerBusy = useGame((s) => s.setPointerBusy);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -115,6 +119,7 @@ export function PlayArea() {
       const h = hoverRef.current;
       dragRef.current = null;
       setDrag(null);
+      setPointerBusy(false);
       if (piece && h?.valid && moved.current) {
         skipClick.current = true;
         tryPlace(d.index, h.r, h.c);
@@ -139,10 +144,10 @@ export function PlayArea() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [match.board, match.tray, rotateSelected, syncHover, tryPlace]);
+  }, [match.board, match.tray, rotateSelected, syncHover, tryPlace, setPointerBusy]);
 
   const onPieceDown = (index: number, e: PE<HTMLButtonElement>) => {
-    if (match.over || !match.tray[index]) return;
+    if (match.over || visitorBusy || !match.tray[index]) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     moved.current = false;
@@ -152,10 +157,12 @@ export function PlayArea() {
     const d: Drag = { index, pointerId: e.pointerId, x: e.clientX, y: e.clientY, lift };
     dragRef.current = d;
     setDrag(d);
+    setPointerBusy(true);
     selectPiece(index);
   };
 
   const onCellClick = (r: number, c: number) => {
+    if (visitorBusy) return;
     if (skipClick.current) {
       skipClick.current = false;
       return;
@@ -216,7 +223,7 @@ export function PlayArea() {
   }
 
   return (
-    <div className="pj-play">
+    <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
       <div className="pj-board-row">
         <SideRails side="l" />
         <div className={`pj-frame ${shake ? "pj-shake" : ""}`}>
@@ -233,6 +240,10 @@ export function PlayArea() {
                 const justLanded = landedAt(r, c);
                 const hinted = hintCells.has(key);
                 const willClear = clearSet.has(key);
+                const hideForFly =
+                  visitorEvent?.action.kind === "move" &&
+                  visitorEvent.action.from[0] === r &&
+                  visitorEvent.action.from[1] === c;
                 const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
                 const cubeColor = special === "bomb" ? "violet" : special === "blast" ? "amber" : special === "rocketH" || special === "rocketV" ? "azure" : col;
                 return (
@@ -245,7 +256,7 @@ export function PlayArea() {
                     onClick={() => onCellClick(r, c)}
                     aria-label={`Row ${r + 1} column ${c + 1}`}
                   >
-                    {col ? (
+                    {col && !hideForFly ? (
                       <BlockFace
                         color={cubeColor ?? "cyan"}
                         star={cell.t === "s"}
@@ -307,7 +318,7 @@ export function PlayArea() {
               type="button"
               data-testid={`tray-${i}`}
               className={`pj-slot ${selected === i ? "is-selected" : ""} ${piece && !fits ? "is-dead" : ""} ${drag?.index === i ? "is-lifted" : ""}`}
-              disabled={!piece || match.over}
+              disabled={!piece || match.over || visitorBusy}
               onPointerDown={(e) => onPieceDown(i, e)}
               onClick={(e) => {
                 if (e.detail !== 0) return;
@@ -349,6 +360,8 @@ export function PlayArea() {
             );
           })()
         : null}
+
+      <VisitorLayer grid={gridRef.current} />
     </div>
   );
 }

@@ -1460,3 +1460,145 @@
   .pj-score { font-size: 0.92rem; }
   .pj-crown { display: none; }
 }
+
+.pj-play.is-visiting .pj-slot,
+.pj-play.is-visiting .pj-hint-btn {
+  pointer-events: none;
+}
+
+.pj-vis-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.pj-vis-warn {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2a4068, #152445);
+  box-shadow: 0 6px 0 #070e1c, 0 10px 18px rgba(0, 0, 0, 0.35);
+  color: #fff8e8;
+  font-weight: 800;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 22;
+}
+
+.pj-vis-warn .pj-vis-sprite { width: 36px; height: 42px; }
+.pj-vis-warn strong { display: block; line-height: 1.1; }
+.pj-vis-warn span { display: block; font-size: 11px; opacity: 0.8; font-weight: 700; }
+
+.pj-vis-actor {
+  position: absolute;
+  top: 18%;
+  bottom: auto;
+  width: 92px;
+  z-index: 20;
+  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.45));
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.pj-vis-actor.is-left { left: 2px; }
+.pj-vis-actor.is-right { right: 2px; }
+.pj-vis-layer.is-warn .pj-vis-actor,
+.pj-vis-layer.is-exit .pj-vis-actor { opacity: 0; }
+.pj-vis-layer.is-warn .pj-vis-actor.is-left,
+.pj-vis-layer.is-exit .pj-vis-actor.is-left { transform: translateX(-80px); }
+.pj-vis-layer.is-warn .pj-vis-actor.is-right,
+.pj-vis-layer.is-exit .pj-vis-actor.is-right { transform: translateX(80px); }
+
+.pj-vis-sprite { width: 88px; height: 108px; }
+.pj-vis-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.pj-vis-name {
+  margin-top: -6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff8e8;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.pj-vis-name em { font-style: normal; color: #ffe07a; display: block; font-size: 10px; }
+
+.pj-vis-hi {
+  border-radius: 18%;
+  box-shadow: 0 0 0 2px #ffe07a, 0 0 16px rgba(255, 224, 122, 0.55);
+  pointer-events: none;
+  z-index: 19;
+  animation: pj-vis-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.pj-vis-fly {
+  z-index: 21;
+  pointer-events: none;
+  animation: pj-vis-carry 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.pj-vis-fx {
+  position: absolute;
+  inset: 20% 18% 30%;
+  pointer-events: none;
+}
+.pj-vis-fx span {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: #ffe07a;
+  animation: pj-vis-spark 0.8s ease-out forwards;
+  animation-delay: calc(var(--i) * 40ms);
+}
+.pj-vis-fx.is-luna span { background: #c9a6ff; }
+.pj-vis-fx.is-pip span { background: #7cf5ac; }
+.pj-vis-fx.is-kai span { background: #d8c4a0; }
+
+.pj-vis-idle { animation: pj-vis-idle 1.6s ease-in-out infinite alternate; }
+.pj-vis-bob { animation: pj-vis-bob 0.35s ease-in-out infinite alternate; }
+.pj-vis-cheer { animation: pj-vis-cheer 0.45s ease-in-out infinite alternate; }
+
+.pj-vis-debug { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+.pj-vis-debug-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pj-vis-debug-row .pj-btn { flex: 1 1 30%; min-width: 72px; font-size: 12px; padding: 8px 6px; }
+
+@keyframes pj-vis-idle {
+  from { transform: translateY(0); }
+  to { transform: translateY(-5px); }
+}
+@keyframes pj-vis-bob {
+  from { transform: translateY(0) rotate(-4deg); }
+  to { transform: translateY(-8px) rotate(4deg); }
+}
+@keyframes pj-vis-cheer {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(-10px) scale(1.06); }
+}
+@keyframes pj-vis-pulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+@keyframes pj-vis-carry {
+  0% { transform: translate(0, 0) scale(1.05); }
+  55% { transform: translate(calc(var(--dx) * 0.55), calc(var(--dy) * 0.45 - 18px)) scale(1.08); }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); }
+}
+@keyframes pj-vis-spark {
+  to { transform: rotate(calc(var(--i) * 45deg)) translateY(-36px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-vis-idle, .pj-vis-bob, .pj-vis-cheer, .pj-vis-hi, .pj-vis-fly, .pj-vis-fx span {
+    animation: none !important;
+  }
+  .pj-vis-actor { transition: none; }
+}

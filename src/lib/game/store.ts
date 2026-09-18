@@ -25,6 +25,15 @@ import {
   type Profile,
 } from "./save";
 import * as audio from "./audio";
+import {
+  applyVisitorAction,
+  nextVisitAt,
+  pickMood,
+  planVisitor,
+  VISITOR_IDS,
+  type VisitorEvent,
+  type VisitorId,
+} from "./visitors";
 
 export type Tab = "home" | "adventure" | "challenges" | "skins" | "more";
 export type Panel =
@@ -59,6 +68,13 @@ type GameStore = {
   comboPop: ComboPop | null;
   toast: string | null;
   levelUpTo: number | null;
+  visitorBusy: boolean;
+  visitorEvent: VisitorEvent | null;
+  visitorApplied: boolean;
+  pointerBusy: boolean;
+  visitorLast: VisitorId | null;
+  visitorNextAt: number;
+  visitorSeen: Partial<Record<VisitorId, number>>;
   hydrate: () => void;
   persist: () => void;
   start: () => void;
@@ -82,10 +98,16 @@ type GameStore = {
   resetProgress: () => void;
   dismissLevelUp: () => void;
   setToast: (msg: string | null) => void;
+  setPointerBusy: (busy: boolean) => void;
+  maybeVisitor: () => void;
+  summonVisitor: (id: VisitorId) => boolean;
+  commitVisitor: () => void;
+  endVisitor: () => void;
 };
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let popSeq = 1;
+let visitSeq = 1;
 
 function persistSoon(get: () => GameStore): void {
   if (persistTimer) clearTimeout(persistTimer);
@@ -132,6 +154,13 @@ export const useGame = create<GameStore>((set, get) => ({
   comboPop: null,
   toast: null,
   levelUpTo: null,
+  visitorBusy: false,
+  visitorEvent: null,
+  visitorApplied: false,
+  pointerBusy: false,
+  visitorLast: null,
+  visitorNextAt: 8,
+  visitorSeen: {},
 
   hydrate: () => {
     const profile = ensureMatch(loadProfile());
@@ -177,7 +206,8 @@ export const useGame = create<GameStore>((set, get) => ({
   selectPiece: (index) => set({ selected: index, targeting: null }),
 
   rotateSelected: () => {
-    const { match, selected } = get();
+    const { match, selected, visitorBusy } = get();
+    if (visitorBusy) return;
     if (selected === null) return;
     const piece = match.tray[selected];
     if (!piece) return;
@@ -189,7 +219,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   tryPlace: (trayIndex, row, col) => {
-    const { match, profile } = get();
+    const { match, profile, visitorBusy } = get();
+    if (visitorBusy) return false;
     const placedPiece = match.tray[trayIndex];
     const result = placePiece(match, trayIndex, row, col);
     if (!result.ok) {
@@ -283,7 +314,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   armPower: (id) => {
-    const { profile, match, targeting } = get();
+    const { profile, match, targeting, visitorBusy } = get();
+    if (visitorBusy) return;
     if (profile.powerups[id] <= 0) {
       set({ panel: "shop", toast: "Buy more in the shop." });
       return;
@@ -322,8 +354,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   usePowerOnCell: (row, col) => {
-    const { targeting, match, profile } = get();
-    if (!targeting) return false;
+    const { targeting, match, profile, visitorBusy } = get();
+    if (!targeting || visitorBusy) return false;
     const used =
       targeting === "hammer" ? hammerCell(match, row, col) : targeting === "bomb" ? bombCell(match, row, col) : null;
     if (!used) {
@@ -363,6 +395,12 @@ export const useGame = create<GameStore>((set, get) => ({
       panel: null,
       tab: "home",
       flash: [],
+      visitorBusy: false,
+      visitorEvent: null,
+      visitorApplied: false,
+      visitorLast: null,
+      visitorNextAt: 8,
+      visitorSeen: {},
       profile: { ...profile, games: profile.games + 1, seenHowTo: true },
     });
     persistSoon(get);
@@ -550,4 +588,95 @@ export const useGame = create<GameStore>((set, get) => ({
   dismissLevelUp: () => set({ levelUpTo: null }),
 
   setToast: (msg) => set({ toast: msg }),
+
+  setPointerBusy: (busy) => set({ pointerBusy: busy }),
+
+  maybeVisitor: () => {
+    const s = get();
+    if (!s.started || s.tab !== "home" || s.panel || s.visitorBusy || s.visitorEvent || s.pointerBusy || s.targeting) return;
+    if (s.match.over || s.match.won) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (s.match.moves < Math.max(6, s.visitorNextAt)) return;
+    startVisit(get, set, null);
+  },
+
+  summonVisitor: (id) => startVisit(get, set, id),
+
+  commitVisitor: () => {
+    const { visitorEvent, visitorApplied, match } = get();
+    if (!visitorEvent || visitorApplied) return;
+    const result = applyVisitorAction(match, visitorEvent.action);
+    if (!result) {
+      set({ visitorApplied: true });
+      return;
+    }
+    set({
+      match: result.match,
+      visitorApplied: true,
+      flash: result.clear?.cells ?? [],
+    });
+    persistSoon(get);
+    window.setTimeout(() => set({ flash: [] }), 520);
+  },
+
+  endVisitor: () => {
+    const { match } = get();
+    set({
+      visitorBusy: false,
+      visitorEvent: null,
+      visitorApplied: false,
+      visitorNextAt: nextVisitAt(match.moves, Math.random),
+    });
+  },
 }));
+
+function startVisit(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  forced: VisitorId | null,
+): boolean {
+  const s = get();
+  if (s.visitorBusy || s.visitorEvent) return false;
+  if (s.match.over || s.match.won) return false;
+  if (!forced && (s.tab !== "home" || s.panel)) return false;
+  const mood = pickMood(s.profile.level, s.match.moves, Math.random);
+  const pool = VISITOR_IDS.filter((id) => id !== s.visitorLast);
+  const order = forced ? [forced] : shuffleIds(pool);
+  for (const visitor of order) {
+    const action = planVisitor(s.match, visitor, mood);
+    if (!action) continue;
+    const seen = s.visitorSeen[visitor] ?? 0;
+    const event: VisitorEvent = {
+      id: visitSeq++,
+      visitor,
+      action,
+      mood,
+      showName: seen < 2,
+    };
+    set({
+      visitorBusy: true,
+      visitorEvent: event,
+      visitorApplied: false,
+      visitorLast: visitor,
+      visitorSeen: { ...s.visitorSeen, [visitor]: seen + 1 },
+      targeting: null,
+      tab: "home",
+      panel: forced ? null : s.panel,
+    });
+    return true;
+  }
+  set({ visitorNextAt: s.match.moves + 3, toast: forced ? "No safe visit right now." : s.toast });
+  if (forced) window.setTimeout(() => set({ toast: null }), 1400);
+  return false;
+}
+
+function shuffleIds(ids: VisitorId[]): VisitorId[] {
+  const next = ids.slice();
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = next[i]!;
+    next[i] = next[j]!;
+    next[j] = tmp;
+  }
+  return next;
+}

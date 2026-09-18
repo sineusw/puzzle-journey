@@ -22,6 +22,7 @@ import {
   xpForLevel,
 } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
+import { VISITOR_IDS, VISITOR_META } from "@/lib/game/visitors";
 import { formatInt } from "@/lib/utils";
 import { GameIcon, type IconName } from "./icons";
 
@@ -341,7 +342,34 @@ function SettingsSheet() {
       <button type="button" className="pj-btn pj-btn-ghost w-full text-danger" onClick={resetProgress}>
         Reset progress
       </button>
+      <VisitorDebug />
     </Sheet>
+  );
+}
+
+function VisitorDebug() {
+  const summonVisitor = useGame((s) => s.summonVisitor);
+  const setPanel = useGame((s) => s.setPanel);
+  return (
+    <div className="pj-vis-debug" data-testid="visitor-debug">
+      <p className="text-xs text-muted">Island Visitors — test summon</p>
+      <div className="pj-vis-debug-row">
+        {VISITOR_IDS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className="pj-btn pj-btn-ghost"
+            data-testid={`summon-${id}`}
+            onClick={() => {
+              setPanel(null);
+              window.setTimeout(() => summonVisitor(id), 40);
+            }}
+          >
+            {VISITOR_META[id].name}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -358,6 +386,7 @@ function HowSheet() {
         <li>4. Tap a tray block or Rotate to turn it. Press R on a keyboard.</li>
         <li>5. Specials: bombs blast 3×3, rockets wipe a line, blasts clear the board, stone takes two hits.</li>
         <li>6. Hammer, reroll, bomb, and frost get you out of tight spots.</li>
+        <li>7. Island visitors may hop in after a few moves — they peek, change one thing, and leave.</li>
       </ol>
       <button
         type="button"

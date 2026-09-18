@@ -8,6 +8,7 @@ import { NightIsle } from "./background";
 import { GameIcon } from "./icons";
 import { Overlays, PowerBar, TabScreens } from "./overlays";
 import { PlayArea } from "./play-area";
+import { VisitorDirector } from "./visitors/director";
 
 export function GameShell() {
   const hydrate = useGame((s) => s.hydrate);
@@ -68,6 +69,7 @@ export function GameShell() {
     <div className="pj-root" data-skin={profile.skin}>
       <div className="pj-stars" />
       <NightIsle />
+      <VisitorDirector />
       <div className="pj-stage">
         <header className="pj-hud">
           <div className="pj-chip pj-chip-wide">
