@@ -340,6 +340,7 @@
   padding: 2px 48px 4px;
   position: relative;
   z-index: 3;
+  flex: 0 0 auto;
 }
 
 .pj-crown {
@@ -1285,7 +1286,8 @@
 }
 
 .pj-bob {
-  animation: pj-bob 2.4s ease-in-out infinite alternate;
+  animation: none;
+  transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1488,15 +1490,17 @@
 }
 
 @media (max-height: 820px) {
-  .pj-word-a { font-size: 1.45rem; -webkit-text-stroke-width: 3px; }
-  .pj-word-b { font-size: 1.55rem; -webkit-text-stroke-width: 3px; }
-  .pj-tag { margin-top: 4px; }
+  .pj-title { padding: 2px 8px 7px; }
+  .pj-crown { margin-bottom: 0; }
+  .pj-crown svg { width: 18px; height: 18px; }
+  .pj-word-a { font-size: 1.32rem; -webkit-text-stroke-width: 3px; }
+  .pj-word-b { font-size: 1.42rem; -webkit-text-stroke-width: 3px; }
+  .pj-tag { margin-top: 3px; padding: 3px 12px 4px; font-size: 10px; }
   .pj-tray { min-height: 80px; margin-top: 8px; }
   .pj-slot { min-height: 74px; }
   .pj-power-wrap,
   .pj-power { width: 56px; height: 59px; }
   .pj-powers { margin-top: 8px; }
-  .pj-title { padding-top: 0; padding-bottom: 0; }
   .pj-nav-btn { min-height: 52px; }
 }
 
