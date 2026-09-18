@@ -1490,12 +1490,16 @@
 }
 
 @media (max-height: 820px) {
-  .pj-title { padding: 2px 8px 7px; }
-  .pj-crown { margin-bottom: 0; }
-  .pj-crown svg { width: 18px; height: 18px; }
-  .pj-word-a { font-size: 1.32rem; -webkit-text-stroke-width: 3px; }
-  .pj-word-b { font-size: 1.42rem; -webkit-text-stroke-width: 3px; }
-  .pj-tag { margin-top: 3px; padding: 3px 12px 4px; font-size: 10px; }
+  .pj-title {
+    padding: 4px 8px 5px;
+    margin-bottom: 7px;
+  }
+  .pj-crown,
+  .pj-tag { display: none; }
+  .pj-word { line-height: 0.82; }
+  .pj-word-a { font-size: 1.14rem; -webkit-text-stroke-width: 2px; }
+  .pj-word-b { font-size: 1.24rem; -webkit-text-stroke-width: 2px; }
+  .pj-score { margin-top: 4px; font-size: 0.9rem; line-height: 1; }
   .pj-tray { min-height: 80px; margin-top: 8px; }
   .pj-slot { min-height: 74px; }
   .pj-power-wrap,
