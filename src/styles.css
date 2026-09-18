@@ -748,11 +748,13 @@
 
 .pj-slot.is-lifted .pj-mini {
   opacity: 0.35;
+  transform: translateY(-3px) scale(1.06);
 }
 
 .pj-mini {
   display: grid;
   gap: 2px;
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1), opacity 100ms ease;
 }
 
 .pj-powers {
@@ -974,7 +976,15 @@
   position: fixed;
   z-index: 40;
   pointer-events: none;
-  transform: translateY(-4px) scale(1.075);
+  transform-origin: top left;
+  will-change: transform;
+  contain: layout paint;
+  backface-visibility: hidden;
+}
+
+.pj-ghost-piece {
+  width: 100%;
+  height: 100%;
   transform-origin: center;
   filter:
     drop-shadow(0 16px 14px rgba(0, 0, 0, 0.5))
@@ -1306,7 +1316,7 @@
   }
   .pj-well.is-clear,
   .pj-well.is-clear::after,
-  .pj-ghost {
+  .pj-ghost-piece {
     animation: none !important;
   }
 }
@@ -1554,7 +1564,7 @@
   position: absolute;
   top: 16%;
   bottom: auto;
-  width: 108px;
+  width: 132px;
   z-index: 20;
   opacity: 1;
   transform: translateX(0) rotateY(0) scale(1);
@@ -1579,20 +1589,24 @@
 
 .pj-vis-sprite {
   position: relative;
-  width: 104px;
-  height: 126px;
+  width: 128px;
+  height: 148px;
   transform-style: preserve-3d;
   transform-origin: 50% 88%;
   isolation: isolate;
 }
-.pj-vis-svg {
+.pj-vis-svg,
+.pj-vis-character-art {
   position: relative;
   z-index: 2;
   width: 100%;
   height: 100%;
   display: block;
-  overflow: visible;
+  object-fit: contain;
+  object-position: 50% 100%;
   filter: saturate(1.1) contrast(1.03);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .pj-vis-floor-shadow { fill: #020710; opacity: 0.54; filter: blur(1.6px); }
 .pj-vis-aura {

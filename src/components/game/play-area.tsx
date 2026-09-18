@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as PE } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as PE } from "react";
 import { bounds, canPlace, findHint, pieceFits, placeFromCell, previewClear, SIZE, snapPlace, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
@@ -11,6 +11,8 @@ type Drag = {
   pointerId: number;
   x: number;
   y: number;
+  startX: number;
+  startY: number;
   lift: number;
 };
 
@@ -44,8 +46,10 @@ export function PlayArea() {
   const setPointerBusy = useGame((s) => s.setPointerBusy);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const hoverRef = useRef<Hover | null>(null);
+  const moveFrame = useRef<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [hint, setHint] = useState<{ r: number; c: number; index: number } | null>(null);
@@ -54,9 +58,32 @@ export function PlayArea() {
   const wasSelected = useRef(false);
 
   const setHoverBoth = (h: Hover | null) => {
+    const prev = hoverRef.current;
+    const same =
+      prev === h ||
+      (prev !== null &&
+        h !== null &&
+        prev.r === h.r &&
+        prev.c === h.c &&
+        prev.valid === h.valid &&
+        prev.rows.join(",") === h.rows.join(",") &&
+        prev.cols.join(",") === h.cols.join(",") &&
+        prev.extras.join(",") === h.extras.join(","));
+    if (same) return;
     hoverRef.current = h;
     setHover(h);
   };
+
+  const paintGhost = useCallback((d: Drag, piece: Piece) => {
+    const el = ghostRef.current;
+    const grid = gridRef.current;
+    if (!el || !grid) return;
+    const metrics = gridMetrics(grid) ?? { cell: 28, gap: 2 };
+    const size = pieceSize(piece.cells, metrics.cell, metrics.gap);
+    el.style.width = `${size.w}px`;
+    el.style.height = `${size.h}px`;
+    el.style.transform = `translate3d(${d.x - size.w / 2}px, ${d.y - d.lift - size.h / 2}px, 0)`;
+  }, []);
 
   const syncHover = useCallback(
     (x: number, y: number, piece: Piece, lift: number) => {
@@ -105,17 +132,29 @@ export function PlayArea() {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || e.pointerId !== d.pointerId) return;
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) moved.current = true;
+      if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) moved.current = true;
       const next = { ...d, x: e.clientX, y: e.clientY };
       dragRef.current = next;
-      setDrag(next);
-      const piece = match.tray[d.index];
-      if (piece) syncHover(next.x, next.y, piece, next.lift);
+      if (moveFrame.current !== null) return;
+      moveFrame.current = window.requestAnimationFrame(() => {
+        moveFrame.current = null;
+        const latest = dragRef.current;
+        if (!latest) return;
+        const piece = match.tray[latest.index];
+        if (!piece) return;
+        paintGhost(latest, piece);
+        syncHover(latest.x, latest.y, piece, latest.lift);
+      });
     };
     const onUp = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || e.pointerId !== d.pointerId) return;
       const piece = match.tray[d.index];
+      if (moveFrame.current !== null) {
+        window.cancelAnimationFrame(moveFrame.current);
+        moveFrame.current = null;
+      }
+      if (piece) syncHover(e.clientX, e.clientY, piece, d.lift);
       const h = hoverRef.current;
       dragRef.current = null;
       setDrag(null);
@@ -140,11 +179,12 @@ export function PlayArea() {
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
+      if (moveFrame.current !== null) window.cancelAnimationFrame(moveFrame.current);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [match.board, match.tray, rotateSelected, syncHover, tryPlace, setPointerBusy]);
+  }, [match.board, match.tray, paintGhost, rotateSelected, syncHover, tryPlace, setPointerBusy]);
 
   const onPieceDown = (index: number, e: PE<HTMLButtonElement>) => {
     if (match.over || visitorBusy || !match.tray[index]) return;
@@ -154,7 +194,15 @@ export function PlayArea() {
     wasSelected.current = selected === index;
     audio.sfxClick();
     const lift = e.pointerType === "mouse" ? 0 : 72;
-    const d: Drag = { index, pointerId: e.pointerId, x: e.clientX, y: e.clientY, lift };
+    const d: Drag = {
+      index,
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      startX: e.clientX,
+      startY: e.clientY,
+      lift,
+    };
     dragRef.current = d;
     setDrag(d);
     setPointerBusy(true);
@@ -221,6 +269,10 @@ export function PlayArea() {
     for (const c of hover.cols) for (let r = 0; r < SIZE; r++) clearSet.add(`${r}-${c}`);
     for (const key of hover.extras) clearSet.add(key);
   }
+
+  useLayoutEffect(() => {
+    if (drag && draggingPiece) paintGhost(drag, draggingPiece);
+  }, [drag, draggingPiece, paintGhost]);
 
   return (
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
@@ -342,20 +394,23 @@ export function PlayArea() {
             const size = pieceSize(draggingPiece.cells, ghostMetrics.cell, ghostMetrics.gap);
             return (
               <div
+                ref={ghostRef}
                 className="pj-ghost"
                 style={{
-                  left: drag.x - size.w / 2,
-                  top: drag.y - drag.lift - size.h / 2,
+                  left: 0,
+                  top: 0,
                   width: size.w,
                   height: size.h,
                 }}
               >
-                <PieceGrid
-                  piece={draggingPiece}
-                  cell={ghostMetrics.cell}
-                  gap={ghostMetrics.gap}
-                  faded={hover ? !hover.valid : false}
-                />
+                <div className="pj-ghost-piece">
+                  <PieceGrid
+                    piece={draggingPiece}
+                    cell={ghostMetrics.cell}
+                    gap={ghostMetrics.gap}
+                    faded={hover ? !hover.valid : false}
+                  />
+                </div>
               </div>
             );
           })()

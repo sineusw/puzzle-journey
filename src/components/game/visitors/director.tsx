@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useGame } from "@/lib/game/store";
 import { VISITOR_IDS, type VisitorId } from "@/lib/game/visitors";
+import { CHARACTER_ART } from "./characters";
 
 export function VisitorDirector() {
   const started = useGame((s) => s.started);
@@ -11,6 +12,14 @@ export function VisitorDirector() {
   const pointerBusy = useGame((s) => s.pointerBusy);
   const targeting = useGame((s) => s.targeting);
   const maybeVisitor = useGame((s) => s.maybeVisitor);
+
+  useEffect(() => {
+    for (const src of Object.values(CHARACTER_ART)) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = src;
+    }
+  }, []);
 
   useEffect(() => {
     if (!started || tab !== "home" || panel || visitorBusy || pointerBusy || targeting) return;
