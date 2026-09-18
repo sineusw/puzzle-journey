@@ -1559,6 +1559,11 @@
 .pj-vis-actor.is-right { right: 2px; }
 .pj-vis-layer.is-warn .pj-vis-actor,
 .pj-vis-layer.is-exit .pj-vis-actor { opacity: 0; }
+.pj-vis-layer.is-enter .pj-vis-actor {
+  opacity: 1;
+  transform: translateX(0) rotateY(0) scale(1);
+  transition: none;
+}
 .pj-vis-layer.is-warn .pj-vis-actor.is-left,
 .pj-vis-layer.is-exit .pj-vis-actor.is-left { transform: translateX(-110px) rotateY(18deg) scale(0.82); }
 .pj-vis-layer.is-warn .pj-vis-actor.is-right,
