@@ -181,21 +181,11 @@ export function GameShell() {
 }
 
 function Logo() {
+  // Approved stone-sign logo, cut from the Block Journey mockup. Static:
+  // the title never moves behind active play.
   return (
-    <div className="pj-bob">
-      <span className="pj-crown" aria-hidden="true">
-        <svg viewBox="0 0 24 24" className="size-6">
-          <path
-            fill="#f0c14a"
-            stroke="#8a4a08"
-            strokeWidth="1.4"
-            d="M3 18h18l-1.2-9-5.3 4.2L12 6l-2.5 7.2L4.2 9z"
-          />
-        </svg>
-      </span>
-      <span className="pj-word pj-word-a">BLOCK</span>
-      <span className="pj-word pj-word-b">JOURNEY</span>
-      <div className="pj-tag">Clear · Relax · Level up</div>
+    <div className="pj-logo">
+      <img src="/art/logo.webp" alt="Block Journey — Clear · Relax · Level up" width={701} height={429} decoding="async" />
     </div>
   );
 }

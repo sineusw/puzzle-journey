@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as PE } from "react";
-import { bounds, canPlace, findHint, pieceFits, placeFromCell, previewClear, SIZE, snapPlace, type Piece } from "@/lib/game/engine";
+import { bounds, canPlace, pieceFits, placeFromCell, previewClear, SIZE, snapPlace, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, overlaysOf, pieceSize } from "./block";
@@ -51,7 +51,6 @@ export function PlayArea() {
   const moveFrame = useRef<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
-  const [hint, setHint] = useState<{ r: number; c: number; index: number } | null>(null);
   const moved = useRef(false);
   const skipClick = useRef(false);
 
@@ -218,24 +217,6 @@ export function PlayArea() {
     else tryPlace(selected, r, c);
   };
 
-  const showHint = () => {
-    const index = selected !== null && match.tray[selected] ? selected : match.tray.findIndex((p) => p && pieceFits(match, p));
-    const piece = index >= 0 ? match.tray[index] : null;
-    if (!piece) {
-      audio.sfxBad();
-      return;
-    }
-    const pos = findHint(match.board, piece.cells);
-    if (!pos) {
-      audio.sfxBad();
-      return;
-    }
-    audio.sfxClick();
-    selectPiece(index);
-    setHint({ ...pos, index });
-    window.setTimeout(() => setHint(null), 1400);
-  };
-
   const flashAt = (r: number, c: number) => flash.find((f) => f.r === r && f.c === c);
   const landedAt = (r: number, c: number) => landed.some((p) => p.r === r && p.c === c);
 
@@ -248,10 +229,6 @@ export function PlayArea() {
   const hintCells = new Set<string>();
   if (hover?.valid && draggingPiece) {
     for (const [dr, dc] of draggingPiece.cells) hintCells.add(`${hover.r + dr}-${hover.c + dc}`);
-  }
-  if (hint) {
-    const piece = match.tray[hint.index];
-    if (piece) for (const [dr, dc] of piece.cells) hintCells.add(`${hint.r + dr}-${hint.c + dc}`);
   }
 
   const clearSet = new Set<string>();
@@ -339,12 +316,6 @@ export function PlayArea() {
       </div>
 
       <div className="pj-tray-wrap">
-        <div className="pj-tray-bar">
-          <span className="pj-tray-label">Next blocks</span>
-          <button type="button" className="pj-hint-btn" onClick={showHint} data-testid="hint">
-            Hint
-          </button>
-        </div>
         <div className="pj-tray" data-testid="tray">
         {match.tray.map((piece, i) => {
           const fits = piece ? pieceFits(match, piece) : true;
@@ -364,7 +335,7 @@ export function PlayArea() {
               aria-label={piece ? `Next block ${i + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${i + 1}`}
             >
               {piece ? (
-                <PieceGrid piece={piece} cell={20} faded={!fits || drag?.index === i} />
+                <PieceGrid piece={piece} cell={23} faded={!fits || drag?.index === i} />
               ) : null}
             </button>
           );

@@ -1765,3 +1765,150 @@
   }
   .pj-vis-actor { transition: none; }
 }
+
+/* ------------------------------------------------------------------------
+   Mockup-exact board, logo and tray (approved Block Journey art).
+   Art lives in public/art and is cut from attachments/block-journey-mockup.jpg
+   by tools/extract-mockup-art.py. This block sits last so it wins over the
+   breakpoint rules above.
+   ------------------------------------------------------------------------ */
+
+.pj-logo {
+  display: grid;
+  place-items: center;
+}
+
+.pj-logo img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: clamp(104px, 20vh, 196px);
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.4));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pj-title {
+  padding-inline: 4px;
+}
+
+/* Stone frame image. The frame is a size container so the grid can be
+   inset by exactly the mockup's frame thickness (measured on an 840px-wide
+   frame: 48 top, 47 right, 48 bottom, 45 left). */
+.pj-frame {
+  container-type: inline-size;
+  padding: 0;
+  border-radius: 0;
+  background: url(/art/frame.webp) center / 100% 100% no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.5));
+}
+
+.pj-frame::before,
+.pj-frame::after {
+  content: none;
+}
+
+.pj-grid {
+  margin: calc(100cqw * 48 / 840) calc(100cqw * 47 / 840) calc(100cqw * 48 / 840) calc(100cqw * 45 / 840);
+  padding: 0;
+  gap: calc(100cqw * 3.6 / 840);
+  background: #05060b;
+  border-radius: calc(100cqw * 12 / 840);
+  box-shadow: none;
+}
+
+.pj-well {
+  border-radius: 9%;
+  background: url(/art/tiles/empty.webp) center / 100% 100% no-repeat;
+  box-shadow: none;
+}
+
+.pj-well.is-hint {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 2px rgba(110, 230, 150, 0.7);
+}
+
+.pj-tex {
+  position: absolute;
+  inset: 0;
+  border-radius: 13%;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.pj-cube.is-tex {
+  filter: none;
+}
+
+/* Tray: one dark slate panel holding the three pieces — no slot boxes. */
+.pj-tray {
+  padding: 12px 10px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #1e2131 0%, #171927 100%);
+  border: 3px solid #3c4159;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 3px 10px rgba(0, 0, 0, 0.45);
+}
+
+.pj-slot,
+.pj-slot.is-selected,
+.pj-slot:not(:disabled):hover {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.pj-slot.is-selected .pj-mini {
+  filter: drop-shadow(0 0 7px rgba(255, 226, 140, 0.55));
+}
+
+/* Tray height matches the mockup's proportion to the board (~0.3x). */
+.pj-tray {
+  min-height: 0;
+  padding-block: 10px;
+}
+
+.pj-slot {
+  min-height: 66px;
+}
+
+.pj-score {
+  margin-top: 0;
+  line-height: 1.1;
+}
+
+@media (min-width: 700px) and (min-height: 760px) {
+  .pj-slot { min-height: 84px; }
+}
+
+/* Board sizing: fit whichever runs out first — width or the height left over
+   after logo, tray, boosters and nav. The row is a size container so the
+   frame can read that leftover height (cqh) and never overflow into the tray. */
+.pj-root { --pj-board-max: 318px; }
+@media (min-width: 420px) { .pj-root { --pj-board-max: 332px; } }
+@media (min-width: 700px) and (min-height: 760px) { .pj-root { --pj-board-max: 470px; } }
+@media (min-width: 700px) and (min-height: 760px) and (max-height: 1150px) { .pj-root { --pj-board-max: 420px; } }
+
+.pj-play {
+  justify-content: flex-start;
+}
+
+.pj-board-row {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+}
+
+.pj-frame {
+  flex: 0 1 auto;
+  width: min(var(--pj-board-max), 100cqh);
+  max-width: 100%;
+}
+
+@media (max-height: 820px) {
+  .pj-logo img { height: clamp(92px, 16vh, 150px); }
+}
