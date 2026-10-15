@@ -47,6 +47,21 @@ function textureFor(color: CubeColor, kind: SpecialId | undefined, star: boolean
   return TILE_TEXTURE[color] ?? null;
 }
 
+/** Texture URL for a board cell, or null when it has no tile art. */
+export function cellTextureUrl(cell: Cell): string | null {
+  const color = colorOf(cell);
+  if (!color) return null;
+  const kind: SpecialId | undefined = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
+  const tex = textureFor(color, kind, cell.t === "s", cell.t === "s" && Boolean(cell.gold), cell.t === "k" ? cell.hp : undefined);
+  return tex ? `/art/tiles/${tex}.webp` : null;
+}
+
+/** Texture URL for a plain block of `color`. */
+export function colorTextureUrl(color: CubeColor): string | null {
+  const tex = TILE_TEXTURE[color];
+  return tex ? `/art/tiles/${tex}.webp` : null;
+}
+
 export function BlockFace({
   color,
   star,

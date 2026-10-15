@@ -131,3 +131,41 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def clean_characters() -> None:
+    """Drop stray slivers of neighbouring sprites from the character PNGs.
+
+    Keeps the largest opaque region (the character) plus any region whose box
+    overlaps it; separate fragments near the edges are cleared.
+    """
+    from scipy import ndimage
+
+    for path in sorted((ROOT / "public" / "characters").glob("*-3d.png")):
+        img = Image.open(path).convert("RGBA")
+        arr = np.asarray(img).copy()
+        solid = arr[..., 3] > 12
+        labels, n = ndimage.label(solid)
+        if n <= 1:
+            continue
+        sizes = ndimage.sum(solid, labels, range(1, n + 1))
+        main = int(np.argmax(sizes)) + 1
+        boxes = ndimage.find_objects(labels)
+        my = boxes[main - 1]
+        keep = np.zeros_like(solid)
+        for i, box in enumerate(boxes, start=1):
+            # Keep detached bits (a feather, a sparkle) only if they sit well
+            # inside the character's box; edge slivers of neighbours go.
+            inside = (
+                box[0].start >= my[0].start
+                and box[0].stop <= my[0].stop
+                and box[1].start >= my[1].start + 12
+                and box[1].stop <= my[1].stop - 12
+            )
+            if i == main or (inside and sizes[i - 1] > 40):
+                keep |= labels == i
+        removed = int(solid.sum() - keep.sum())
+        if removed:
+            arr[..., 3][~keep] = 0
+            Image.fromarray(arr, "RGBA").save(path, optimize=True)
+            print(f"cleaned {path.name}: cleared {removed} stray pixels")

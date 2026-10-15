@@ -17,6 +17,15 @@ import {
   SNAP_RADIUS,
   setIsPlayable,
   refillIfNeeded,
+  newSandboxMatch,
+  newLevelMatch,
+  makePiece,
+  continueMatch,
+  refreshTray,
+  PLAIN_FEATURES,
+  ALL_FEATURES,
+  sanitizeMatch,
+  type Match,
   placeFromCell,
   peelCell,
   type Cell,
@@ -323,5 +332,59 @@ describe("drop accuracy and fair piece sets", () => {
       assert.equal(set.length, 3);
       assert.equal(setIsPlayable(match.board, set, 50000), true, `seed ${seed} produced a dead set`);
     }
+  });
+});
+
+describe("game modes and feature sets", () => {
+  const isPlainPiece = (p: Piece) => p.special === null && p.starAt === null && !p.gold;
+
+  it("plain features never produce stars, specials or stones on pieces", () => {
+    let s = 7;
+    const rng = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 2000; i++) {
+      assert.ok(isPlainPiece(makePiece(rng, undefined, PLAIN_FEATURES)), `piece ${i} was not plain`);
+    }
+  });
+
+  it("sandbox runs stay plain through many refills, rerolls and continues", () => {
+    let m: Match = newSandboxMatch();
+    assert.equal(m.mode, "sandbox");
+    for (let i = 0; i < 60; i++) {
+      m.tray.filter((p): p is Piece => p !== null).forEach((p) => assert.ok(isPlainPiece(p)));
+      m = i % 3 === 0 ? refreshTray(m) : continueMatch(m);
+    }
+  });
+
+  it("a classic level has no stones even when the level asks for some", () => {
+    const m = newLevelMatch("classic", 5, { type: "score", value: 500 }, 6, PLAIN_FEATURES);
+    assert.equal(m.board.flat().filter((c) => c.t !== "e").length, 0);
+    m.tray.forEach((p) => p && assert.ok(isPlainPiece(p)));
+  });
+
+  it("adventure places stones only once stones are unlocked", () => {
+    const noStones = newLevelMatch("adventure", 4, { type: "score", value: 500 }, 4, { ...PLAIN_FEATURES, specials: ["rocketH", "rocketV"] });
+    assert.equal(noStones.board.flat().filter((c) => c.t === "k").length, 0);
+    const withStones = newLevelMatch("adventure", 7, { type: "score", value: 500 }, 4, ALL_FEATURES);
+    assert.equal(withStones.board.flat().filter((c) => c.t === "k").length, 4);
+  });
+
+  it("only unlocked specials appear", () => {
+    let s = 99;
+    const rng = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    const f = { ...PLAIN_FEATURES, specials: ["rocketH" as const, "rocketV" as const] };
+    const seen = new Set<string>();
+    for (let i = 0; i < 3000; i++) {
+      const p = makePiece(rng, undefined, f);
+      if (p.special) seen.add(p.special);
+    }
+    assert.deepEqual([...seen].sort(), ["rocketH", "rocketV"]);
+  });
+
+  it("old saved endless runs load as plain sandbox runs", () => {
+    const legacy = { ...newSandboxMatch(), mode: "endless" } as unknown as Match;
+    delete (legacy as Partial<Match>).features;
+    const m = sanitizeMatch(legacy);
+    assert.equal(m.mode, "sandbox");
+    assert.deepEqual(m.features, PLAIN_FEATURES);
   });
 });

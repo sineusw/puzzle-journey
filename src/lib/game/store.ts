@@ -6,19 +6,32 @@ import {
   burstLabel,
   continueMatch,
   hammerCell,
-  newAdventureMatch,
-  newEndlessMatch,
   newGoalMatch,
+  newLevelMatch,
+  newSandboxMatch,
   placePiece,
   refreshTray,
   sanitizeMatch,
+  PLAIN_FEATURES,
   type Cell,
   type Match,
 } from "./engine";
-import { ADVENTURE, CHALLENGES, CONTINUE_COST, QUESTS, xpForLevel, type PowerId, type SkinId } from "./content";
+import {
+  ADVENTURE,
+  CHALLENGES,
+  CLASSIC,
+  CONTINUE_COST,
+  QUESTS,
+  adventureFeatures,
+  xpForLevel,
+  type PowerId,
+  type SkinId,
+  type UnlockId,
+} from "./content";
 import {
   defaultProfile,
   ensureMatch,
+  firstMatch,
   loadProfile,
   saveProfile,
   type Profile,
@@ -46,7 +59,8 @@ export type Panel =
   | "how"
   | "over"
   | "won"
-  | "levelup";
+  | "levelup"
+  | "intro";
 
 export type FlashCell = { r: number; c: number; cell: Cell };
 export type ComboPop = { id: number; label: string; score: number; combo: number };
@@ -67,13 +81,19 @@ type GameStore = {
   comboPop: ComboPop | null;
   toast: string | null;
   levelUpTo: number | null;
+  /** The Adventure unlock being introduced on the "New!" card. */
+  introUnlock: UnlockId | null;
   visitorBusy: boolean;
   visitorEvent: VisitorEvent | null;
   visitorApplied: boolean;
+  /** Board cells hidden while a visitor carries a copy of their block. */
+  visitorHide: string[];
   pointerBusy: boolean;
   visitorLast: VisitorId | null;
   visitorNextAt: number;
   visitorSeen: Partial<Record<VisitorId, number>>;
+  /** Visitor just introduced by this island: arrives first, and early. */
+  visitorFeatured: VisitorId | null;
   hydrate: () => void;
   persist: () => void;
   start: () => void;
@@ -84,8 +104,11 @@ type GameStore = {
   armPower: (id: PowerId) => void;
   usePowerOnCell: (row: number, col: number) => boolean;
   cancelTarget: () => void;
+  /** Play the current mode again (same level, or a fresh Sandbox run). */
   newGame: () => void;
   startAdventure: (levelId: number) => void;
+  startClassic: (levelId: number) => void;
+  startSandbox: () => void;
   startChallenge: (id: string) => void;
   continueRun: () => void;
   claimDaily: () => void;
@@ -101,6 +124,7 @@ type GameStore = {
   summonVisitor: (id: VisitorId) => boolean;
   commitVisitor: () => void;
   endVisitor: () => void;
+  setVisitorHide: (cells: string[]) => void;
 };
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,7 +167,7 @@ export const useGame = create<GameStore>((set, get) => ({
   tab: "home",
   panel: null,
   profile: defaultProfile(),
-  match: newEndlessMatch({ showcase: true }),
+  match: firstMatch(),
   selected: 0,
   targeting: null,
   flash: [],
@@ -152,18 +176,21 @@ export const useGame = create<GameStore>((set, get) => ({
   comboPop: null,
   toast: null,
   levelUpTo: null,
+  introUnlock: null,
   visitorBusy: false,
   visitorEvent: null,
   visitorApplied: false,
+  visitorHide: [],
   pointerBusy: false,
   visitorLast: null,
   visitorNextAt: 8,
   visitorSeen: {},
+  visitorFeatured: null,
 
   hydrate: () => {
     const profile = ensureMatch(loadProfile());
     audio.setMuted(profile.settings.sfx, profile.settings.music);
-    const match = sanitizeMatch(profile.match ?? newEndlessMatch({ showcase: true }));
+    const match = sanitizeMatch(profile.match ?? firstMatch());
     set({
       ready: true,
       profile,
@@ -229,12 +256,16 @@ export const useGame = create<GameStore>((set, get) => ({
       else audio.sfxClear(result.combo);
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(18);
     }
-    if (result.match.won && result.match.mode === "adventure") {
-      if (result.match.levelId) {
-        const lvl = ADVENTURE.find((l) => l.id === result.match.levelId);
+    if (result.match.mode === "sandbox") {
+      nextProfile = { ...nextProfile, sandboxBest: Math.max(nextProfile.sandboxBest, result.match.score) };
+    }
+    if (result.match.won) {
+      const ratio = result.match.goal ? result.match.goalProgress / result.match.goal.value : 1;
+      const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
+      const id = result.match.levelId;
+      if (result.match.mode === "adventure" && id) {
+        const lvl = ADVENTURE.find((l) => l.id === id);
         if (lvl) {
-          const ratio = result.match.goal ? result.match.goalProgress / result.match.goal.value : 1;
-          const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
           const prev = nextProfile.adventure.stars[String(lvl.id)] ?? 0;
           nextProfile = {
             ...nextProfile,
@@ -242,14 +273,25 @@ export const useGame = create<GameStore>((set, get) => ({
             gems: nextProfile.gems + lvl.reward.gems,
             adventure: {
               unlocked: Math.max(nextProfile.adventure.unlocked, lvl.id + 1),
-              stars: {
-                ...nextProfile.adventure.stars,
-                [String(lvl.id)]: Math.max(prev, stars),
-              },
+              stars: { ...nextProfile.adventure.stars, [String(lvl.id)]: Math.max(prev, stars) },
             },
           };
         }
-      } else {
+      } else if (result.match.mode === "classic" && id) {
+        const lvl = CLASSIC.find((l) => l.id === id);
+        if (lvl) {
+          const prev = nextProfile.classic.stars[String(lvl.id)] ?? 0;
+          nextProfile = {
+            ...nextProfile,
+            coins: nextProfile.coins + lvl.reward.coins,
+            gems: nextProfile.gems + lvl.reward.gems,
+            classic: {
+              unlocked: Math.max(nextProfile.classic.unlocked, lvl.id + 1),
+              stars: { ...nextProfile.classic.stars, [String(lvl.id)]: Math.max(prev, stars) },
+            },
+          };
+        }
+      } else if (result.match.mode === "challenge") {
         const ch = CHALLENGES.find((c) => c.goal.type === result.match.goal?.type && c.goal.value === result.match.goal.value);
         nextProfile = {
           ...nextProfile,
@@ -370,25 +412,20 @@ export const useGame = create<GameStore>((set, get) => ({
   cancelTarget: () => set({ targeting: null }),
 
   newGame: () => {
+    const { match } = get();
+    const id = match.levelId;
+    if (match.mode === "adventure" && id) return get().startAdventure(id);
+    if (match.mode === "classic" && id) return get().startClassic(id);
+    if (match.mode === "challenge") {
+      const ch = CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value);
+      if (ch) return get().startChallenge(ch.id);
+    }
+    get().startSandbox();
+  },
+
+  startSandbox: () => {
     audio.sfxUi();
-    const { profile } = get();
-    const match = newEndlessMatch();
-    set({
-      match,
-      selected: 0,
-      targeting: null,
-      panel: null,
-      tab: "home",
-      flash: [],
-      visitorBusy: false,
-      visitorEvent: null,
-      visitorApplied: false,
-      visitorLast: null,
-      visitorNextAt: 8,
-      visitorSeen: {},
-      profile: { ...profile, games: profile.games + 1, seenHowTo: true },
-    });
-    persistSoon(get);
+    beginRun(get, set, newSandboxMatch());
   },
 
   startAdventure: (levelId) => {
@@ -401,33 +438,37 @@ export const useGame = create<GameStore>((set, get) => ({
       return;
     }
     audio.sfxUi();
-    const match = newAdventureMatch(level.id, level.goal, level.stones);
-    set({
-      match,
-      tab: "home",
-      panel: null,
-      selected: 0,
-      targeting: null,
-      profile: { ...profile, games: profile.games + 1 },
-    });
-    persistSoon(get);
+    const match = newLevelMatch("adventure", level.id, level.goal, level.stones, adventureFeatures(level.id));
+    beginRun(get, set, match);
+    // A visitor this island introduces drops in early, and before anyone else.
+    const introVisitor = VISITOR_IDS.find((v) => v === level.introduces) ?? null;
+    if (introVisitor) set({ visitorFeatured: introVisitor, visitorNextAt: 3 });
+    // Introduce the level's new block or visitor the first time it appears.
+    const intro = level.introduces;
+    if (intro && !get().profile.seenUnlocks.includes(intro)) {
+      const p = get().profile;
+      set({ panel: "intro", introUnlock: intro, profile: { ...p, seenUnlocks: [...p.seenUnlocks, intro] } });
+      persistSoon(get);
+    }
+  },
+
+  startClassic: (levelId) => {
+    const level = CLASSIC.find((l) => l.id === levelId);
+    if (!level) return;
+    if (levelId > get().profile.classic.unlocked) {
+      set({ toast: "Clear the previous level first." });
+      window.setTimeout(() => set({ toast: null }), 1400);
+      return;
+    }
+    audio.sfxUi();
+    beginRun(get, set, newLevelMatch("classic", level.id, level.goal, 0, PLAIN_FEATURES));
   },
 
   startChallenge: (id) => {
     const challenge = CHALLENGES.find((c) => c.id === id);
     if (!challenge) return;
     audio.sfxUi();
-    const { profile } = get();
-    const match = newGoalMatch(challenge.goal);
-    set({
-      match,
-      tab: "home",
-      panel: null,
-      selected: 0,
-      targeting: null,
-      profile: { ...profile, games: profile.games + 1 },
-    });
-    persistSoon(get);
+    beginRun(get, set, newGoalMatch(challenge.goal));
   },
 
   continueRun: () => {
@@ -565,7 +606,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   resetProgress: () => {
     const fresh = defaultProfile();
-    const match = newEndlessMatch({ showcase: true });
+    const match = firstMatch();
     set({ profile: fresh, match, panel: "how", selected: 0, tab: "home" });
     saveProfile({ ...fresh, match });
   },
@@ -580,8 +621,9 @@ export const useGame = create<GameStore>((set, get) => ({
     const s = get();
     if (!s.started || s.tab !== "home" || s.panel || s.visitorBusy || s.visitorEvent || s.pointerBusy || s.targeting) return;
     if (s.match.over || s.match.won) return;
+    if (s.match.features.visitors.length === 0) return;
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    if (s.match.moves < Math.max(6, s.visitorNextAt)) return;
+    if (s.match.moves < Math.max(s.visitorFeatured ? 3 : 6, s.visitorNextAt)) return;
     startVisit(get, set, null);
   },
 
@@ -604,16 +646,43 @@ export const useGame = create<GameStore>((set, get) => ({
     window.setTimeout(() => set({ flash: [] }), 520);
   },
 
+  setVisitorHide: (cells) => set({ visitorHide: cells }),
+
   endVisitor: () => {
     const { match } = get();
     set({
       visitorBusy: false,
       visitorEvent: null,
       visitorApplied: false,
+      visitorHide: [],
       visitorNextAt: nextVisitAt(match.moves, Math.random),
     });
   },
 }));
+
+/** Shared reset for starting any run. */
+function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => void, match: Match): void {
+  const { profile } = get();
+  set({
+    match,
+    tab: "home",
+    panel: null,
+    selected: 0,
+    targeting: null,
+    flash: [],
+    landed: [],
+    visitorBusy: false,
+    visitorEvent: null,
+    visitorApplied: false,
+    visitorHide: [],
+    visitorLast: null,
+    visitorNextAt: 8,
+    visitorSeen: {},
+    visitorFeatured: null,
+    profile: { ...profile, games: profile.games + 1, seenHowTo: true },
+  });
+  persistSoon(get);
+}
 
 function startVisit(
   get: () => GameStore,
@@ -625,8 +694,10 @@ function startVisit(
   if (s.match.over || s.match.won) return false;
   if (!forced && (s.tab !== "home" || s.panel)) return false;
   const mood = pickMood(s.profile.level, s.match.moves, Math.random);
-  const pool = VISITOR_IDS.filter((id) => id !== s.visitorLast);
-  const order = forced ? [forced] : shuffleIds(pool);
+  const allowed = VISITOR_IDS.filter((id) => s.match.features.visitors.includes(id));
+  const pool = allowed.length > 1 ? allowed.filter((id) => id !== s.visitorLast) : allowed;
+  const featured = !forced && s.visitorFeatured && allowed.includes(s.visitorFeatured) ? s.visitorFeatured : null;
+  const order = forced ? [forced] : featured ? [featured, ...shuffleIds(pool.filter((v) => v !== featured))] : shuffleIds(pool);
   for (const visitor of order) {
     const action = planVisitor(s.match, visitor, mood);
     if (!action) continue;
@@ -644,6 +715,7 @@ function startVisit(
       visitorApplied: false,
       visitorLast: visitor,
       visitorSeen: { ...s.visitorSeen, [visitor]: seen + 1 },
+      visitorFeatured: visitor === s.visitorFeatured ? null : s.visitorFeatured,
       targeting: null,
       tab: "home",
       panel: forced ? null : s.panel,

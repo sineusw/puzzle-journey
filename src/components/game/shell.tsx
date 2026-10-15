@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { Home, MapPin, MoreHorizontal, Music, Paintbrush, Trophy, Volume2, VolumeX } from "lucide-react";
-import { goalLabel, xpForLevel } from "@/lib/game/content";
+import { Gamepad2, Home, MoreHorizontal, Music, Paintbrush, Trophy, Volume2, VolumeX } from "lucide-react";
+import { ADVENTURE, goalLabel, xpForLevel } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
 import { formatInt } from "@/lib/utils";
@@ -121,6 +121,7 @@ export function GameShell() {
 
         <div className="pj-title">
           <Logo />
+          <div className="pj-mode-label" data-testid="mode-label">{modeLabel(match)}</div>
           {match.goal ? (
             <div className="pj-objective" aria-label={`${goalLabel(match.goal)}. ${goalPct}% complete.`}>
               <div className="pj-objective-copy">
@@ -136,6 +137,7 @@ export function GameShell() {
           ) : (
             <div className="pj-score tabular-nums">
               {formatInt(match.score)}
+              {match.mode === "sandbox" ? `  ·  best ${formatInt(Math.max(profile.sandboxBest, match.score))}` : ""}
               {match.combo > 1 ? `  ·  x${match.combo}` : ""}
               {match.shield > 0 ? `  ·  frost ${match.shield}` : ""}
             </div>
@@ -155,7 +157,7 @@ export function GameShell() {
           {(
             [
               ["home", "Home", Home],
-              ["adventure", "Adventure", MapPin],
+              ["adventure", "Play", Gamepad2],
               ["challenges", "Challenges", Trophy],
               ["skins", "Skins", Paintbrush],
               ["more", "More", MoreHorizontal],
@@ -178,6 +180,16 @@ export function GameShell() {
       <Overlays />
     </div>
   );
+}
+
+function modeLabel(match: { mode: string; levelId: number | null }): string {
+  if (match.mode === "adventure") {
+    const lvl = ADVENTURE.find((l) => l.id === match.levelId);
+    return lvl ? `Adventure · Island ${lvl.id} · ${lvl.name}` : "Adventure";
+  }
+  if (match.mode === "classic") return `Classic · Level ${match.levelId ?? 1}`;
+  if (match.mode === "sandbox") return "Sandbox";
+  return "Challenge";
 }
 
 function Logo() {

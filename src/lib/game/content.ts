@@ -1,4 +1,4 @@
-import type { Goal } from "./engine";
+import { PLAIN_FEATURES, cloneFeatures, type Features, type Goal } from "./engine.ts";
 
 export type PowerId = "hammer" | "refresh" | "bomb" | "freeze";
 
@@ -17,6 +17,44 @@ export const OBSTACLE_PROGRESSION = [
   { id: "portal", fromLevel: 12, blurb: "Portals pair distant cells." },
 ] as const;
 
+/** Something Adventure introduces. Each level adds at most one. */
+export type UnlockId =
+  | "stars"
+  | "arrows"
+  | "bombs"
+  | "milo"
+  | "stones"
+  | "kai"
+  | "luna"
+  | "blast"
+  | "nia"
+  | "pip";
+
+export type UnlockInfo = {
+  id: UnlockId;
+  kind: "block" | "visitor";
+  name: string;
+  /** One line shown on the "New!" card. */
+  blurb: string;
+  /** Tile texture (blocks) or character art (visitors), served from /public. */
+  art: string;
+  /** Icon overlay drawn on the tile art, for special blocks. */
+  special?: "bomb" | "rocketV" | "blast";
+};
+
+export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
+  stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Clear a row or column with a star gem in it for bonus points.", art: "/art/tiles/star-blue.webp" },
+  arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Clear an arrow block and it wipes its whole row or column.", art: "/art/tiles/cyan.webp", special: "rocketV" },
+  bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Clear a bomb block and it blasts everything around it.", art: "/art/tiles/violet.webp", special: "bomb" },
+  milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.png" },
+  stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones fill a gap but take two clears to break.", art: "/art/tiles/stone.webp" },
+  kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.png" },
+  luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Enchants a block into an arrow or a bomb.", art: "/characters/luna-3d.png" },
+  blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "The rare golden block. Clear it and the whole board goes.", art: "/art/tiles/amber.webp", special: "blast" },
+  nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.png" },
+  pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb that changes a block's color.", art: "/characters/pip-3d.png" },
+};
+
 export type AdventureLevel = {
   id: number;
   name: string;
@@ -24,20 +62,67 @@ export type AdventureLevel = {
   goal: Goal;
   stones: number;
   reward: { coins: number; gems: number };
+  /** The one new thing this level introduces, if any. */
+  introduces?: UnlockId;
 };
 
+/** Island Adventure: starts with plain blocks and adds one thing at a time. */
 export const ADVENTURE: AdventureLevel[] = [
   { id: 1, name: "Shore", blurb: "Score 400 to leave the beach.", goal: { type: "score", value: 400 }, stones: 0, reward: { coins: 40, gems: 4 } },
-  { id: 2, name: "Palms", blurb: "Clear 6 lines under the palms.", goal: { type: "lines", value: 6 }, stones: 0, reward: { coins: 50, gems: 5 } },
-  { id: 3, name: "Cove", blurb: "Reach a x3 combo in the cove.", goal: { type: "combo", value: 3 }, stones: 2, reward: { coins: 60, gems: 6 } },
-  { id: 4, name: "Falls", blurb: "Score 900 beside the waterfall.", goal: { type: "score", value: 900 }, stones: 2, reward: { coins: 70, gems: 6 } },
-  { id: 5, name: "Lanterns", blurb: "Clear 10 lines by lantern light.", goal: { type: "lines", value: 10 }, stones: 3, reward: { coins: 80, gems: 8 } },
-  { id: 6, name: "Cliff", blurb: "Hold a x4 combo on the cliff.", goal: { type: "combo", value: 4 }, stones: 3, reward: { coins: 90, gems: 8 } },
-  { id: 7, name: "Ruins", blurb: "Score 1,400 among cracked ruins.", goal: { type: "score", value: 1400 }, stones: 4, reward: { coins: 100, gems: 10 } },
-  { id: 8, name: "Lagoon", blurb: "Clear 14 lines across the lagoon.", goal: { type: "lines", value: 14 }, stones: 4, reward: { coins: 110, gems: 10 } },
-  { id: 9, name: "Temple", blurb: "Reach a x5 combo at the temple.", goal: { type: "combo", value: 5 }, stones: 5, reward: { coins: 130, gems: 12 } },
-  { id: 10, name: "Summit", blurb: "Score 2,200 on the summit.", goal: { type: "score", value: 2200 }, stones: 6, reward: { coins: 160, gems: 16 } },
+  { id: 2, name: "Palms", blurb: "Clear 6 lines under the palms.", goal: { type: "lines", value: 6 }, stones: 0, reward: { coins: 50, gems: 5 }, introduces: "stars" },
+  { id: 3, name: "Cove", blurb: "Score 700 in the cove.", goal: { type: "score", value: 700 }, stones: 0, reward: { coins: 60, gems: 6 }, introduces: "arrows" },
+  { id: 4, name: "Falls", blurb: "Reach a x3 combo by the waterfall.", goal: { type: "combo", value: 3 }, stones: 0, reward: { coins: 70, gems: 6 } },
+  { id: 5, name: "Lanterns", blurb: "Clear 10 lines by lantern light.", goal: { type: "lines", value: 10 }, stones: 0, reward: { coins: 80, gems: 8 }, introduces: "bombs" },
+  { id: 6, name: "Cliff", blurb: "Score 1,100 on the cliff.", goal: { type: "score", value: 1100 }, stones: 0, reward: { coins: 90, gems: 8 }, introduces: "milo" },
+  { id: 7, name: "Ruins", blurb: "Clear 12 lines among cracked ruins.", goal: { type: "lines", value: 12 }, stones: 3, reward: { coins: 100, gems: 10 }, introduces: "stones" },
+  { id: 8, name: "Quarry", blurb: "Score 1,500 in the old quarry.", goal: { type: "score", value: 1500 }, stones: 4, reward: { coins: 110, gems: 10 }, introduces: "kai" },
+  { id: 9, name: "Temple", blurb: "Reach a x4 combo at the temple.", goal: { type: "combo", value: 4 }, stones: 4, reward: { coins: 130, gems: 12 }, introduces: "luna" },
+  { id: 10, name: "Summit", blurb: "Score 2,000 on the summit.", goal: { type: "score", value: 2000 }, stones: 5, reward: { coins: 150, gems: 14 }, introduces: "blast" },
+  { id: 11, name: "Grotto", blurb: "Clear 16 lines in the glowing grotto.", goal: { type: "lines", value: 16 }, stones: 5, reward: { coins: 160, gems: 14 }, introduces: "nia" },
+  { id: 12, name: "Reef", blurb: "Score 2,500 over the reef.", goal: { type: "score", value: 2500 }, stones: 5, reward: { coins: 170, gems: 16 }, introduces: "pip" },
+  { id: 13, name: "Lagoon", blurb: "Reach a x5 combo across the lagoon.", goal: { type: "combo", value: 5 }, stones: 6, reward: { coins: 180, gems: 16 } },
+  { id: 14, name: "Volcano", blurb: "Clear 20 lines on the volcano's rim.", goal: { type: "lines", value: 20 }, stones: 6, reward: { coins: 200, gems: 18 } },
+  { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 7, reward: { coins: 240, gems: 24 } },
 ];
+
+/** Everything unlocked by the time the player reaches `levelId`. */
+export function unlockedAt(levelId: number): UnlockId[] {
+  return ADVENTURE.filter((l) => l.id <= levelId && l.introduces).map((l) => l.introduces!);
+}
+
+/** The feature set an Adventure level plays with. */
+export function adventureFeatures(levelId: number): Features {
+  const on = new Set(unlockedAt(levelId));
+  const f = cloneFeatures(PLAIN_FEATURES);
+  f.stars = on.has("stars");
+  if (on.has("arrows")) f.specials.push("rocketH", "rocketV");
+  if (on.has("bombs")) f.specials.push("bomb");
+  if (on.has("blast")) f.specials.push("blast");
+  f.stones = on.has("stones");
+  for (const v of ["milo", "kai", "luna", "nia", "pip"] as const) if (on.has(v)) f.visitors.push(v);
+  return f;
+}
+
+export type ClassicLevel = {
+  id: number;
+  name: string;
+  goal: Goal;
+  reward: { coins: number; gems: number };
+};
+
+/** Classic: plain blocks only, steadily harder goals. */
+export const CLASSIC: ClassicLevel[] = Array.from({ length: 30 }, (_, i) => {
+  const id = i + 1;
+  const tier = Math.floor(i / 3);
+  const kind = i % 3;
+  const goal: Goal =
+    kind === 0
+      ? { type: "score", value: 300 + tier * 260 }
+      : kind === 1
+        ? { type: "lines", value: 4 + tier * 2 }
+        : { type: "combo", value: Math.min(2 + Math.floor(tier / 2), 7) };
+  return { id, name: `Classic ${id}`, goal, reward: { coins: 30 + tier * 10, gems: 2 + Math.floor(tier / 2) } };
+});
 
 export type ChallengeDef = {
   id: string;

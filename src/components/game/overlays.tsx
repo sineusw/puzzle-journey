@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Info,
   Lock,
+  Sparkles,
   Music,
   RotateCcw,
   Settings,
@@ -14,6 +15,8 @@ import {
 import {
   ADVENTURE,
   CHALLENGES,
+  CLASSIC,
+  UNLOCKS,
   CONTINUE_COST,
   QUESTS,
   SHOP_ITEMS,
@@ -25,6 +28,7 @@ import { useGame } from "@/lib/game/store";
 import { VISITOR_IDS, VISITOR_META } from "@/lib/game/visitors";
 import { formatInt } from "@/lib/utils";
 import { GameIcon, type IconName } from "./icons";
+import { SpecialFace } from "./tile-art";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
@@ -158,7 +162,7 @@ export function Overlays() {
       ) : null}
       {panel ? (
         <div
-          className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" ? "center" : ""}`}
+          className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" || panel === "intro" ? "center" : ""}`}
           role="dialog"
           aria-modal="true"
         >
@@ -171,6 +175,7 @@ export function Overlays() {
           {panel === "how" ? <HowSheet /> : null}
           {panel === "over" ? <OverSheet /> : null}
           {panel === "won" ? <WonSheet /> : null}
+          {panel === "intro" ? <IntroSheet /> : null}
         </div>
       ) : null}
     </>
@@ -310,7 +315,7 @@ function SettingsSheet() {
   const profile = useGame((s) => s.profile);
   const toggleSetting = useGame((s) => s.toggleSetting);
   const setPanel = useGame((s) => s.setPanel);
-  const newGame = useGame((s) => s.newGame);
+  const startSandbox = useGame((s) => s.startSandbox);
   const resetProgress = useGame((s) => s.resetProgress);
   return (
     <Sheet title="Settings">
@@ -336,8 +341,8 @@ function SettingsSheet() {
       <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setPanel("how")}>
         How to play
       </button>
-      <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={newGame}>
-        New endless run
+      <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={startSandbox}>
+        New Sandbox run
       </button>
       <button type="button" className="pj-btn pj-btn-ghost w-full text-danger" onClick={resetProgress}>
         Reset progress
@@ -384,9 +389,9 @@ function HowSheet() {
         <li>2. Fill a whole row or column to clear it. Fill several and they all pop at once.</li>
         <li>3. Chain clears on back-to-back drops for combos.</li>
         <li>4. Blocks don’t rotate — plan around the shapes you’re given.</li>
-        <li>5. Specials: bombs blast 3×3, rockets wipe a line, blasts clear the board, stone takes two hits.</li>
-        <li>6. Hammer, reroll, bomb, and frost get you out of tight spots.</li>
-        <li>7. Island visitors may hop in after a few moves — they peek, change one thing, and leave.</li>
+        <li>5. Three ways to play: Adventure, Classic levels with plain blocks, and Sandbox for a high score.</li>
+        <li>6. Adventure starts with plain blocks. New special blocks and Island Visitors join one at a time as you travel.</li>
+        <li>7. Hammer, reroll, bomb, and frost get you out of tight spots.</li>
       </ol>
       <button
         type="button"
@@ -403,22 +408,34 @@ function HowSheet() {
   );
 }
 
+function modeName(mode: string): string {
+  return mode === "adventure" ? "Adventure" : mode === "classic" ? "Classic" : mode === "sandbox" ? "Sandbox" : "Challenge";
+}
+
 function OverSheet() {
   const profile = useGame((s) => s.profile);
   const match = useGame((s) => s.match);
   const newGame = useGame((s) => s.newGame);
   const continueRun = useGame((s) => s.continueRun);
+  const setTab = useGame((s) => s.setTab);
+  const sandbox = match.mode === "sandbox";
+  const best = sandbox ? profile.sandboxBest : profile.highScore;
+  const newBest = sandbox && match.score > 0 && match.score >= profile.sandboxBest;
   return (
     <div className="pj-sheet text-center">
-      <h2 className="font-display text-3xl text-cream">No more moves</h2>
+      <p className="text-xs font-extrabold tracking-widest text-gold uppercase">{modeName(match.mode)}</p>
+      <h2 className="mt-1 font-display text-3xl text-cream">{newBest ? "New best!" : "No more moves"}</h2>
       <p className="mt-2 text-sm text-muted">
-        Score {formatInt(match.score)} · best {formatInt(profile.highScore)}
+        Score {formatInt(match.score)} · best {formatInt(best)}
       </p>
       <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={newGame}>
-        Play again
+        {match.levelId ? "Try level again" : "Play again"}
       </button>
       <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={continueRun}>
         Continue · {CONTINUE_COST} gems
+      </button>
+      <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={() => setTab("adventure")}>
+        Choose a mode
       </button>
     </div>
   );
@@ -427,49 +444,162 @@ function OverSheet() {
 function WonSheet() {
   const match = useGame((s) => s.match);
   const profile = useGame((s) => s.profile);
-  const newGame = useGame((s) => s.newGame);
   const startAdventure = useGame((s) => s.startAdventure);
+  const startClassic = useGame((s) => s.startClassic);
+  const newGame = useGame((s) => s.newGame);
   const setTab = useGame((s) => s.setTab);
-  const nextId = match.levelId ? match.levelId + 1 : null;
-  const nextOpen = nextId !== null && nextId <= profile.adventure.unlocked && ADVENTURE.some((l) => l.id === nextId);
+  const id = match.levelId;
+  const nextId = id ? id + 1 : null;
+  const list = match.mode === "classic" ? CLASSIC : ADVENTURE;
+  const unlocked = match.mode === "classic" ? profile.classic.unlocked : profile.adventure.unlocked;
+  const nextOpen = nextId !== null && nextId <= unlocked && list.some((l) => l.id === nextId);
+  const nextNew = match.mode === "adventure" && nextId ? ADVENTURE.find((l) => l.id === nextId)?.introduces : undefined;
+  const stars = id ? ((match.mode === "classic" ? profile.classic.stars : profile.adventure.stars)[String(id)] ?? 1) : 0;
   return (
     <div className="pj-sheet text-center">
-      <Star className="mx-auto size-8 text-gold" fill="currentColor" />
-      <h2 className="mt-2 font-display text-3xl text-cream">Island cleared</h2>
+      <div className="flex justify-center gap-1">
+        {[1, 2, 3].map((n) => (
+          <Star key={n} className={`size-8 ${n <= stars ? "text-gold" : "text-muted/40"}`} fill={n <= stars ? "currentColor" : "none"} />
+        ))}
+      </div>
+      <h2 className="mt-2 font-display text-3xl text-cream">{match.mode === "classic" ? "Level cleared" : "Island cleared"}</h2>
       <p className="mt-2 text-sm text-muted">
         {match.goal ? goalLabel(match.goal) : "Challenge complete"} · {formatInt(match.score)} pts
       </p>
+      {nextNew ? (
+        <p className="mt-2 text-sm font-extrabold text-gold">
+          <Sparkles className="mr-1 inline size-4" />
+          Next: {UNLOCKS[nextNew].name}
+        </p>
+      ) : null}
       {nextOpen && nextId ? (
-        <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={() => startAdventure(nextId)}>
-          Next island
+        <button
+          type="button"
+          className="pj-btn pj-btn-primary mt-5 w-full"
+          onClick={() => (match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId))}
+        >
+          {match.mode === "classic" ? "Next level" : "Next island"}
         </button>
       ) : (
         <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={newGame}>
-          Endless run
+          Play again
         </button>
       )}
-      <button
-        type="button"
-        className="pj-btn pj-btn-ghost mt-2 w-full"
-        onClick={() => {
-          newGame();
-          setTab("adventure");
-        }}
-      >
-        Island map
+      <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={() => setTab("adventure")}>
+        Choose a mode
       </button>
     </div>
   );
 }
 
+function IntroSheet() {
+  const unlock = useGame((s) => s.introUnlock);
+  const setPanel = useGame((s) => s.setPanel);
+  if (!unlock) return null;
+  const info = UNLOCKS[unlock];
+  return (
+    <div className="pj-sheet pj-intro text-center" data-testid="intro-card">
+      <p className="pj-intro-new">
+        <Sparkles className="mr-1 inline size-4" />
+        New on this island
+      </p>
+      <div className={`pj-intro-art is-${info.kind}`}>
+        {info.kind === "visitor" ? (
+          <img src={info.art} alt="" />
+        ) : (
+          <span className="pj-intro-tile" style={{ backgroundImage: `url(${info.art})` }}>
+            {info.special ? <SpecialFace kind={info.special} /> : null}
+          </span>
+        )}
+      </div>
+      <h2 className="mt-2 font-display text-3xl text-cream">{info.name}</h2>
+      <p className="mx-auto mt-2 max-w-[28ch] text-sm text-cream/85">{info.blurb}</p>
+      <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
+        Let’s go
+      </button>
+    </div>
+  );
+}
+
+type PlayMode = "adventure" | "classic" | "sandbox";
+
 function AdventureScreen() {
+  const current = useGame((s) => s.match.mode);
+  const [mode, setMode] = useState<PlayMode>(current === "classic" || current === "sandbox" ? current : "adventure");
+  const modes: Array<{ id: PlayMode; label: string; blurb: string }> = [
+    { id: "adventure", label: "Adventure", blurb: "Islands that add a new special block or visitor as you go." },
+    { id: "classic", label: "Classic", blurb: "Thirty levels with plain blocks only. No specials, no visitors." },
+    { id: "sandbox", label: "Sandbox", blurb: "Endless plain blocks. Chase your highest score." },
+  ];
+  const active = modes.find((m) => m.id === mode)!;
   return (
     <div>
-      <h2 className="font-display text-2xl">Adventure</h2>
-      <p className="mt-1 text-sm text-muted">Ten islands. Clear · relax · level up.</p>
-      <div className="mt-3">
-        <AdventureList />
+      <h2 className="font-display text-2xl">Play</h2>
+      <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
+        {modes.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="tab"
+            aria-selected={mode === m.id}
+            data-testid={`mode-${m.id}`}
+            className={`pj-mode-tab ${mode === m.id ? "is-on" : ""}`}
+            onClick={() => setMode(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
+      <p className="mt-2 text-sm text-muted">{active.blurb}</p>
+      <div className="mt-3">
+        {mode === "adventure" ? <AdventureList /> : mode === "classic" ? <ClassicList /> : <SandboxCard />}
+      </div>
+    </div>
+  );
+}
+
+function SandboxCard() {
+  const best = useGame((s) => s.profile.sandboxBest);
+  const startSandbox = useGame((s) => s.startSandbox);
+  return (
+    <div className="pj-card text-center">
+      <div className="text-xs text-muted">Your best</div>
+      <div className="mt-1 font-display text-4xl tabular-nums">{formatInt(best)}</div>
+      <button type="button" data-testid="sandbox-play" className="pj-btn pj-btn-primary mt-4 w-full" onClick={startSandbox}>
+        Play Sandbox
+      </button>
+    </div>
+  );
+}
+
+function ClassicList() {
+  const profile = useGame((s) => s.profile);
+  const startClassic = useGame((s) => s.startClassic);
+  return (
+    <div className="pj-classic-grid">
+      {CLASSIC.map((lvl) => {
+        const locked = lvl.id > profile.classic.unlocked;
+        const stars = profile.classic.stars[String(lvl.id)] ?? 0;
+        return (
+          <button
+            key={lvl.id}
+            type="button"
+            data-testid={`classic-${lvl.id}`}
+            className={`pj-classic-cell ${locked ? "is-locked" : ""}`}
+            disabled={locked}
+            onClick={() => startClassic(lvl.id)}
+            aria-label={`Classic level ${lvl.id}. ${goalLabel(lvl.goal)}.${locked ? " Locked." : ""}`}
+          >
+            <span className="font-display text-xl tabular-nums">{locked ? <Lock className="mx-auto size-4" /> : lvl.id}</span>
+            <span className="pj-classic-goal">{goalLabel(lvl.goal)}</span>
+            <span className="flex justify-center gap-0.5" aria-hidden="true">
+              {[1, 2, 3].map((n) => (
+                <Star key={n} className={`size-2.5 ${n <= stars ? "text-gold" : "text-muted/40"}`} fill={n <= stars ? "currentColor" : "none"} />
+              ))}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -534,13 +664,13 @@ function SkinsScreen() {
 function MoreScreen() {
   const profile = useGame((s) => s.profile);
   const setPanel = useGame((s) => s.setPanel);
-  const newGame = useGame((s) => s.newGame);
+  const startSandbox = useGame((s) => s.startSandbox);
   const xpNeed = xpForLevel(profile.level);
   return (
     <div>
       <h2 className="font-display text-2xl">More</h2>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Stat label="High score" value={formatInt(profile.highScore)} />
+        <Stat label="Sandbox best" value={formatInt(profile.sandboxBest)} />
         <Stat label="Best combo" value={`x${profile.bestCombo}`} />
         <Stat label="Runs" value={String(profile.games)} />
         <Stat label="Level" value={`${profile.level} · ${profile.xp}/${xpNeed}`} />
@@ -554,9 +684,9 @@ function MoreScreen() {
           <Settings className="mr-2 inline size-4" />
           Settings
         </button>
-        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={newGame}>
+        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={startSandbox}>
           <RotateCcw className="mr-2 inline size-4" />
-          New endless run
+          New Sandbox run
         </button>
       </div>
     </div>
@@ -577,7 +707,12 @@ function AdventureList({ compact = false }: { compact?: boolean }) {
               {locked ? <Lock className="size-4 text-muted" /> : lvl.id}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="font-extrabold">{lvl.name}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-extrabold">{lvl.name}</span>
+                {lvl.introduces ? (
+                  <span className="pj-new-chip">New: {UNLOCKS[lvl.introduces].name}</span>
+                ) : null}
+              </div>
               <div className="text-xs text-muted">{compact ? goalLabel(lvl.goal) : lvl.blurb}</div>
               <div className="mt-1 flex gap-0.5">
                 {[1, 2, 3].map((n) => (

@@ -1912,3 +1912,364 @@
 @media (max-height: 820px) {
   .pj-logo img { height: clamp(92px, 16vh, 150px); }
 }
+
+/* ------------------------------------------------------------------------
+   Game modes: Play screen tabs, Classic grid, "New!" intro card.
+   ------------------------------------------------------------------------ */
+
+.pj-mode-label {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f0d9a4;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.pj-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  background: rgba(5, 10, 24, 0.6);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.pj-mode-tab {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-cream);
+  font-weight: 800;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.pj-mode-tab.is-on {
+  opacity: 1;
+  color: #3a2200;
+  background: linear-gradient(180deg, #ffe58a 0%, #f5b53a 100%);
+  box-shadow: 0 3px 0 #9a5d0c, inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.pj-mode-tab:focus-visible { outline: 2px solid #7ee0ff; outline-offset: 2px; }
+
+.pj-new-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #3a2200;
+  background: linear-gradient(180deg, #ffe58a, #f5b53a);
+}
+
+.pj-classic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.pj-classic-cell {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  min-height: 92px;
+  padding: 10px 6px 8px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--color-cream);
+  background: linear-gradient(180deg, #24304e, #141c33);
+  box-shadow: 0 4px 0 #070e1c, inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.pj-classic-cell.is-locked { opacity: 0.45; }
+
+.pj-classic-goal {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  color: rgba(244, 238, 227, 0.75);
+}
+
+.pj-intro-new {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd75e;
+}
+
+.pj-intro-art {
+  display: grid;
+  place-items: center;
+  height: 150px;
+  margin-top: 6px;
+}
+
+.pj-intro-art.is-visitor img {
+  height: 150px;
+  width: auto;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
+  animation: pj-intro-pop 640ms cubic-bezier(0.2, 1.6, 0.4, 1) both, pj-intro-float 2.4s 640ms ease-in-out infinite alternate;
+}
+
+.pj-intro-tile {
+  position: relative;
+  display: block;
+  width: 96px;
+  height: 96px;
+  border-radius: 14px;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
+  animation: pj-intro-pop 640ms cubic-bezier(0.2, 1.6, 0.4, 1) both, pj-intro-float 2.4s 640ms ease-in-out infinite alternate;
+}
+
+.pj-intro-tile .pj-sp { inset: 14%; }
+
+@keyframes pj-intro-pop {
+  from { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes pj-intro-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-intro-art.is-visitor img,
+  .pj-intro-tile { animation: none; }
+}
+
+/* ------------------------------------------------------------------------
+   Island Visitor scenes (components/game/visitors/choreography.ts).
+   Everything is positioned in viewport px and moved with transforms.
+   ------------------------------------------------------------------------ */
+
+.pj-vis-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.pj-fx-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.pj-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+}
+
+.pj-actor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  z-index: 4;
+}
+
+.pj-actor-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -4%;
+  width: 70%;
+  height: 12%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.6), transparent);
+  transform-origin: 50% 50%;
+}
+
+.pj-actor-body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+.pj-actor-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45));
+  user-select: none;
+}
+
+.pj-actor-img[data-mode="idle"] { animation: pj-act-breathe 1.1s ease-in-out infinite alternate; }
+.pj-actor-img[data-mode="hover"] { animation: pj-act-hover 1.2s ease-in-out infinite alternate; filter: drop-shadow(0 0 10px rgba(196, 140, 255, 0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
+.pj-actor-img[data-mode="flap"] { animation: pj-act-flap 0.16s ease-in-out infinite alternate; }
+.pj-actor-img[data-mode="run"] { animation: pj-act-run 0.22s ease-in-out infinite alternate; }
+
+@keyframes pj-act-breathe { from { transform: scale(1, 1); } to { transform: scale(1.025, 0.97); } }
+@keyframes pj-act-hover { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-8%) rotate(2deg); } }
+@keyframes pj-act-flap { from { transform: scale(1.06, 0.94) rotate(-4deg); } to { transform: scale(0.95, 1.06) rotate(4deg); } }
+@keyframes pj-act-run { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-5%) rotate(3deg); } }
+
+.pj-actor-prop,
+.pj-actor-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+}
+
+.pj-actor-bubble {
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #2b1a05;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 rgba(60, 35, 10, 0.35), 0 8px 18px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  scale: 0.6;
+  transition: opacity 160ms ease, scale 220ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+.pj-actor-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-top-color: #fffaf0;
+}
+
+.pj-actor-bubble.is-on { opacity: 1; scale: 1; }
+
+.pj-fly-tile {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-radius: 13%;
+  background-size: 100% 100%;
+  will-change: transform;
+  z-index: 5;
+}
+
+.pj-fly-tile.is-held { filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 8px rgba(255, 240, 180, 0.6)); }
+.pj-fly-tile.is-dropped { filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.55)); }
+.pj-fly-tile.is-splat { filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.7)); }
+
+.pj-vine {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 5px;
+  margin-left: -2.5px;
+  border-radius: 3px;
+  transform-origin: 50% 0;
+  background:
+    radial-gradient(ellipse 7px 4px at 0 30%, #3fae4a 60%, transparent 62%) 0 0 / 5px 26px repeat-y,
+    linear-gradient(90deg, #4b7a24, #6aa33a 45%, #3d6619);
+  box-shadow: 0 0 0 1px rgba(20, 40, 8, 0.35);
+  z-index: 3;
+  transition: opacity 300ms ease, height 380ms ease-in;
+}
+
+.pj-vine.is-gone { opacity: 0; height: 0 !important; }
+
+.pj-beam {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 8px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 240, 180, 0.95), rgba(214, 160, 255, 0.95) 40%, rgba(160, 230, 255, 0.95));
+  box-shadow: 0 0 12px rgba(214, 160, 255, 0.95), 0 0 26px rgba(160, 120, 255, 0.6);
+  z-index: 4;
+}
+
+.pj-rune {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 226, 122, 0.95);
+  background: radial-gradient(circle, rgba(214, 160, 255, 0.45), rgba(120, 60, 220, 0.12) 60%, transparent 70%);
+  box-shadow: 0 0 18px rgba(214, 160, 255, 0.8), inset 0 0 12px rgba(255, 226, 122, 0.6);
+  opacity: 0;
+  animation: pj-rune-spin 1.6s linear infinite;
+  z-index: 3;
+}
+
+@keyframes pj-rune-spin { to { rotate: 360deg; } }
+
+.pj-path {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  overflow: visible;
+}
+
+.pj-path path {
+  fill: none;
+  stroke: #9fe8ff;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgba(120, 220, 255, 0.95));
+}
+
+.pj-paint-blob {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-radius: 50% 50% 46% 46%;
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, var(--paint) 30%, color-mix(in oklab, var(--paint) 70%, black) 100%);
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+.pj-vis-stage .pj-vis-warn {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 74px);
+  opacity: 0;
+  transform: translate(-50%, -40px);
+  z-index: 6;
+}
+
+.pj-vis-stage .pj-vis-warn img {
+  width: 40px;
+  height: 46px;
+  object-fit: contain;
+  animation: pj-act-breathe 0.4s ease-in-out infinite alternate;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-actor-img,
+  .pj-rune,
+  .pj-vis-stage .pj-vis-warn img { animation: none !important; }
+}

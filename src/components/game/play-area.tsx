@@ -41,7 +41,7 @@ export function PlayArea() {
   const tryPlace = useGame((s) => s.tryPlace);
   const usePowerOnCell = useGame((s) => s.usePowerOnCell);
   const visitorBusy = useGame((s) => s.visitorBusy);
-  const visitorEvent = useGame((s) => s.visitorEvent);
+  const visitorHide = useGame((s) => s.visitorHide);
   const setPointerBusy = useGame((s) => s.setPointerBusy);
 
   const gridRef = useRef<HTMLDivElement>(null);
@@ -256,10 +256,7 @@ export function PlayArea() {
                 const justLanded = landedAt(r, c);
                 const hinted = hintCells.has(key);
                 const willClear = clearSet.has(key);
-                const hideForFly =
-                  visitorEvent?.action.kind === "move" &&
-                  visitorEvent.action.from[0] === r &&
-                  visitorEvent.action.from[1] === c;
+                const hideForFly = visitorHide.includes(key);
                 const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
                 const cubeColor = special === "bomb" ? "violet" : special === "blast" ? "amber" : special === "rocketH" || special === "rocketV" ? "azure" : col;
                 return (

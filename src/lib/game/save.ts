@@ -1,7 +1,7 @@
-import { newEndlessMatch, sanitizeMatch, type Match } from "./engine";
-import type { PowerId, QuestId, SkinId } from "./content";
+import { newLevelMatch, sanitizeMatch, type Match } from "./engine";
+import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content";
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = "puzzle-journey-v1";
 
 export type PowerCounts = Record<PowerId, number>;
@@ -23,6 +23,11 @@ export type Profile = {
   quests: QuestProgress;
   questDay: string;
   adventure: { unlocked: number; stars: Record<string, number> };
+  classic: { unlocked: number; stars: Record<string, number> };
+  /** Best Sandbox score (plain blocks, endless). */
+  sandboxBest: number;
+  /** Adventure unlocks whose "New!" card the player has already seen. */
+  seenUnlocks: UnlockId[];
   skin: SkinId;
   seenHowTo: boolean;
   match: Match | null;
@@ -52,6 +57,9 @@ export function defaultProfile(): Profile {
     quests: EMPTY_QUESTS(),
     questDay: todayKey(),
     adventure: { unlocked: 1, stars: {} },
+    classic: { unlocked: 1, stars: {} },
+    sandboxBest: 0,
+    seenUnlocks: [],
     skin: "classic",
     seenHowTo: false,
     match: null,
@@ -77,9 +85,15 @@ function migrate(raw: Profile): Profile {
       unlocked: raw.adventure?.unlocked ?? 1,
       stars: raw.adventure?.stars ?? {},
     },
-    // Version 2 introduced the dimensional special-tile showcase. Keep the
-    // player's currency and progress, but replace the stale v1 board so the
-    // upgraded bomb, arrow and stone art is visible immediately.
+    classic: {
+      unlocked: raw.classic?.unlocked ?? 1,
+      stars: raw.classic?.stars ?? {},
+    },
+    sandboxBest: raw.sandboxBest ?? 0,
+    seenUnlocks: raw.seenUnlocks ?? [],
+    // Version 3 introduced game modes. Keep currency and progress, but start
+    // the player on a fresh run so an old special-filled board doesn't carry
+    // over into the plain-block start.
     match: shouldRefreshShowcase ? null : raw.match,
   };
   if (next.questDay !== todayKey()) {
@@ -110,13 +124,19 @@ export function saveProfile(profile: Profile): void {
   }
 }
 
+/** The run a brand-new player starts with: Adventure level 1, plain blocks. */
+export function firstMatch(): Match {
+  const lvl = ADVENTURE[0]!;
+  return newLevelMatch("adventure", lvl.id, lvl.goal, lvl.stones, adventureFeatures(lvl.id));
+}
+
 export function ensureMatch(profile: Profile): Profile {
   if (profile.match) {
     try {
       return { ...profile, match: sanitizeMatch(profile.match) };
     } catch {
-      return { ...profile, match: newEndlessMatch({ showcase: profile.games === 0 }) };
+      return { ...profile, match: firstMatch() };
     }
   }
-  return { ...profile, match: newEndlessMatch({ showcase: profile.games === 0 }) };
+  return { ...profile, match: firstMatch() };
 }

@@ -50,6 +50,38 @@ export type Goal =
   | { type: "lines"; value: number }
   | { type: "combo"; value: number };
 
+/** Game modes. "classic" = plain-block levels, "adventure" = levels that
+ *  unlock specials and visitors one at a time, "sandbox" = endless high
+ *  score with plain blocks, "challenge" = short goal runs. */
+export type GameMode = "classic" | "adventure" | "sandbox" | "challenge";
+
+export type BlockSpecial = Exclude<SpecialId, "stone">;
+
+/** What may appear in a match. Every generator and visitor obeys this. */
+export type Features = {
+  /** Star gem blocks (bonus points when cleared). */
+  stars: boolean;
+  /** Special blocks pieces can carry. */
+  specials: BlockSpecial[];
+  /** Stone obstacles on the board and on pieces. */
+  stones: boolean;
+  /** Island Visitor ids allowed to drop in. */
+  visitors: string[];
+};
+
+export const PLAIN_FEATURES: Features = { stars: false, specials: [], stones: false, visitors: [] };
+
+export const ALL_FEATURES: Features = {
+  stars: true,
+  specials: ["rocketH", "rocketV", "bomb", "blast"],
+  stones: true,
+  visitors: ["milo", "luna", "kai", "nia", "pip"],
+};
+
+export function cloneFeatures(f: Features): Features {
+  return { stars: f.stars, specials: [...f.specials], stones: f.stones, visitors: [...f.visitors] };
+}
+
 export type Match = {
   board: Cell[][];
   tray: Array<Piece | null>;
@@ -61,8 +93,9 @@ export type Match = {
   shield: number;
   over: boolean;
   won: boolean;
-  mode: "endless" | "adventure";
+  mode: GameMode;
   levelId: number | null;
+  features: Features;
   goal: Goal | null;
   goalProgress: number;
   stonesCleared: number;
@@ -174,8 +207,11 @@ export function sanitizePiece(piece: Piece): Piece {
 }
 
 export function sanitizeMatch(match: Match): Match {
+  const legacyMode = (match.mode as string) === "endless";
   return {
     ...match,
+    mode: legacyMode ? "sandbox" : match.mode,
+    features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
     board: cloneBoard(match.board ?? emptyBoard()),
     tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
     goal: match.goal ? { ...match.goal } : null,
@@ -185,6 +221,7 @@ export function sanitizeMatch(match: Match): Match {
 export function cloneMatch(m: Match): Match {
   return {
     ...m,
+    features: cloneFeatures(m.features),
     board: cloneBoard(m.board),
     tray: m.tray.map((p) => (p ? clonePiece(p) : null)),
     goal: m.goal ? { ...m.goal } : null,
@@ -295,21 +332,30 @@ function pickColor(rng: () => number): ColorId {
   return COLORS[Math.floor(rng() * COLORS.length)]!;
 }
 
-export function makePiece(rng: () => number, forceShape?: string): Piece {
+/** Pick a special a piece may carry under `features`, or null. */
+function rollSpecial(rng: () => number, features: Features): SpecialId | null {
+  const roll = rng();
+  const has = (sp: BlockSpecial) => features.specials.includes(sp);
+  if (roll > 0.94 && has("blast")) return "blast";
+  if (roll > 0.8 && has("bomb")) return "bomb";
+  if (roll > 0.66 && (has("rocketH") || has("rocketV"))) {
+    const dirs = (["rocketH", "rocketV"] as const).filter(has);
+    return dirs[Math.floor(rng() * dirs.length)]!;
+  }
+  if (roll > 0.56 && features.stones) return "stone";
+  return null;
+}
+
+export function makePiece(rng: () => number, forceShape?: string, features: Features = ALL_FEATURES): Piece {
   const shape = forceShape
     ? SHAPE_MAP.get(forceShape) ?? pickShape(rng)
     : pickShape(rng);
   const turns = Math.floor(rng() * 4);
   const cells = rotateN(shape.cells, turns);
   const starRoll = rng();
-  const gold = starRoll > 0.97;
-  const starAt = gold || starRoll > 0.9 ? Math.floor(rng() * cells.length) : null;
-  const specRoll = rng();
-  let special: SpecialId | null = null;
-  if (specRoll > 0.93) special = "blast";
-  else if (specRoll > 0.78) special = "bomb";
-  else if (specRoll > 0.64) special = rng() > 0.5 ? "rocketH" : "rocketV";
-  else if (specRoll > 0.52) special = "stone";
+  const gold = features.stars && starRoll > 0.97;
+  const starAt = features.stars && (gold || starRoll > 0.9) ? Math.floor(rng() * cells.length) : null;
+  const special = rollSpecial(rng, features);
   const specialAt = special !== null ? Math.floor(rng() * cells.length) : null;
   return {
     id: uid(),
@@ -705,33 +751,32 @@ export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 3000): 
 }
 
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
+  const f = match.features;
+  const make = (shape?: string) => makePiece(rng, shape, f);
   const makeFitting = (): Piece[] => {
     if (easy) {
-      return [
-        makePiece(rng, "o4"),
-        makePiece(rng, "i3"),
-        makePiece(rng, "l3"),
-      ];
+      return [make("o4"), make("i3"), make("l3")];
     }
     let partial: Piece[] | null = null;
     for (let attempt = 0; attempt < 28; attempt++) {
-      const pieces = [makePiece(rng), makePiece(rng), makePiece(rng)];
+      const pieces = [make(), make(), make()];
       if (!pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) continue;
       if (setIsPlayable(match.board, pieces)) return pieces;
       partial ??= pieces;
     }
     // Crowded board: small pieces are the fairest offer if they all fit.
-    const small = [makePiece(rng, "o1"), makePiece(rng, "i2"), makePiece(rng, "l3")];
+    const small = [make("o1"), make("i2"), make("l3")];
     if (setIsPlayable(match.board, small)) return small;
     return partial ?? small;
   };
   const pieces = makeFitting();
-  if (!pieces.some((p) => p.special)) {
+  // When specials are unlocked, make sure they actually show up now and then:
+  // half the sets without one get one of the allowed kinds.
+  const anySpecial = f.specials.length > 0 || f.stones;
+  if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.5) {
     const i = Math.floor(rng() * pieces.length);
-    const roll = rng();
-    const special: SpecialId =
-      roll > 0.82 ? "blast" : roll > 0.5 ? "bomb" : roll > 0.22 ? (rng() > 0.5 ? "rocketH" : "rocketV") : "stone";
-    pieces[i] = { ...pieces[i]!, special, specialAt: 0 };
+    const special = rollSpecial(() => 0.57 + rng() * 0.43, f);
+    if (special) pieces[i] = { ...pieces[i]!, special, specialAt: 0 };
   }
   match.tray = pieces;
 }
@@ -741,8 +786,9 @@ export function refillIfNeeded(match: Match, rng: () => number = defaultRng()): 
   return checkOver(match);
 }
 
-function blankMatch(): Match {
+function blankMatch(features: Features = PLAIN_FEATURES): Match {
   return {
+    features: cloneFeatures(features),
     board: emptyBoard(),
     tray: [null, null, null],
     score: 0,
@@ -753,7 +799,7 @@ function blankMatch(): Match {
     shield: 0,
     over: false,
     won: false,
-    mode: "endless",
+    mode: "sandbox",
     levelId: null,
     goal: null,
     goalProgress: 0,
@@ -761,38 +807,58 @@ function blankMatch(): Match {
   };
 }
 
-export function newGoalMatch(goal: Goal): Match {
-  const match = newEndlessMatch();
-  match.mode = "adventure";
+/** Short goal run on a fresh board (Challenges). Uses the full feature set. */
+export function newGoalMatch(goal: Goal, features: Features = ALL_FEATURES): Match {
+  const match = blankMatch(features);
+  match.mode = "challenge";
   match.goal = goal;
-  match.levelId = null;
+  fillTray(match, defaultRng(), true);
   updateGoal(match);
   return match;
 }
 
-export function newEndlessMatch(opts?: { showcase?: boolean }): Match {
-  const match = blankMatch();
-  if (opts?.showcase) {
-    match.board = openingBoard();
-    match.tray = openingTray();
-    return checkOver(match);
-  }
+/** Sandbox: endless, plain blocks only, chase the high score. */
+export function newSandboxMatch(): Match {
+  const match = blankMatch(PLAIN_FEATURES);
+  match.mode = "sandbox";
   fillTray(match, defaultRng(), true);
   return match;
 }
 
-export function newAdventureMatch(levelId: number, goal: Goal, stones: number): Match {
-  const rng = mulberry32(levelId * 9973 + 17);
+/** Kept for older callers and tests: the endless run is now Sandbox. */
+export function newEndlessMatch(opts?: { showcase?: boolean }): Match {
+  if (opts?.showcase) {
+    const match = blankMatch(ALL_FEATURES);
+    match.board = openingBoard();
+    match.tray = openingTray();
+    return checkOver(match);
+  }
+  return newSandboxMatch();
+}
+
+/** A level in Classic or Adventure. Stones are only placed when allowed. */
+export function newLevelMatch(
+  mode: "classic" | "adventure",
+  levelId: number,
+  goal: Goal,
+  stones: number,
+  features: Features,
+): Match {
+  const rng = mulberry32(levelId * 9973 + (mode === "classic" ? 4219 : 17));
   const board = emptyBoard();
-  sprinkleStones(board, stones, rng);
-  const match = blankMatch();
+  if (features.stones) sprinkleStones(board, stones, rng);
+  const match = blankMatch(features);
   match.board = board;
-  match.mode = "adventure";
+  match.mode = mode;
   match.levelId = levelId;
   match.goal = goal;
   fillTray(match, rng, levelId <= 2);
   updateGoal(match);
   return match;
+}
+
+export function newAdventureMatch(levelId: number, goal: Goal, stones: number, features: Features = ALL_FEATURES): Match {
+  return newLevelMatch("adventure", levelId, goal, stones, features);
 }
 
 export function placePiece(
