@@ -14,6 +14,9 @@ import {
   placePiece,
   resolveClears,
   snapPlace,
+  SNAP_RADIUS,
+  setIsPlayable,
+  refillIfNeeded,
   placeFromCell,
   peelCell,
   type Cell,
@@ -272,3 +275,53 @@ describe("puzzle journey engine", () => {
 function cloneBoardSafe(board: Cell[][]): Cell[][] {
   return board.map((row) => row.map((cell) => ({ ...cell })));
 }
+
+describe("drop accuracy and fair piece sets", () => {
+  it("never snaps a drop more than one cell from where the player aimed", () => {
+    const board = emptyBoard();
+    // Fill everything except a single hole at (7,7).
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) board[r][c] = block();
+    board[7][7] = { t: "e" };
+    const cells: Array<[number, number]> = [[0, 0]];
+    assert.equal(snapPlace(board, cells, 0, 0), null, "far-away hole must not be reached");
+    assert.deepEqual(snapPlace(board, cells, 6, 6), { r: 7, c: 7 }, "adjacent hole is fine");
+    assert.ok(SNAP_RADIUS <= 1);
+  });
+
+  it("rejects a set that can only be placed partway", () => {
+    // Every row and column keeps a gap after the pocket is filled, so no
+    // placement here can clear a line and open up more room.
+    const board = emptyBoard();
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) board[r][c] = block();
+    const holes = [
+      [0, 0], [0, 1], [1, 0], [1, 1], // the only 2x2 pocket
+      [0, 3], [1, 5], [2, 6], [3, 1], [4, 4], [4, 0], [5, 7], [6, 2], [7, 5], // isolated singles
+    ] as const;
+    for (const [r, c] of holes) {
+      board[r][c] = { t: "e" };
+    }
+    const sq = piece([[0, 0], [0, 1], [1, 0], [1, 1]]);
+    const bar = piece([[0, 0], [0, 1]]);
+    assert.equal(setIsPlayable(board, [sq]), true);
+    assert.equal(setIsPlayable(board, [bar]), true);
+    assert.equal(setIsPlayable(board, [sq, bar]), false, "both need the only pocket");
+  });
+
+  it("refills a crowded board with a set the player can fully place", () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const match = newEndlessMatch();
+      const board = emptyBoard();
+      // Pseudo-random ~60% fill with no full lines.
+      let s = seed * 7919;
+      const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (rnd() < 0.6) board[r][c] = block();
+      for (let r = 0; r < SIZE; r++) board[r][r] = { t: "e" };
+      match.board = board;
+      match.tray = [null, null, null];
+      refillIfNeeded(match);
+      const set = match.tray.filter((p): p is Piece => p !== null);
+      assert.equal(set.length, 3);
+      assert.equal(setIsPlayable(match.board, set, 50000), true, `seed ${seed} produced a dead set`);
+    }
+  });
+});

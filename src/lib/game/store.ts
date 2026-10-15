@@ -11,7 +11,6 @@ import {
   newGoalMatch,
   placePiece,
   refreshTray,
-  rotatePiece,
   sanitizeMatch,
   type Cell,
   type Match,
@@ -81,7 +80,6 @@ type GameStore = {
   setTab: (tab: Tab) => void;
   setPanel: (panel: Panel) => void;
   selectPiece: (index: number | null) => void;
-  rotateSelected: () => void;
   tryPlace: (trayIndex: number, row: number, col: number) => boolean;
   armPower: (id: PowerId) => void;
   usePowerOnCell: (row: number, col: number) => boolean;
@@ -204,19 +202,6 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   selectPiece: (index) => set({ selected: index, targeting: null }),
-
-  rotateSelected: () => {
-    const { match, selected, visitorBusy } = get();
-    if (visitorBusy) return;
-    if (selected === null) return;
-    const piece = match.tray[selected];
-    if (!piece) return;
-    audio.sfxUi();
-    const tray = match.tray.slice();
-    tray[selected] = rotatePiece(piece);
-    set({ match: { ...match, tray } });
-    persistSoon(get);
-  },
 
   tryPlace: (trayIndex, row, col) => {
     const { match, profile, visitorBusy } = get();

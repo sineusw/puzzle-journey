@@ -13,8 +13,8 @@ import {
   type ColorId,
   type Match,
   type SpecialId,
-} from "../engine";
-import type { VisitorAction, VisitorId, VisitorMood } from "./types";
+} from "../engine.ts";
+import type { VisitorAction, VisitorId, VisitorMood } from "./types.ts";
 
 export function isPlainBlock(cell: Cell): boolean {
   if (cell.t !== "b" && cell.t !== "s") return false;

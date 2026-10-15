@@ -383,7 +383,7 @@ function HowSheet() {
         <li>1. Drag a next-block from the tray under the board onto the grid.</li>
         <li>2. Fill a whole row or column to clear it. Fill several and they all pop at once.</li>
         <li>3. Chain clears on back-to-back drops for combos.</li>
-        <li>4. Tap a tray block or Rotate to turn it. Press R on a keyboard.</li>
+        <li>4. Blocks don’t rotate — plan around the shapes you’re given.</li>
         <li>5. Specials: bombs blast 3×3, rockets wipe a line, blasts clear the board, stone takes two hits.</li>
         <li>6. Hammer, reroll, bomb, and frost get you out of tight spots.</li>
         <li>7. Island visitors may hop in after a few moves — they peek, change one thing, and leave.</li>

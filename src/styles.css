@@ -226,9 +226,20 @@
   min-width: 0;
 }
 
+.pj-chip-wide {
+  min-width: 96px;
+}
+
 .pj-lv {
   font-size: 14px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Narrow phones: sound/music toggles live in Settings, so drop the top-bar
+   copy rather than crushing the level chip behind the coin counter. */
+@media (max-width: 419px) {
+  .pj-audio { display: none; }
 }
 
 .pj-avatar {
@@ -360,20 +371,22 @@
   filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35));
 }
 
+/* "BLOCK" — warm gold, sits on top. "JOURNEY" — tropical blue below.
+   Static on purpose: the title must never move behind active play. */
 .pj-word-a {
-  font-size: clamp(1.7rem, 8vw, 2.5rem);
-  color: #5eb7ff;
-  -webkit-text-stroke: 4px #1a4f9c;
+  font-size: clamp(1.9rem, 9vw, 2.8rem);
+  color: #ffcf4a;
+  -webkit-text-stroke: 4px #9a520a;
   paint-order: stroke fill;
-  text-shadow: 0 4px 0 #163e7a;
+  text-shadow: 0 4px 0 #6a3606;
 }
 
 .pj-word-b {
   font-size: clamp(1.8rem, 8.4vw, 2.65rem);
-  color: #ffcf4a;
-  -webkit-text-stroke: 4px #b56a10;
+  color: #5ec8ff;
+  -webkit-text-stroke: 4px #134a9a;
   paint-order: stroke fill;
-  text-shadow: 0 4px 0 #8a4a08;
+  text-shadow: 0 4px 0 #0e3570;
 }
 
 .pj-tag {
@@ -464,29 +477,39 @@
   min-height: 0;
 }
 
+/* Ancient carved-stone puzzle surface: speckled dark stone, a chiselled
+   inner groove, moss creeping in from the corners, and a deep drop shadow
+   so the board reads clearly against the busy island backdrop. */
 .pj-frame {
   position: relative;
   width: min(100%, 300px);
   flex: 1 1 auto;
   max-width: 318px;
   padding: 12px;
-  border-radius: 30px;
+  border-radius: 26px;
   background:
-    linear-gradient(180deg, #a8b0c0 0%, #7a8294 38%, #5a6272 100%);
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.07) 0 1.5px, transparent 2.5px) 0 0 / 19px 19px,
+    radial-gradient(circle at 70% 65%, rgba(0, 0, 0, 0.22) 0 2px, transparent 3px) 0 0 / 23px 23px,
+    radial-gradient(ellipse at 50% 0%, rgba(255, 214, 160, 0.16), transparent 60%),
+    linear-gradient(180deg, #646a74 0%, #4a4f59 42%, #31353e 100%);
   box-shadow:
-    0 22px 34px rgba(0, 0, 0, 0.45),
-    inset 0 2px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -8px 14px rgba(0, 0, 0, 0.32);
+    0 0 0 2px #1a1d23,
+    0 22px 36px rgba(0, 0, 0, 0.55),
+    inset 0 2px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -7px 12px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
 .pj-frame::before {
   content: "";
   position: absolute;
-  inset: 8px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  inset: 6px;
+  border-radius: 21px;
+  border: 2px solid rgba(0, 0, 0, 0.38);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   pointer-events: none;
 }
+
 
 .pj-rivet {
   position: absolute;
@@ -504,6 +527,8 @@
 .pj-rivet.br { bottom: 8px; right: 8px; }
 
 .pj-grid {
+  position: relative;
+  z-index: 1; /* sit above the frame's moss layer */
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 2px;

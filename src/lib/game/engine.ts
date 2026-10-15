@@ -369,7 +369,7 @@ function sprinkleStones(board: Cell[][], count: number, rng: () => number): void
   }
 }
 
-/** Mid-run board that matches the Puzzle Journey mock — no full lines. */
+/** Mid-run board that matches the Block Journey mock — no full lines. */
 export function openingBoard(): Cell[][] {
   const b = emptyBoard();
   const put = (r: number, c: number, cell: Cell) => {
@@ -671,6 +671,39 @@ export function checkOver(match: Match): Match {
   return match;
 }
 
+/**
+ * True when every piece in the set can be placed, one after another, in some
+ * order — including the line clears each placement triggers. This is what
+ * keeps a fresh set from being a guaranteed loss.
+ *
+ * The search is bounded by `budget` placements tried; if the budget runs out
+ * the set is treated as playable (we only ever reject sets we've *proven* dead).
+ */
+export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 3000): boolean {
+  let tries = 0;
+  const visit = (b: Cell[][], left: Piece[]): boolean => {
+    if (left.length === 0) return true;
+    if (left.length === 1) return canPlaceAnywhere(b, left[0]!.cells);
+    for (let i = 0; i < left.length; i++) {
+      const p = left[i]!;
+      const { rows, cols } = bounds(p.cells);
+      const rest = left.filter((_, j) => j !== i);
+      for (let r = 0; r <= SIZE - rows; r++) {
+        for (let c = 0; c <= SIZE - cols; c++) {
+          if (!canPlace(b, p.cells, r, c)) continue;
+          if (++tries > budget) return true;
+          const next = cloneBoard(b);
+          stampPiece(next, p, r, c);
+          resolveClears(next);
+          if (visit(next, rest)) return true;
+        }
+      }
+    }
+    return false;
+  };
+  return visit(board, pieces);
+}
+
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const makeFitting = (): Piece[] => {
     if (easy) {
@@ -680,15 +713,17 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
         makePiece(rng, "l3"),
       ];
     }
+    let partial: Piece[] | null = null;
     for (let attempt = 0; attempt < 28; attempt++) {
       const pieces = [makePiece(rng), makePiece(rng), makePiece(rng)];
-      if (pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) return pieces;
+      if (!pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) continue;
+      if (setIsPlayable(match.board, pieces)) return pieces;
+      partial ??= pieces;
     }
-    const fallback = [makePiece(rng, "o1"), makePiece(rng, "i2"), makePiece(rng, "l3")];
-    if (!fallback.some((p) => canPlaceAnywhere(match.board, p.cells))) {
-      fallback[0] = makePiece(rng, "o1");
-    }
-    return fallback;
+    // Crowded board: small pieces are the fairest offer if they all fit.
+    const small = [makePiece(rng, "o1"), makePiece(rng, "i2"), makePiece(rng, "l3")];
+    if (setIsPlayable(match.board, small)) return small;
+    return partial ?? small;
   };
   const pieces = makeFitting();
   if (!pieces.some((p) => p.special)) {
@@ -890,6 +925,12 @@ export function burstLabel(lines: number): string {
   return "Mega";
 }
 
+/**
+ * How far (in cells) a drag may be nudged to the nearest legal spot.
+ * Kept at 1 so a drop never lands somewhere the player wasn't pointing.
+ */
+export const SNAP_RADIUS = 1;
+
 export function snapPlace(
   board: Cell[][],
   cells: CellPos[],
@@ -898,8 +939,8 @@ export function snapPlace(
 ): { r: number; c: number } | null {
   if (canPlace(board, cells, row, col)) return { r: row, c: col };
   let best: { r: number; c: number; d: number } | null = null;
-  for (let dr = -2; dr <= 2; dr++) {
-    for (let dc = -2; dc <= 2; dc++) {
+  for (let dr = -SNAP_RADIUS; dr <= SNAP_RADIUS; dr++) {
+    for (let dc = -SNAP_RADIUS; dc <= SNAP_RADIUS; dc++) {
       if (dr === 0 && dc === 0) continue;
       const r = row + dr;
       const c = col + dc;

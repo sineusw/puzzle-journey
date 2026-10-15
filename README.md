@@ -1,6 +1,6 @@
-# Puzzle Journey
+# Block Journey
 
-A Block Blast–style puzzle game: drag colorful polyominoes onto an 8×8 board, clear rows and columns, and use bombs, rockets, and stones.
+A tropical adventure block puzzle: drag colorful blocks onto an 8×8 board, clear rows and columns, and use bombs, rockets, and stones. Blocks don't rotate.
 
 Clear · Relax · Level Up
 
@@ -19,6 +19,8 @@ Clear · Relax · Level Up
 npm install
 npm run dev
 ```
+
+Game-logic tests: `npm run test:game`
 
 Open the printed local URL, then play.
 

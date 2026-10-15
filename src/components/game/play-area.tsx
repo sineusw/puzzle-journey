@@ -38,7 +38,6 @@ export function PlayArea() {
   const shake = useGame((s) => s.shake);
   const comboPop = useGame((s) => s.comboPop);
   const selectPiece = useGame((s) => s.selectPiece);
-  const rotateSelected = useGame((s) => s.rotateSelected);
   const tryPlace = useGame((s) => s.tryPlace);
   const usePowerOnCell = useGame((s) => s.usePowerOnCell);
   const visitorBusy = useGame((s) => s.visitorBusy);
@@ -55,7 +54,6 @@ export function PlayArea() {
   const [hint, setHint] = useState<{ r: number; c: number; index: number } | null>(null);
   const moved = useRef(false);
   const skipClick = useRef(false);
-  const wasSelected = useRef(false);
 
   const setHoverBoth = (h: Hover | null) => {
     const prev = hoverRef.current;
@@ -162,15 +160,9 @@ export function PlayArea() {
       if (piece && h?.valid && moved.current) {
         skipClick.current = true;
         tryPlace(d.index, h.r, h.c);
-      } else if (!moved.current) {
-        if (wasSelected.current) rotateSelected();
-      } else if (moved.current && piece && h) {
-        const snap = placeFromCell(match.board, piece.cells, h.r, h.c);
-        if (snap) {
-          skipClick.current = true;
-          tryPlace(d.index, snap.r, snap.c);
-        } else audio.sfxBad();
       } else if (moved.current && piece) {
+        // Invalid or off-board release: the piece goes back to the tray.
+        // We never guess a far-away spot the player didn't point at.
         audio.sfxBad();
       }
       setHoverBoth(null);
@@ -184,14 +176,13 @@ export function PlayArea() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [match.board, match.tray, paintGhost, rotateSelected, syncHover, tryPlace, setPointerBusy]);
+  }, [match.board, match.tray, paintGhost, syncHover, tryPlace, setPointerBusy]);
 
   const onPieceDown = (index: number, e: PE<HTMLButtonElement>) => {
     if (match.over || visitorBusy || !match.tray[index]) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     moved.current = false;
-    wasSelected.current = selected === index;
     audio.sfxClick();
     const lift = e.pointerType === "mouse" ? 0 : 72;
     const d: Drag = {
@@ -279,10 +270,6 @@ export function PlayArea() {
       <div className="pj-board-row">
         <SideRails side="l" />
         <div className={`pj-frame ${shake ? "pj-shake" : ""}`}>
-          <span className="pj-rivet tl" />
-          <span className="pj-rivet tr" />
-          <span className="pj-rivet bl" />
-          <span className="pj-rivet br" />
           <div ref={gridRef} className="pj-grid" data-testid="board">
             {match.board.flatMap((row, r) =>
               row.map((cell, c) => {
@@ -357,9 +344,6 @@ export function PlayArea() {
           <button type="button" className="pj-hint-btn" onClick={showHint} data-testid="hint">
             Hint
           </button>
-          <button type="button" className="pj-hint-btn" onClick={() => rotateSelected()} data-testid="rotate">
-            Rotate
-          </button>
         </div>
         <div className="pj-tray" data-testid="tray">
         {match.tray.map((piece, i) => {
@@ -375,10 +359,9 @@ export function PlayArea() {
               onClick={(e) => {
                 if (e.detail !== 0) return;
                 if (!piece) return;
-                if (selected === i) rotateSelected();
-                else selectPiece(i);
+                selectPiece(i);
               }}
-              aria-label={piece ? `Next block ${i + 1}. Tap to rotate, drag onto the board.` : `Empty slot ${i + 1}`}
+              aria-label={piece ? `Next block ${i + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${i + 1}`}
             >
               {piece ? (
                 <PieceGrid piece={piece} cell={20} faded={!fits || drag?.index === i} />

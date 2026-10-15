@@ -20,7 +20,6 @@ export function GameShell() {
   const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
   const toggleSetting = useGame((s) => s.toggleSetting);
-  const rotateSelected = useGame((s) => s.rotateSelected);
   const cancelTarget = useGame((s) => s.cancelTarget);
   const selectPiece = useGame((s) => s.selectPiece);
 
@@ -44,10 +43,7 @@ export function GameShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        rotateSelected();
-      } else if (e.key === "Escape") {
+      if (e.key === "Escape") {
         cancelTarget();
         setPanel(null);
       } else if (e.key === "1" || e.key === "2" || e.key === "3") {
@@ -57,7 +53,7 @@ export function GameShell() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cancelTarget, rotateSelected, selectPiece, setPanel]);
+  }, [cancelTarget, selectPiece, setPanel]);
 
   const xpNeed = xpForLevel(profile.level);
   const xpPct = Math.min(100, Math.round((profile.xp / xpNeed) * 100));
@@ -197,7 +193,7 @@ function Logo() {
           />
         </svg>
       </span>
-      <span className="pj-word pj-word-a">PUZZLE</span>
+      <span className="pj-word pj-word-a">BLOCK</span>
       <span className="pj-word pj-word-b">JOURNEY</span>
       <div className="pj-tag">Clear · Relax · Level up</div>
     </div>
