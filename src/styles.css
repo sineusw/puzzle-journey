@@ -2273,3 +2273,151 @@
   .pj-rune,
   .pj-vis-stage .pj-vis-warn img { animation: none !important; }
 }
+
+/* ------------------------------------------------------------------------
+   Block Blast-style feel (play-area.tsx + board-fx.ts).
+   Every moving thing animates transform/opacity only; no animated filters
+   or box-shadows, so phones can keep 60 fps.
+   ------------------------------------------------------------------------ */
+
+/* Dragged piece: one static shadow, no idle float. */
+.pj-ghost {
+  left: 0;
+  top: 0;
+  z-index: 45;
+  contain: none;
+  transition: none;
+}
+
+.pj-ghost-piece {
+  animation: none;
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.45));
+  transform-origin: 50% 50%;
+  transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 120ms ease;
+}
+
+.pj-ghost-piece.is-invalid { opacity: 0.55; }
+.pj-ghost.is-returning { transition: transform 180ms cubic-bezier(0.3, 0, 0.3, 1); }
+.pj-ghost.is-returning .pj-ghost-piece { transition: transform 180ms ease, opacity 180ms ease; opacity: 0.8; }
+
+/* The tray copy stays put but dims while its twin is being dragged. */
+.pj-slot.is-lifted .pj-mini { opacity: 0.2; transform: none; }
+
+/* Line-clear preview: blocks in a line that would clear take the dragged
+   piece's color, like Block Blast. Static — no pulsing paint work. */
+.pj-well.is-clear {
+  animation: none;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+.pj-well.is-clear::after { content: none; animation: none; }
+
+.pj-clear-tint {
+  position: absolute;
+  inset: 0;
+  border-radius: 13%;
+  background-size: 100% 100%;
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.pj-well { position: relative; }
+.pj-well.is-landed,
+.pj-well.is-landed .pj-cube { animation: none; }
+
+/* Effects layer. */
+.pj-boardfx-host {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 44;
+}
+
+.pj-boardfx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pj-burst-tile {
+  position: fixed;
+  border-radius: 13%;
+  background-size: 100% 100%;
+  will-change: transform, opacity;
+  z-index: 2;
+}
+
+.pj-sweep {
+  position: fixed;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 252, 230, 0.85) 50%, rgba(255, 255, 255, 0));
+  will-change: transform, opacity;
+  z-index: 1;
+}
+
+.pj-score-pop {
+  position: fixed;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  color: #fff7d6;
+  -webkit-text-stroke: 4px #7a3d06;
+  paint-order: stroke fill;
+  white-space: nowrap;
+  will-change: transform, opacity;
+  z-index: 4;
+}
+
+.pj-praise {
+  position: fixed;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(34px, 10vw, 52px);
+  line-height: 1;
+  color: #ffe66b;
+  -webkit-text-stroke: 6px #8a3b00;
+  paint-order: stroke fill;
+  text-shadow: 0 5px 0 #5a2600;
+  white-space: nowrap;
+  will-change: transform, opacity;
+  z-index: 5;
+}
+
+.pj-praise.is-perfect {
+  font-size: clamp(44px, 13vw, 66px);
+  color: #9ff3ff;
+  -webkit-text-stroke-color: #0b3f86;
+  text-shadow: 0 6px 0 #082a5c;
+}
+
+.pj-combo-badge {
+  position: fixed;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 14px 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff9b3d, #e2531a);
+  box-shadow: 0 4px 0 #8a2a06, 0 8px 16px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-family: var(--font-display);
+  white-space: nowrap;
+  will-change: transform, opacity;
+  z-index: 5;
+}
+
+.pj-combo-badge span { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+.pj-combo-badge strong { font-size: 24px; font-weight: 700; }
+
+/* The board frame gets its own compositor layer so shake doesn't repaint it. */
+.pj-frame { will-change: translate; }
+
+/* The frame's shadow is a plain box-shadow, not a filter: a filtered parent
+   re-renders entirely whenever any block inside it changes. */
+.pj-frame {
+  filter: none;
+  border-radius: 3.6%;
+  box-shadow: 0 16px 26px rgba(0, 0, 0, 0.5);
+}

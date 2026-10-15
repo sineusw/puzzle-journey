@@ -15,6 +15,9 @@ import {
   resolveClears,
   snapPlace,
   SNAP_RADIUS,
+  COMBO_WINDOW,
+  PERFECT_BONUS,
+  praiseFor,
   setIsPlayable,
   refillIfNeeded,
   newSandboxMatch,
@@ -388,3 +391,96 @@ describe("game modes and feature sets", () => {
     assert.deepEqual(m.features, PLAIN_FEATURES);
   });
 });
+
+describe("Block Blast scoring rules", () => {
+  // A sandbox match with a custom board and tray of 1x1 pieces.
+  const setup = (board: Cell[][]): Match => {
+    const m = newSandboxMatch();
+    m.board = board;
+    m.tray = [piece([[0, 0]]), piece([[0, 0]]), piece([[0, 0]])];
+    return m;
+  };
+  // Row r full except column `hole`.
+  const almostRow = (board: Cell[][], r: number, hole: number) => {
+    for (let c = 0; c < SIZE; c++) if (c !== hole) board[r][c] = block();
+  };
+
+  it("clears a full row and a full column in the same move", () => {
+    const board = emptyBoard();
+    almostRow(board, 7, 7);
+    for (let r = 0; r < 7; r++) board[r][7] = block("pink");
+    const res = placePiece(setup(board), 0, 7, 7);
+    assert.ok(res.ok);
+    assert.deepEqual(res.clear?.rows, [7]);
+    assert.deepEqual(res.clear?.cols, [7]);
+    assert.ok(boardIsEmptyLike(res.match.board));
+    assert.equal(res.perfect, true);
+  });
+
+  it("keeps the combo alive for up to three non-clearing placements", () => {
+    const board = emptyBoard();
+    almostRow(board, 0, 0);
+    almostRow(board, 7, 0);
+    let m = setup(board);
+    m.board[3][3] = block(); // keep the board from ever being empty
+    let res = placePiece(m, 0, 0, 0); // clear row 0 -> combo 1
+    assert.equal(res.combo, 1);
+    m = res.match;
+    m.tray = [piece([[0, 0]]), piece([[0, 0]]), piece([[0, 0]])];
+    // Two placements with no clear: combo survives.
+    m = placePiece(m, 0, 2, 2).match;
+    m = placePiece(m, 1, 2, 4).match;
+    assert.equal(m.combo, 1);
+    assert.equal(m.sinceClear, 2);
+    // A clear on the third move continues the streak.
+    m.tray = [piece([[0, 0]]), null, null];
+    res = placePiece(m, 0, 7, 0);
+    assert.equal(res.combo, 2);
+  });
+
+  it("drops the combo after COMBO_WINDOW placements without a clear", () => {
+    const board = emptyBoard();
+    almostRow(board, 0, 0);
+    board[4][4] = block();
+    let m = placePiece(setup(board), 0, 0, 0).match;
+    assert.equal(m.combo, 1);
+    for (let i = 0; i < COMBO_WINDOW; i++) {
+      m.tray = [piece([[0, 0]]), piece([[0, 0]]), piece([[0, 0]])];
+      m = placePiece(m, 0, 2, i * 2).match;
+    }
+    assert.equal(m.combo, 0);
+  });
+
+  it("scores multi-line clears on a growing curve", () => {
+    const one = emptyBoard();
+    almostRow(one, 0, 0);
+    one[5][5] = block();
+    const two = emptyBoard();
+    almostRow(two, 0, 0);
+    for (let r = 1; r < SIZE; r++) two[r][0] = block();
+    two[5][5] = block();
+    const a = placePiece(setup(one), 0, 0, 0).gained;
+    const b = placePiece(setup(two), 0, 0, 0).gained;
+    assert.equal(a, 10 + 100);
+    assert.equal(b, 10 + 300 + 25); // 2 lines (100+200) + intersection bonus
+  });
+
+  it("awards the perfect-clear bonus only when the board ends empty", () => {
+    const board = emptyBoard();
+    almostRow(board, 0, 0);
+    const res = placePiece(setup(board), 0, 0, 0);
+    assert.equal(res.perfect, true);
+    assert.equal(res.gained, 10 + 100 + PERFECT_BONUS);
+  });
+
+  it("names clears by size", () => {
+    assert.equal(praiseFor(1, false), null);
+    assert.equal(praiseFor(2, false), "Good!");
+    assert.equal(praiseFor(4, false), "Excellent!");
+    assert.equal(praiseFor(1, true), "Perfect!");
+  });
+});
+
+function boardIsEmptyLike(board: Cell[][]): boolean {
+  return board.every((row) => row.every((c) => c.t === "e"));
+}

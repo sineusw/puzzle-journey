@@ -2,8 +2,7 @@ import { create } from "zustand";
 import {
   applyFreeze,
   bombCell,
-  comboLabel,
-  burstLabel,
+  praiseFor,
   continueMatch,
   hammerCell,
   newGoalMatch,
@@ -63,8 +62,28 @@ export type Panel =
   | "intro";
 
 export type FlashCell = { r: number; c: number; cell: Cell };
-export type ComboPop = { id: number; label: string; score: number; combo: number };
 export type LandedCell = { r: number; c: number };
+
+/**
+ * Everything the board's effect layer needs to animate one move, delivered
+ * in a single store update so a placement costs one render, not five.
+ */
+export type BoardFx = {
+  id: number;
+  /** Cells that just received a block (landing bounce). */
+  landed: LandedCell[];
+  /** Cells removed by this move, with what was in them (burst animation). */
+  cleared: FlashCell[];
+  rows: number[];
+  cols: number[];
+  /** Where the effects radiate from. */
+  origin: { r: number; c: number };
+  gained: number;
+  combo: number;
+  praise: string | null;
+  perfect: boolean;
+  shake: boolean;
+};
 
 type GameStore = {
   ready: boolean;
@@ -75,10 +94,7 @@ type GameStore = {
   match: Match;
   selected: number | null;
   targeting: PowerId | null;
-  flash: FlashCell[];
-  landed: LandedCell[];
-  shake: boolean;
-  comboPop: ComboPop | null;
+  fx: BoardFx | null;
   toast: string | null;
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
@@ -128,12 +144,50 @@ type GameStore = {
 };
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
-let popSeq = 1;
+let fxSeq = 1;
 let visitSeq = 1;
 
+/**
+ * Save after the player pauses, when the phone is idle, so writing the save
+ * never lands in the same frame as an animation.
+ */
 function persistSoon(get: () => GameStore): void {
   if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => get().persist(), 250);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(() => get().persist(), { timeout: 2000 });
+    else get().persist();
+  }, 700);
+}
+
+/**
+ * Run `fn` right after the next frame is painted. Sounds are scheduled here so
+ * building audio nodes never delays the frame that shows the move (~16 ms of
+ * extra latency, below what anyone can hear).
+ */
+function afterPaint(fn: () => void): void {
+  if (typeof requestAnimationFrame === "undefined") return fn();
+  requestAnimationFrame(() => setTimeout(fn, 0));
+}
+
+function centerOf(cells: Array<{ r: number; c: number }>, fallback: { r: number; c: number }): { r: number; c: number } {
+  if (!cells.length) return fallback;
+  return {
+    r: cells.reduce((n, x) => n + x.r, 0) / cells.length,
+    c: cells.reduce((n, x) => n + x.c, 0) / cells.length,
+  };
+}
+
+/** Cells that were filled in `before` and are empty in `after`. */
+function removedCells(before: Cell[][], after: Cell[][]): FlashCell[] {
+  const out: FlashCell[] = [];
+  before.forEach((row, r) =>
+    row.forEach((cell, c) => {
+      if (cell.t !== "e" && after[r]?.[c]?.t === "e") out.push({ r, c, cell: { ...cell } });
+    }),
+  );
+  return out;
 }
 
 function applyQuestScore(profile: Profile, match: Match, powersUsed = 0): Profile {
@@ -170,10 +224,7 @@ export const useGame = create<GameStore>((set, get) => ({
   match: firstMatch(),
   selected: 0,
   targeting: null,
-  flash: [],
-  landed: [],
-  shake: false,
-  comboPop: null,
+  fx: null,
   toast: null,
   levelUpTo: null,
   introUnlock: null,
@@ -239,7 +290,6 @@ export const useGame = create<GameStore>((set, get) => ({
       audio.sfxBad();
       return false;
     }
-    audio.sfxPlace();
     let nextProfile: Profile = {
       ...profile,
       coins: profile.coins + result.coins,
@@ -249,13 +299,19 @@ export const useGame = create<GameStore>((set, get) => ({
     const xpGain = Math.max(4, Math.floor(result.gained / 12));
     const leveled = grantXp(nextProfile, xpGain);
     nextProfile = applyQuestScore(leveled.profile, result.match);
-    if (result.clear) {
-      if (result.clear.blasts) audio.sfxBlast();
-      else if (result.clear.bombs) audio.sfxBomb();
-      else if (result.clear.rockets) audio.sfxRocket();
-      else audio.sfxClear(result.combo);
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(18);
-    }
+    const sound = result.clear;
+    afterPaint(() => {
+      audio.sfxPlace();
+      if (sound) {
+        if (sound.blasts) audio.sfxBlast();
+        else if (sound.bombs) audio.sfxBomb();
+        else if (sound.rockets) audio.sfxRocket();
+        else audio.sfxClear(result.combo);
+        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(18);
+      }
+      if (result.perfect || result.match.won) audio.sfxWin();
+      else if (result.match.over) audio.sfxOver();
+    });
     if (result.match.mode === "sandbox") {
       nextProfile = { ...nextProfile, sandboxBest: Math.max(nextProfile.sandboxBest, result.match.score) };
     }
@@ -300,43 +356,30 @@ export const useGame = create<GameStore>((set, get) => ({
         };
       }
     }
-    const comboPop =
-      result.clear && result.combo > 0
-        ? {
-            id: popSeq++,
-            label: result.clear.blasts
-              ? "Board wipe"
-              : result.clear.bombs
-                ? "Boom"
-                : result.clear.rockets
-                  ? "Rocket"
-                  : result.clear.lines >= 2
-                    ? burstLabel(result.clear.lines)
-                    : comboLabel(result.combo),
-            score: result.gained,
-            combo: result.combo,
-          }
-        : null;
-    const landed = placedPiece
-      ? placedPiece.cells.map(([dr, dc]) => ({ r: row + dr, c: col + dc }))
-      : [];
+    const landed = placedPiece ? placedPiece.cells.map(([dr, dc]) => ({ r: row + dr, c: col + dc })) : [];
+    const clear = result.clear;
+    const fx: BoardFx = {
+      id: fxSeq++,
+      landed,
+      cleared: clear?.cells ?? [],
+      rows: clear?.rows ?? [],
+      cols: clear?.cols ?? [],
+      origin: centerOf(landed, { r: row, c: col }),
+      gained: result.gained,
+      combo: result.combo,
+      praise: clear ? praiseFor(clear.lines, result.perfect) : null,
+      perfect: result.perfect,
+      shake: Boolean(clear && profile.settings.shake && (clear.lines >= 2 || clear.bombs || clear.blasts || result.perfect)),
+    };
     set({
       match: result.match,
       profile: nextProfile,
       selected: result.match.tray.findIndex((p) => p),
-      flash: result.clear?.cells ?? [],
-      landed,
-      shake: Boolean(result.clear && profile.settings.shake && result.clear.lines >= 2),
-      comboPop,
+      fx,
       levelUpTo: leveled.leveled,
       panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,
     });
-    if (result.match.won) audio.sfxWin();
-    else if (result.match.over) audio.sfxOver();
     persistSoon(get);
-    window.setTimeout(() => set({ flash: [], shake: false }), 520);
-    window.setTimeout(() => set({ landed: [] }), 360);
-    window.setTimeout(() => set({ comboPop: null }), 900);
     return true;
   },
 
@@ -399,11 +442,25 @@ export const useGame = create<GameStore>((set, get) => ({
       used,
       1,
     );
+    const cleared = removedCells(match.board, used.board);
     set({
       match: used,
       profile: nextProfile,
       targeting: null,
       panel: used.over ? "over" : get().panel,
+      fx: {
+        id: fxSeq++,
+        landed: [],
+        cleared,
+        rows: [],
+        cols: [],
+        origin: { r: row, c: col },
+        gained: 0,
+        combo: 0,
+        praise: null,
+        perfect: false,
+        shake: targeting === "bomb" && profile.settings.shake,
+      },
     });
     persistSoon(get);
     return true;
@@ -637,13 +694,27 @@ export const useGame = create<GameStore>((set, get) => ({
       set({ visitorApplied: true });
       return;
     }
+    const clear = result.clear;
     set({
       match: result.match,
       visitorApplied: true,
-      flash: result.clear?.cells ?? [],
+      fx: clear
+        ? {
+            id: fxSeq++,
+            landed: [],
+            cleared: clear.cells,
+            rows: clear.rows,
+            cols: clear.cols,
+            origin: centerOf(clear.cells, { r: 3, c: 3 }),
+            gained: 0,
+            combo: 0,
+            praise: praiseFor(clear.lines, false),
+            perfect: false,
+            shake: false,
+          }
+        : get().fx,
     });
     persistSoon(get);
-    window.setTimeout(() => set({ flash: [] }), 520);
   },
 
   setVisitorHide: (cells) => set({ visitorHide: cells }),
@@ -669,8 +740,7 @@ function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => vo
     panel: null,
     selected: 0,
     targeting: null,
-    flash: [],
-    landed: [],
+    fx: null,
     visitorBusy: false,
     visitorEvent: null,
     visitorApplied: false,

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { VISITOR_META } from "@/lib/game/visitors";
 import { useGame } from "@/lib/game/store";
 import { playVisitor } from "./choreography";
@@ -12,7 +12,7 @@ function reducedMotion(): boolean {
  * imperative (see choreography.ts); this component starts it when a visit
  * begins and tears it down if the player leaves mid-visit.
  */
-export function VisitorLayer({ grid }: { grid: HTMLElement | null }) {
+export const VisitorLayer = memo(function VisitorLayer({ grid }: { grid: HTMLElement | null }) {
   const event = useGame((s) => s.visitorEvent);
   const host = useRef<HTMLDivElement>(null);
 
@@ -44,4 +44,4 @@ export function VisitorLayer({ grid }: { grid: HTMLElement | null }) {
       {event ? <span className="sr-only">{VISITOR_META[event.visitor].name} is visiting the board.</span> : null}
     </div>
   );
-}
+});

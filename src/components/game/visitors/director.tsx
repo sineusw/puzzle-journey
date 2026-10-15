@@ -7,7 +7,9 @@ export function VisitorDirector() {
   const started = useGame((s) => s.started);
   const tab = useGame((s) => s.tab);
   const panel = useGame((s) => s.panel);
-  const match = useGame((s) => s.match);
+  const moves = useGame((s) => s.match.moves);
+  const matchOver = useGame((s) => s.match.over);
+  const matchWon = useGame((s) => s.match.won);
   const visitorBusy = useGame((s) => s.visitorBusy);
   const pointerBusy = useGame((s) => s.pointerBusy);
   const targeting = useGame((s) => s.targeting);
@@ -23,11 +25,11 @@ export function VisitorDirector() {
 
   useEffect(() => {
     if (!started || tab !== "home" || panel || visitorBusy || pointerBusy || targeting) return;
-    if (match.over || match.won) return;
+    if (matchOver || matchWon) return;
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     const id = window.setTimeout(() => maybeVisitor(), 1050);
     return () => window.clearTimeout(id);
-  }, [started, tab, panel, visitorBusy, pointerBusy, targeting, match.moves, match.over, match.won, maybeVisitor]);
+  }, [started, tab, panel, visitorBusy, pointerBusy, targeting, moves, matchOver, matchWon, maybeVisitor]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

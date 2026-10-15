@@ -195,9 +195,10 @@ export class Fx {
   private draw(p: Particle): void {
     const { ctx } = this;
     const t = 1 - p.life / p.max; // 0 → 1 over life
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rot);
+    // setTransform instead of save/translate/rotate/restore: cheaper per particle.
+    const cos = Math.cos(p.rot);
+    const sin = Math.sin(p.rot);
+    ctx.setTransform(this.dpr * cos, this.dpr * sin, -this.dpr * sin, this.dpr * cos, this.dpr * p.x, this.dpr * p.y);
     ctx.fillStyle = p.color;
     switch (p.kind) {
       case "dust": {
@@ -268,6 +269,6 @@ export class Fx {
         break;
       }
     }
-    ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
   }
 }

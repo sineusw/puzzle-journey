@@ -25,13 +25,25 @@ function ensure(): Bus | null {
   return bus;
 }
 
+/** Noise bursts are generated once per length and reused. */
+const noiseCache = new Map<number, AudioBuffer>();
+function noiseBuffer(ctx: AudioContext, dur: number): AudioBuffer {
+  const key = Math.round(dur * 1000);
+  let buf = noiseCache.get(key);
+  if (!buf) {
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    noiseCache.set(key, buf);
+  }
+  return buf;
+}
+
 function noise(dur: number, gain: number, dest: GainNode, when = 0, hp = 400): void {
   const b = bus;
   if (!b || !unlocked) return;
-  const n = Math.max(1, Math.floor(b.ctx.sampleRate * dur));
-  const buf = b.ctx.createBuffer(1, n, b.ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const buf = noiseBuffer(b.ctx, dur);
   const src = b.ctx.createBufferSource();
   const g = b.ctx.createGain();
   const f = b.ctx.createBiquadFilter();

@@ -14,12 +14,10 @@ export function GameShell() {
   const hydrate = useGame((s) => s.hydrate);
   const persist = useGame((s) => s.persist);
   const start = useGame((s) => s.start);
-  const profile = useGame((s) => s.profile);
-  const match = useGame((s) => s.match);
+  const skin = useGame((s) => s.profile.skin);
   const tab = useGame((s) => s.tab);
   const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
-  const toggleSetting = useGame((s) => s.toggleSetting);
   const cancelTarget = useGame((s) => s.cancelTarget);
   const selectPiece = useGame((s) => s.selectPiece);
 
@@ -55,94 +53,14 @@ export function GameShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [cancelTarget, selectPiece, setPanel]);
 
-  const xpNeed = xpForLevel(profile.level);
-  const xpPct = Math.min(100, Math.round((profile.xp / xpNeed) * 100));
-  const goalPct = match.goal
-    ? Math.min(100, Math.round((match.goalProgress / match.goal.value) * 100))
-    : 0;
-
   return (
-    <div className="pj-root" data-skin={profile.skin}>
+    <div className="pj-root" data-skin={skin}>
       <div className="pj-stars" />
       <NightIsle />
       <VisitorDirector />
       <div className="pj-stage">
-        <header className="pj-hud">
-          <div className="pj-chip pj-chip-wide">
-            <PalmBadge />
-            <span className="tabular-nums pj-lv">Lv. {profile.level}</span>
-            <div className="pj-xp" aria-hidden="true">
-              <span style={{ width: `${xpPct}%` }} />
-            </div>
-          </div>
-          <div className="pj-chip">
-            <GameIcon name="coin" className="pj-chip-ico" />
-            <span className="tabular-nums">{formatInt(profile.coins)}</span>
-            <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get coins">
-              +
-            </button>
-          </div>
-          <div className="pj-chip">
-            <GameIcon name="gem" className="pj-chip-ico" />
-            <span className="tabular-nums">{formatInt(profile.gems)}</span>
-            <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get gems">
-              +
-            </button>
-          </div>
-          <div className="pj-chip pj-audio">
-            <button
-              type="button"
-              className={`pj-audio-btn ${profile.settings.sfx ? "" : "is-off"}`}
-              onClick={() => toggleSetting("sfx")}
-              aria-label={profile.settings.sfx ? "Mute sound effects" : "Sound effects on"}
-              title={profile.settings.sfx ? "Sound on" : "Sound off"}
-            >
-              {profile.settings.sfx ? <Volume2 /> : <VolumeX />}
-            </button>
-            <button
-              type="button"
-              className={`pj-audio-btn ${profile.settings.music ? "" : "is-off"}`}
-              onClick={() => toggleSetting("music")}
-              aria-label={profile.settings.music ? "Mute music" : "Music on"}
-              title={profile.settings.music ? "Music on" : "Music off"}
-            >
-              <Music />
-            </button>
-          </div>
-          <button
-            type="button"
-            className="pj-icon-btn"
-            onClick={() => setPanel("settings")}
-            aria-label="Settings"
-          >
-            <GameIcon name="settings" className="pj-gear" />
-          </button>
-        </header>
-
-        <div className="pj-title">
-          <Logo />
-          <div className="pj-mode-label" data-testid="mode-label">{modeLabel(match)}</div>
-          {match.goal ? (
-            <div className="pj-objective" aria-label={`${goalLabel(match.goal)}. ${goalPct}% complete.`}>
-              <div className="pj-objective-copy">
-                <span>{goalLabel(match.goal)}</span>
-                <strong className="tabular-nums">
-                  {Math.min(match.goalProgress, match.goal.value)}/{match.goal.value}
-                </strong>
-              </div>
-              <div className="pj-objective-track" aria-hidden="true">
-                <span style={{ width: `${goalPct}%` }} />
-              </div>
-            </div>
-          ) : (
-            <div className="pj-score tabular-nums">
-              {formatInt(match.score)}
-              {match.mode === "sandbox" ? `  ·  best ${formatInt(Math.max(profile.sandboxBest, match.score))}` : ""}
-              {match.combo > 1 ? `  ·  x${match.combo}` : ""}
-              {match.shield > 0 ? `  ·  frost ${match.shield}` : ""}
-            </div>
-          )}
-        </div>
+        <Hud />
+        <TitleBar />
 
         {tab === "home" ? (
           <>
@@ -178,6 +96,106 @@ export function GameShell() {
       </div>
 
       <Overlays />
+    </div>
+  );
+}
+
+function Hud() {
+  const level = useGame((s) => s.profile.level);
+  const xp = useGame((s) => s.profile.xp);
+  const coins = useGame((s) => s.profile.coins);
+  const gems = useGame((s) => s.profile.gems);
+  const sfx = useGame((s) => s.profile.settings.sfx);
+  const music = useGame((s) => s.profile.settings.music);
+  const setPanel = useGame((s) => s.setPanel);
+  const toggleSetting = useGame((s) => s.toggleSetting);
+  const xpPct = Math.min(100, Math.round((xp / xpForLevel(level)) * 100));
+  return (
+    <header className="pj-hud">
+      <div className="pj-chip pj-chip-wide">
+        <PalmBadge />
+        <span className="tabular-nums pj-lv">Lv. {level}</span>
+        <div className="pj-xp" aria-hidden="true">
+          <span style={{ width: `${xpPct}%` }} />
+        </div>
+      </div>
+      <div className="pj-chip">
+        <GameIcon name="coin" className="pj-chip-ico" />
+        <span className="tabular-nums">{formatInt(coins)}</span>
+        <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get coins">
+          +
+        </button>
+      </div>
+      <div className="pj-chip">
+        <GameIcon name="gem" className="pj-chip-ico" />
+        <span className="tabular-nums">{formatInt(gems)}</span>
+        <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get gems">
+          +
+        </button>
+      </div>
+      <div className="pj-chip pj-audio">
+        <button
+          type="button"
+          className={`pj-audio-btn ${sfx ? "" : "is-off"}`}
+          onClick={() => toggleSetting("sfx")}
+          aria-label={sfx ? "Mute sound effects" : "Sound effects on"}
+          title={sfx ? "Sound on" : "Sound off"}
+        >
+          {sfx ? <Volume2 /> : <VolumeX />}
+        </button>
+        <button
+          type="button"
+          className={`pj-audio-btn ${music ? "" : "is-off"}`}
+          onClick={() => toggleSetting("music")}
+          aria-label={music ? "Mute music" : "Music on"}
+          title={music ? "Music on" : "Music off"}
+        >
+          <Music />
+        </button>
+      </div>
+      <button type="button" className="pj-icon-btn" onClick={() => setPanel("settings")} aria-label="Settings">
+        <GameIcon name="settings" className="pj-gear" />
+      </button>
+    </header>
+  );
+}
+
+function TitleBar() {
+  const mode = useGame((s) => s.match.mode);
+  const levelId = useGame((s) => s.match.levelId);
+  const goalType = useGame((s) => s.match.goal?.type);
+  const goalValue = useGame((s) => s.match.goal?.value);
+  const goal = goalType && goalValue !== undefined ? { type: goalType, value: goalValue } : null;
+  const goalProgress = useGame((s) => s.match.goalProgress);
+  const score = useGame((s) => s.match.score);
+  const combo = useGame((s) => s.match.combo);
+  const shield = useGame((s) => s.match.shield);
+  const sandboxBest = useGame((s) => s.profile.sandboxBest);
+  const goalPct = goal ? Math.min(100, Math.round((goalProgress / goal.value) * 100)) : 0;
+  return (
+    <div className="pj-title">
+      <Logo />
+      <div className="pj-mode-label" data-testid="mode-label">{modeLabel({ mode, levelId })}</div>
+      {goal ? (
+        <div className="pj-objective" aria-label={`${goalLabel(goal)}. ${goalPct}% complete.`}>
+          <div className="pj-objective-copy">
+            <span>{goalLabel(goal)}</span>
+            <strong className="tabular-nums">
+              {Math.min(goalProgress, goal.value)}/{goal.value}
+            </strong>
+          </div>
+          <div className="pj-objective-track" aria-hidden="true">
+            <span style={{ width: `${goalPct}%` }} />
+          </div>
+        </div>
+      ) : (
+        <div className="pj-score tabular-nums">
+          {formatInt(score)}
+          {mode === "sandbox" ? `  ·  best ${formatInt(Math.max(sandboxBest, score))}` : ""}
+          {combo > 1 ? `  ·  combo ${combo}` : ""}
+          {shield > 0 ? `  ·  frost ${shield}` : ""}
+        </div>
+      )}
     </div>
   );
 }

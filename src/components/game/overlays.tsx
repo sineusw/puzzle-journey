@@ -32,30 +32,17 @@ import { SpecialFace } from "./tile-art";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
-  const profile = useGame((s) => s.profile);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => tick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const dailyReady = Date.now() >= profile.daily.nextAt;
-  const remain = Math.max(0, profile.daily.nextAt - Date.now());
-  const mm = String(Math.floor(remain / 60000) % 60).padStart(2, "0");
-  const hh = String(Math.floor(remain / 3600000)).padStart(2, "0");
-  const ss = String(Math.floor((remain / 1000) % 60)).padStart(2, "0");
-  const questReady = QUESTS.some((q) => profile.quests[q.id].value >= q.target && !profile.quests[q.id].claimed);
+  const dailyNextAt = useGame((s) => s.profile.daily.nextAt);
+  const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
+  const questReady = useGame((s) => QUESTS.some((q) => s.profile.quests[q.id].value >= q.target && !s.profile.quests[q.id].claimed));
 
   if (side === "l") {
     return (
       <div className="pj-rails pj-rails-l">
-        <button type="button" className="pj-rail relative" onClick={() => setPanel("daily")}>
-          {dailyReady ? <span className="pj-badge" /> : null}
-          <GameIcon name="daily" />
-          Daily
-        </button>
+        <DailyRail nextAt={dailyNextAt} onOpen={() => setPanel("daily")} />
         <button type="button" className="pj-rail" onClick={() => setPanel("daily")}>
           <GameIcon name="gift" />
-          {dailyReady ? "Claim" : `${hh}:${mm}:${ss}`}
+          <GiftTimer nextAt={dailyNextAt} />
         </button>
         <button type="button" className="pj-rail" onClick={() => setPanel("events")}>
           <GameIcon name="events" />
@@ -68,7 +55,7 @@ export function SideRails({ side }: { side: "l" | "r" }) {
   return (
     <div className="pj-rails pj-rails-r">
       <button type="button" className="pj-rail relative" onClick={() => setPanel("map")}>
-        {profile.adventure.unlocked === 1 ? <span className="pj-badge" /> : null}
+        {firstIsland ? <span className="pj-badge" /> : null}
         <GameIcon name="map" />
         Map
       </button>
@@ -85,8 +72,39 @@ export function SideRails({ side }: { side: "l" | "r" }) {
   );
 }
 
+/** Re-renders itself once a second; nothing else on screen does. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function DailyRail({ nextAt, onOpen }: { nextAt: number; onOpen: () => void }) {
+  const ready = useNow() >= nextAt;
+  return (
+    <button type="button" className="pj-rail relative" onClick={onOpen}>
+      {ready ? <span className="pj-badge" /> : null}
+      <GameIcon name="daily" />
+      Daily
+    </button>
+  );
+}
+
+function GiftTimer({ nextAt }: { nextAt: number }) {
+  const now = useNow();
+  const remain = Math.max(0, nextAt - now);
+  if (remain === 0) return <>Claim</>;
+  const hh = String(Math.floor(remain / 3600000)).padStart(2, "0");
+  const mm = String(Math.floor(remain / 60000) % 60).padStart(2, "0");
+  const ss = String(Math.floor((remain / 1000) % 60)).padStart(2, "0");
+  return <>{`${hh}:${mm}:${ss}`}</>;
+}
+
 export function PowerBar() {
-  const profile = useGame((s) => s.profile);
+  const powerups = useGame((s) => s.profile.powerups);
   const targeting = useGame((s) => s.targeting);
   const armPower = useGame((s) => s.armPower);
   const setPanel = useGame((s) => s.setPanel);
@@ -104,12 +122,12 @@ export function PowerBar() {
             type="button"
             data-testid={`power-${item.id}`}
             data-id={item.id}
-            className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${profile.powerups[item.id] <= 0 ? "is-empty" : ""}`}
+            className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${powerups[item.id] <= 0 ? "is-empty" : ""}`}
             onClick={() => armPower(item.id)}
             aria-label={item.label}
           >
             <GameIcon name={item.icon} />
-            <span className="pj-count">{profile.powerups[item.id]}</span>
+            <span className="pj-count">{powerups[item.id]}</span>
           </button>
           <button
             type="button"

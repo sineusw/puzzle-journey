@@ -91,6 +91,8 @@ export type Match = {
   lines: number;
   moves: number;
   shield: number;
+  /** Placements since the last clear. The combo survives while this stays under COMBO_WINDOW. */
+  sinceClear: number;
   over: boolean;
   won: boolean;
   mode: GameMode;
@@ -122,7 +124,18 @@ export type PlaceResult = {
   gained: number;
   combo: number;
   coins: number;
+  /** The clear emptied the whole board. */
+  perfect: boolean;
 };
+
+/**
+ * Block Blast-style combo: a streak keeps going as long as the next clear
+ * comes within this many placements of the last one.
+ */
+export const COMBO_WINDOW = 3;
+
+/** Bonus for emptying the whole board, before the combo multiplier. */
+export const PERFECT_BONUS = 300;
 
 type Shape = {
   id: string;
@@ -211,6 +224,7 @@ export function sanitizeMatch(match: Match): Match {
   return {
     ...match,
     mode: legacyMode ? "sandbox" : match.mode,
+    sinceClear: match.sinceClear ?? 0,
     features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
     board: cloneBoard(match.board ?? emptyBoard()),
     tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
@@ -666,18 +680,33 @@ function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): vo
   });
 }
 
-function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number): number {
+/**
+ * Score for one placement, Block Blast style:
+ * - every block placed is worth 10
+ * - each cleared line is worth 100; clearing several at once adds a growing
+ *   bonus (2 lines = 300, 3 = 600, 4 = 1,000 …) instead of a flat sum
+ * - the whole clear is multiplied by the current combo streak
+ * - stars, specials and a perfect (empty-board) clear add on top
+ */
+function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number, perfect: boolean): number {
   let score = piece.cells.length * 10;
   if (clear && (clear.lines > 0 || clear.bombs || clear.rockets || clear.blasts)) {
-    score += clear.lines * 100 * combo;
-    if (clear.lines > 1) score += (clear.lines - 1) * 50 * combo;
+    const n = clear.lines;
+    const lineScore = (100 * n * (n + 1)) / 2;
+    score += lineScore * combo;
     score += clear.intersections * 25 * combo;
     score += clear.stars * 50 + clear.golds * 150;
     score += clear.bombs * 80 * combo;
     score += clear.rockets * 70 * combo;
     score += clear.blasts * 240 * combo;
+    if (perfect) score += PERFECT_BONUS * combo;
   }
   return score;
+}
+
+/** True when nothing breakable is left on the board. */
+export function boardIsEmpty(board: Cell[][]): boolean {
+  return board.every((row) => row.every((cell) => cell.t === "e" || isUnbreakable(cell)));
 }
 
 function coinsFor(clear: ClearInfo | null, gained: number): number {
@@ -797,6 +826,7 @@ function blankMatch(features: Features = PLAIN_FEATURES): Match {
     lines: 0,
     moves: 0,
     shield: 0,
+    sinceClear: 0,
     over: false,
     won: false,
     mode: "sandbox",
@@ -869,10 +899,10 @@ export function placePiece(
 ): PlaceResult {
   const piece = match.tray[trayIndex];
   if (!piece || match.over) {
-    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0 };
+    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0, perfect: false };
   }
   if (!canPlace(match.board, piece.cells, row, col)) {
-    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0 };
+    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0, perfect: false };
   }
 
   const next = cloneMatch(match);
@@ -882,18 +912,28 @@ export function placePiece(
   next.moves += 1;
 
   if (clear) {
-    next.combo = match.combo + 1;
+    // A clear within the window extends the streak; otherwise it starts a new one.
+    next.combo = match.sinceClear < COMBO_WINDOW ? match.combo + 1 : 1;
+    next.sinceClear = 0;
     next.lines += clear.lines;
     next.stonesCleared += clear.cells.filter((c) => c.cell.t === "k").length;
-  } else if (next.shield > 0) {
-    next.shield -= 1;
   } else {
-    next.combo = 0;
+    next.sinceClear = match.sinceClear + 1;
+    if (next.sinceClear >= COMBO_WINDOW && next.combo > 0) {
+      // Frost: spend a charge to keep the streak alive a little longer.
+      if (next.shield > 0) {
+        next.shield -= 1;
+        next.sinceClear = COMBO_WINDOW - 1;
+      } else {
+        next.combo = 0;
+      }
+    }
   }
   next.bestCombo = Math.max(next.bestCombo, next.combo);
 
+  const perfect = Boolean(clear) && boardIsEmpty(next.board);
   const comboForScore = Math.max(1, next.combo);
-  const gained = scoreFor(piece, clear, comboForScore);
+  const gained = scoreFor(piece, clear, comboForScore, perfect);
   next.score += gained;
   updateGoal(next);
   refillIfNeeded(next);
@@ -905,7 +945,8 @@ export function placePiece(
     clear,
     gained,
     combo: next.combo,
-    coins: coinsFor(clear, gained),
+    coins: coinsFor(clear, gained) + (perfect ? 20 : 0),
+    perfect,
   };
 }
 
@@ -972,23 +1013,24 @@ export function continueMatch(match: Match): Match {
   return next;
 }
 
+/** Praise for a clear, by how many lines went at once. Null for a single line. */
+export function praiseFor(lines: number, perfect: boolean): string | null {
+  if (perfect) return "Perfect!";
+  if (lines >= 6) return "Unbelievable!";
+  if (lines === 5) return "Amazing!";
+  if (lines === 4) return "Excellent!";
+  if (lines === 3) return "Great!";
+  if (lines === 2) return "Good!";
+  return null;
+}
+
+/** Kept for older callers. */
 export function comboLabel(combo: number): string {
-  if (combo <= 1) return "Clear";
-  if (combo === 2) return "Nice";
-  if (combo === 3) return "Great";
-  if (combo === 4) return "Super";
-  if (combo === 5) return "Amazing";
-  if (combo === 6) return "Unreal";
-  return "Legendary";
+  return combo > 1 ? `Combo ${combo}` : "Clear";
 }
 
 export function burstLabel(lines: number): string {
-  if (lines <= 1) return "Line";
-  if (lines === 2) return "Double";
-  if (lines === 3) return "Triple";
-  if (lines === 4) return "Quad";
-  if (lines === 5) return "Penta";
-  return "Mega";
+  return praiseFor(lines, false) ?? "Line";
 }
 
 /**
