@@ -63,6 +63,7 @@ export function PlayArea() {
 
   const gridRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const fxHostRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const ghostInnerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +78,29 @@ export function PlayArea() {
   // Latest values for stable callbacks.
   const live = useRef({ board, tray, over, selected, targeting, visitorBusy });
   live.current = { board, tray, over, selected, targeting, visitorBusy };
+
+  // Size the board to the largest square that fits the space left for it.
+  // Done in JS so every browser (Safari included) gets the same result.
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const frame = frameRef.current;
+    if (!row || !frame) return;
+    const fit = () => {
+      const rails = row.querySelectorAll<HTMLElement>(".pj-rails");
+      let railW = 0;
+      rails.forEach((r) => (railW += r.offsetWidth));
+      const gap = parseFloat(getComputedStyle(row).columnGap || "0") || 0;
+      const w = row.clientWidth - railW - gap * rails.length;
+      const h = row.clientHeight;
+      const max = parseFloat(getComputedStyle(frame).getPropertyValue("--pj-board-max")) || 480;
+      const size = Math.max(160, Math.floor(Math.min(w, h, max)));
+      frame.style.setProperty("--bs", `${size}px`);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, []);
 
   // Board effects layer.
   useEffect(() => {
@@ -291,7 +315,7 @@ export function PlayArea() {
 
   return (
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
-      <div className="pj-board-row">
+      <div ref={rowRef} className="pj-board-row">
         <SideRails side="l" />
         <div ref={frameRef} className="pj-frame">
           <BoardGrid
