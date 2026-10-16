@@ -114,7 +114,7 @@ function migrate(raw: Profile): Profile {
     seenSpecialTips: raw.seenSpecialTips ?? [],
     seenShapesIntro: raw.seenShapesIntro ?? false,
     tutorialDone: raw.tutorialDone ?? false,
-    card: raw.card?.best ? { ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } } : emptyCard(),
+    card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start
     // the player on a fresh run so an old special-filled board doesn't carry
@@ -164,4 +164,10 @@ export function ensureMatch(profile: Profile): Profile {
     }
   }
   return { ...profile, match: firstMatch() };
+}
+
+/** Drop impossible records left by an older bug (a level "won" in a few seconds after a reload). */
+function fixCard(card: PlayerCard): PlayerCard {
+  if (card.best.fastest > 0 && card.best.fastest < 8) return { ...card, best: { ...card.best, fastest: 0 } };
+  return card;
 }

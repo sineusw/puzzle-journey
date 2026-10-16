@@ -94,6 +94,14 @@ class Actor {
   rot = 0;
   flip = 1;
   private bubbleTimer = 0;
+  /** Smoothed 3D yaw: 0 = facing right, 180 = facing left. */
+  private turn = 0;
+  private lastX = 0;
+  private lean = 0;
+  private still = false;
+  private born = performance.now();
+  private raf = 0;
+  private reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
   constructor(host: HTMLElement, id: VisitorId, height: number) {
     const aspect = { milo: 371 / 653, luna: 480 / 700, kai: 385 / 695, nia: 450 / 693, pip: 459 / 675 }[id];
@@ -113,12 +121,52 @@ class Actor {
     this.img.draggable = false;
     this.img.className = "pj-actor-img";
     this.body.appendChild(this.img);
+    // A soft highlight that sweeps across the character, masked to its
+    // silhouette, so the art reads as a rounded 3D figure, not a flat cut-out.
+    const shine = document.createElement("div");
+    shine.className = "pj-actor-shine";
+    const mask = `url(${CHARACTER_ART[id]})`;
+    shine.style.maskImage = mask;
+    shine.style.webkitMaskImage = mask;
+    this.body.appendChild(shine);
     this.prop = document.createElement("div");
     this.prop.className = "pj-actor-prop";
     this.bubble = document.createElement("div");
     this.bubble.className = "pj-actor-bubble";
     this.el.append(this.shadow, this.body, this.prop, this.bubble);
     host.appendChild(this.el);
+    // Life loop: smooth 3D turns, leaning into motion, idle look-around.
+    const tick = () => {
+      this.render(true);
+      this.raf = requestAnimationFrame(tick);
+    };
+    if (!this.reduce) this.raf = requestAnimationFrame(tick);
+  }
+
+  private render(fromTick = false): void {
+    const target = this.flip === 1 ? 0 : 180;
+    this.turn += (target - this.turn) * (this.reduce ? 1 : 0.2);
+    if (Math.abs(target - this.turn) < 0.5) this.turn = target;
+    // Velocity is sampled once per frame (tweens also call render).
+    const vx = fromTick ? this.x - this.lastX : 0;
+    if (fromTick) {
+      this.lastX = this.x;
+      this.lean += (Math.max(-22, Math.min(22, vx * 2.2)) - this.lean) * 0.18;
+      this.still = Math.abs(vx) < 0.3 && this.lift < 1;
+    }
+    const t = (performance.now() - this.born) / 1000;
+    const still = this.still;
+    const look = still ? Math.sin(t * 1.7) * 14 : 0;
+    const breathe = still ? Math.sin(t * 3.2) * 0.02 : 0;
+    // Pop in with a spin the first half second.
+    const pop = Math.min(1, t / 0.45);
+    const popScale = pop < 1 ? 0.2 + 0.8 * (1 - (1 - pop) ** 3) * (1 + 0.15 * Math.sin(pop * Math.PI)) : 1;
+    const popSpin = pop < 1 ? (1 - pop) * 360 : 0;
+    const yaw = this.turn + popSpin + (this.flip === 1 ? -this.lean : this.lean) * 0.6 + look;
+    this.body.style.transform =
+      `translateY(${-this.lift}px) rotateY(${yaw}deg) rotateZ(${this.rot + this.lean * 0.25 * this.flip}deg) ` +
+      `scale(${this.sx * popScale * (1 + breathe)}, ${this.sy * popScale * (1 - breathe)})`;
+    this.body.style.setProperty("--shine", `${((t * 0.45) % 1.6) * 100 - 30}%`);
   }
 
   /** Feet position in viewport px; `lift` raises the body off the ground. */
@@ -127,7 +175,8 @@ class Actor {
     this.y = y;
     this.lift = lift;
     this.el.style.transform = `translate3d(${x - this.w / 2}px, ${y - this.h}px, 0)`;
-    this.body.style.transform = `translateY(${-lift}px) scale(${this.flip * this.sx}, ${this.sy}) rotate(${this.rot}deg)`;
+    if (this.reduce) this.body.style.transform = `translateY(${-lift}px) scale(${this.flip * this.sx}, ${this.sy}) rotate(${this.rot}deg)`;
+    else this.render();
     this.prop.style.transform = `translate(-50%, ${-lift}px)`;
     this.bubble.style.transform = `translate(-50%, ${-lift}px)`;
     const k = Math.max(0.35, 1 - lift / (this.h * 1.4));
@@ -225,6 +274,7 @@ class Actor {
 
   remove(): void {
     window.clearTimeout(this.bubbleTimer);
+    cancelAnimationFrame(this.raf);
     this.el.remove();
   }
 }
@@ -344,6 +394,7 @@ async function sceneMilo(s: Scene): Promise<void> {
   };
   actor.face(side === -1 ? 1 : -1);
   audio.sfxVisitor("milo");
+  audio.visitorTheme("milo");
   const start = side * 1.25;
   const end = Math.asin(Math.max(-1, Math.min(1, (from.x - pivot.x) / len))) || 0;
   await tween(ctl, 760, (e) => hang(lerp(start, end - side * 0.28, e)), easeOut);
@@ -411,6 +462,7 @@ async function sceneLuna(s: Scene): Promise<void> {
 
   // Portal: rings and a spiral of motes, then she grows out of it, spinning.
   audio.sfxVisitor("luna");
+  audio.visitorTheme("luna");
   for (let i = 0; i < 3; i++) fx.ring(clampX, spot.y - actor.h * 0.4, { to: size * (1.4 + i * 0.6), color: "rgba(196,140,255,0.9)", ms: 520 + i * 160 });
   fx.burst("magic", clampX, spot.y - actor.h * 0.45, { count: 26, speed: 160 });
   actor.face(side === -1 ? 1 : -1);
@@ -485,6 +537,7 @@ async function sceneKai(s: Scene): Promise<void> {
   const nearX = side === -1 ? cell.cx - size * 1.5 : cell.cx + size * 1.5;
 
   audio.sfxVisitor("kai");
+  audio.visitorTheme("kai");
   actor.mode("run");
   actor.place(startX, ground, 0);
   await actor.walk(ctl, fx, nearX, ground, 150);
@@ -540,6 +593,7 @@ async function sceneNia(s: Scene): Promise<void> {
   const standX = side === -1 ? cx - size * 1.6 : cx + size * 1.6;
 
   audio.sfxVisitor("nia");
+  audio.visitorTheme("nia");
   actor.mode("run");
   actor.place(side === -1 ? -actor.w : s.vw + actor.w, ground, 0);
   await actor.walk(ctl, fx, standX, ground, 110, actor.w * 0.7);
@@ -610,6 +664,7 @@ async function scenePip(s: Scene): Promise<void> {
   const sy0 = board.box.y - size * 2;
 
   audio.sfxVisitor("pip");
+  audio.visitorTheme("pip");
   actor.mode("flap");
   actor.face(fromRight ? -1 : 1);
   // Swoop: a curved dive that dips below the target, then rises into a hover.
@@ -681,7 +736,7 @@ export function playVisitor(
   const layer = document.createElement("div");
   layer.className = "pj-scene";
   host.appendChild(layer);
-  const actor = new Actor(layer, event.visitor, Math.max(84, board.size * 3.25));
+  const actor = new Actor(layer, event.visitor, Math.max(100, board.size * 4));
   actor.place(-500, -500, 0);
   actor.mode("idle");
   let committed = false;

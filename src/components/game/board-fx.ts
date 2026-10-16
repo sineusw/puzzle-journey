@@ -225,13 +225,13 @@ export class BoardFxRunner {
       const tier = PRAISE_TIER[e.praise] ?? 1;
       if (e.perfect) audio.feelPerfect();
       else audio.feelPraise(tier);
-      if (e.perfect || tier >= 2) cheer(e.praise, { delayMs: 250, priority: e.perfect });
+      // No voice during combos: just the sounds and visuals.
+      if (e.perfect || (tier >= 2 && e.combo < 2)) cheer(e.praise, { delayMs: 250, priority: e.perfect });
     }
     if (e.combo >= 2) {
       this.comboBadge(gridBox, e.combo, reduce);
       if (!reduce) this.screenGlow(e.combo >= 4 ? "#ff6a3c" : "#ffb04a");
       audio.feelCombo(e.combo);
-      if (e.combo >= 3 && !(e.praise && (PRAISE_TIER[e.praise] ?? 1) >= 2)) cheer(`Combo ${e.combo}!`, { delayMs: 350 });
     }
     if (e.comboWarning) audio.feelComboWarning();
     if (e.milestone) {

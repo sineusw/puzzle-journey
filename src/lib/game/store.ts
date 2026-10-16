@@ -304,7 +304,7 @@ export const useGame = create<GameStore>((set, get) => ({
       started: false,
       panel: null,
       run: runFlagsFor(match, profile, true),
-      runStats: emptyRun(match.mode, match.levelId),
+      runStats: { ...emptyRun(match.mode, match.levelId), resumed: match.moves > 0 },
     });
     // New (and returning) players play through the tutorial once; Skip is always there.
     if (!profile.tutorialDone) get().startTutorial("basics", true);

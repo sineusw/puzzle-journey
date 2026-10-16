@@ -691,6 +691,7 @@ function OverSheet() {
       <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={continueRun}>
         Continue · {CONTINUE_COST} gems
       </button>
+      <p className="mt-1 text-center text-xs text-muted">Continue empties your two fullest rows and deals pieces that fit.</p>
       <button
         type="button"
         className="pj-btn pj-btn-ghost mt-2 w-full"

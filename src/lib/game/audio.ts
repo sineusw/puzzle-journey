@@ -646,3 +646,81 @@ export function feelCoins(n: number): void {
   if (!ensure()) return;
   for (let i = 0; i < Math.min(n, 6); i++) bell(note(10 + (i % 3)), i * 0.07, 0.035, 0.4);
 }
+
+/* ---------------------------------------------------- visitor themes */
+
+const NOTE = (semis: number) => 392 * Math.pow(2, semis / 12); // G4 = 0
+
+/** Bongo / drum hit: a pitched thump plus a short noise slap. */
+function drum(pitch: number, when: number, gain = 0.2): void {
+  const b = bus;
+  if (!b || !unlocked) return;
+  tone(pitch * 1.8, 0.16, "sine", gain, b.sfx, when, pitch);
+  noise(0.05, gain * 0.35, b.sfx, when, 2200);
+}
+
+let duckTimer: number | null = null;
+/** Lower the background music while a visitor's theme plays. */
+function duckMusic(ms: number): void {
+  const el = track;
+  const b = bus;
+  if (el && !el.paused) el.volume = 0.1;
+  if (b) b.music.gain.setTargetAtTime(wantMusic ? 0.06 : 0, b.ctx.currentTime, 0.08);
+  if (duckTimer !== null) window.clearTimeout(duckTimer);
+  duckTimer = window.setTimeout(() => {
+    duckTimer = null;
+    if (track && wantMusic) track.volume = 0.34;
+    if (bus) bus.music.gain.setTargetAtTime(wantMusic ? 0.22 : 0, bus.ctx.currentTime, 0.3);
+  }, ms);
+}
+
+/**
+ * Each Island Visitor has a short entrance theme (about 2–3 s) that plays
+ * over the ducked background music, so you hear who's arriving.
+ */
+export function visitorTheme(id: "milo" | "luna" | "kai" | "nia" | "pip"): void {
+  const b = ensure();
+  if (!b || !unlocked) return;
+  duckMusic(3200);
+  if (id === "milo") {
+    // Monkey: bongos and a bouncy marimba run, then an "ooh-ooh" slide.
+    [0, 0.14, 0.28, 0.42].forEach((t, i) => drum(i % 2 ? 180 : 130, t, 0.18));
+    [0, 2, 4, 7, 9, 12, 9, 12].forEach((s, i) => mallet(NOTE(s + 12), 0.5 + i * 0.1, 0.13, 0.35));
+    tone(NOTE(12), 0.22, "sine", 0.08, b.sfx, 1.4, NOTE(19));
+    tone(NOTE(12), 0.26, "sine", 0.08, b.sfx, 1.7, NOTE(21));
+    drum(130, 1.75, 0.2);
+  } else if (id === "luna") {
+    // Magician: harp-like rising arpeggio, sparkles, then a "ta-da" chord.
+    [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => bell(NOTE(s), i * 0.11, 0.06, 1.2));
+    for (let i = 0; i < 10; i++) tone(NOTE(28 + (i % 3) * 3), 0.08, "sine", 0.025, b.sfx, 0.85 + i * 0.05);
+    [12, 16, 19, 24].forEach((s) => bell(NOTE(s), 1.45, 0.07, 1.6));
+  } else if (id === "kai") {
+    // Builder: a march on low drums, an anvil clang, and a sturdy chord.
+    [0, 0.3, 0.6, 0.75, 0.9].forEach((t) => drum(90, t, 0.24));
+    [0.15, 0.45].forEach((t) => thock(320, t, 0.18));
+    bell(NOTE(19), 1.15, 0.08, 0.9);
+    noise(0.12, 0.12, b.sfx, 1.15, 3000);
+    [-12, -5, 0, 4].forEach((s) => mallet(NOTE(s), 1.35, 0.12, 0.9));
+  } else if (id === "nia") {
+    // Explorer: an adventure horn call over a drum roll.
+    for (let i = 0; i < 8; i++) drum(110, i * 0.06, 0.08 + i * 0.012);
+    [
+      [-5, 0.55, 0.22],
+      [0, 0.8, 0.22],
+      [7, 1.05, 0.5],
+      [5, 1.6, 0.18],
+      [7, 1.8, 0.6],
+    ].forEach(([s, t, d]) => {
+      tone(NOTE(s!), d!, "triangle", 0.09, b.sfx, t!);
+      tone(NOTE(s! + 12), d!, "sine", 0.03, b.sfx, t!);
+    });
+    drum(140, 1.8, 0.2);
+  } else {
+    // Parrot: chirpy whistles and a quick high marimba flutter.
+    [0, 0.12, 0.3].forEach((t, i) => tone(NOTE(24 + i * 2), 0.1, "sine", 0.07, b.sfx, t, NOTE(31 + i * 2)));
+    [12, 16, 19, 16, 19, 24].forEach((s, i) => mallet(NOTE(s), 0.55 + i * 0.075, 0.11, 0.3));
+    tone(NOTE(31), 0.16, "sine", 0.07, b.sfx, 1.15, NOTE(24));
+    tone(NOTE(28), 0.12, "sine", 0.06, b.sfx, 1.35, NOTE(36));
+  }
+  vibrate([20, 40, 20]);
+}

@@ -103,6 +103,10 @@ export type Match = {
   goal: Goal | null;
   goalProgress: number;
   stonesCleared: number;
+  /** Seed for this game's deals, so any tray can be reproduced and tested. */
+  seed?: number;
+  /** Trays dealt so far (with `seed`, picks the next deal's random stream). */
+  deals?: number;
 };
 
 export type ClearInfo = {
@@ -202,7 +206,6 @@ export function shapeCells(id: string): CellPos[] {
 
 /** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
 export const UNUSUAL_SHAPES = ["diag2", "h3", "u5", "plus", "corner5", "z5", "t5", "i5", "o9"] as const;
-const WEIGHT_SUM = SHAPES.reduce((a, s) => a + s.weight, 0);
 
 let seq = 1;
 export function uid(prefix = "p"): string {
@@ -354,13 +357,44 @@ export function findHint(
   return null;
 }
 
-function pickShape(rng: () => number): Shape {
-  let roll = rng() * WEIGHT_SUM;
+/** Shapes that are hard to fit: five-block pieces, the 3×3, and gap shapes. */
+const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "z5", "h3", "diag2", "r23"]);
+
+/**
+ * How often bulky shapes appear, by how full the board is. A documented,
+ * fixed curve based only on the board: the fuller it gets, the more the
+ * deal leans on small, easy-to-read pieces.
+ *   under 35% full → normal mix · 35–55% → bulky ×0.6 · over 55% → bulky ×0.3
+ */
+export function bulkyFactor(occupancy: number): number {
+  return occupancy < 0.35 ? 1 : occupancy < 0.55 ? 0.6 : 0.3;
+}
+
+function pickShape(rng: () => number, occupancy = 0): Shape {
+  const k = bulkyFactor(occupancy);
+  const weightOf = (sh: Shape) => (BULKY.has(sh.id) ? sh.weight * k : sh.weight);
+  const total = SHAPES.reduce((a, sh) => a + weightOf(sh), 0);
+  let roll = rng() * total;
   for (const shape of SHAPES) {
-    roll -= shape.weight;
+    roll -= weightOf(shape);
     if (roll <= 0) return shape;
   }
   return SHAPES[0];
+}
+
+/** Share of board cells that are filled (0–1). */
+export function occupancy(board: Cell[][]): number {
+  let n = 0;
+  for (const row of board) for (const cell of row) if (!isEmpty(cell)) n++;
+  return n / (SIZE * SIZE);
+}
+
+/** The random stream for this match's next deal (reproducible from seed + deal count). */
+export function dealRng(match: Match): () => number {
+  if (match.seed === undefined) match.seed = Math.floor(Math.random() * 2 ** 31);
+  const n = match.deals ?? 0;
+  match.deals = n + 1;
+  return mulberry32((match.seed ^ Math.imul(n + 1, 0x9e3779b1)) >>> 0);
 }
 
 function pickColor(rng: () => number): ColorId {
@@ -381,10 +415,10 @@ function rollSpecial(rng: () => number, features: Features): SpecialId | null {
   return null;
 }
 
-export function makePiece(rng: () => number, forceShape?: string, features: Features = ALL_FEATURES): Piece {
+export function makePiece(rng: () => number, forceShape?: string, features: Features = ALL_FEATURES, occ = 0): Piece {
   const shape = forceShape
-    ? SHAPE_MAP.get(forceShape) ?? pickShape(rng)
-    : pickShape(rng);
+    ? SHAPE_MAP.get(forceShape) ?? pickShape(rng, occ)
+    : pickShape(rng, occ);
   const turns = Math.floor(rng() * 4);
   const cells = rotateN(shape.cells, turns);
   const starRoll = rng();
@@ -442,9 +476,6 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function defaultRng(): () => number {
-  return Math.random;
-}
 
 function sprinkleStones(board: Cell[][], count: number, rng: () => number): void {
   let placed = 0;
@@ -923,7 +954,14 @@ export function checkOver(match: Match): Match {
  * The search is bounded by `budget` placements tried; if the budget runs out
  * the set is treated as playable (we only ever reject sets we've *proven* dead).
  */
-export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 3000): boolean {
+/**
+ * True when there is at least one order and set of spots that places every
+ * piece, using the same placement rules as real play (clears, specials,
+ * stones). The search is capped; if the cap runs out first the tray is NOT
+ * treated as proven, so the dealer tries another or falls back to small
+ * pieces that are checked the same way.
+ */
+export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 6000): boolean {
   let tries = 0;
   const visit = (b: Cell[][], left: Piece[]): boolean => {
     if (left.length === 0) return true;
@@ -935,10 +973,9 @@ export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 3000): 
       for (let r = 0; r <= SIZE - rows; r++) {
         for (let c = 0; c <= SIZE - cols; c++) {
           if (!canPlace(b, p.cells, r, c)) continue;
-          if (++tries > budget) return true;
+          if (++tries > budget) return false;
           const next = cloneBoard(b);
-          stampPiece(next, p, r, c);
-          resolveClears(next);
+          settlePiece(next, p, r, c);
           if (visit(next, rest)) return true;
         }
       }
@@ -950,7 +987,8 @@ export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 3000): 
 
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const f = match.features;
-  const make = (shape?: string) => makePiece(rng, shape, f);
+  const occ = occupancy(match.board);
+  const make = (shape?: string) => makePiece(rng, shape, f, occ);
   const makeFitting = (): Piece[] => {
     if (easy) {
       return [make("o4"), make("i3"), make("l3")];
@@ -958,6 +996,8 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
     let partial: Piece[] | null = null;
     for (let attempt = 0; attempt < 28; attempt++) {
       const pieces = [make(), make(), make()];
+      // Variety you can read: never three of the same shape in one tray.
+      if (pieces[0]!.shape === pieces[1]!.shape && pieces[1]!.shape === pieces[2]!.shape) continue;
       if (!pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) continue;
       if (setIsPlayable(match.board, pieces)) return pieces;
       partial ??= pieces;
@@ -979,8 +1019,8 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   match.tray = pieces;
 }
 
-export function refillIfNeeded(match: Match, rng: () => number = defaultRng()): Match {
-  if (match.tray.every((p) => p === null)) fillTray(match, rng, false);
+export function refillIfNeeded(match: Match, rng?: () => number): Match {
+  if (match.tray.every((p) => p === null)) fillTray(match, rng ?? dealRng(match), false);
   return checkOver(match);
 }
 
@@ -1004,6 +1044,9 @@ function blankMatch(features: Features = PLAIN_FEATURES): Match {
     goal: null,
     goalProgress: 0,
     stonesCleared: 0,
+    // One random seed per game; every deal after this is reproducible from it.
+    seed: Math.floor(Math.random() * 2 ** 31),
+    deals: 0,
   };
 }
 
@@ -1012,7 +1055,7 @@ export function newGoalMatch(goal: Goal, features: Features = ALL_FEATURES): Mat
   const match = blankMatch(features);
   match.mode = "challenge";
   match.goal = goal;
-  fillTray(match, defaultRng(), true);
+  fillTray(match, dealRng(match), true);
   updateGoal(match);
   return match;
 }
@@ -1021,7 +1064,7 @@ export function newGoalMatch(goal: Goal, features: Features = ALL_FEATURES): Mat
 export function newSandboxMatch(): Match {
   const match = blankMatch(PLAIN_FEATURES);
   match.mode = "sandbox";
-  fillTray(match, defaultRng(), true);
+  fillTray(match, dealRng(match), true);
   return match;
 }
 
@@ -1159,7 +1202,7 @@ export function bombCell(match: Match, row: number, col: number): Match | null {
 
 export function refreshTray(match: Match): Match {
   const next = cloneMatch(match);
-  fillTray(next, defaultRng(), false);
+  fillTray(next, dealRng(next), false);
   next.over = false;
   checkOver(next);
   return next;
@@ -1171,22 +1214,23 @@ export function applyFreeze(match: Match): Match {
   return next;
 }
 
+/** The rows Continue will empty: the two fullest (ties go to the lower row). */
+export function continueRows(board: Cell[][]): number[] {
+  return board
+    .map((row, r) => ({ r, n: row.filter((cell) => !isEmpty(cell)).length }))
+    .sort((a, b) => b.n - a.n || b.r - a.r)
+    .slice(0, 2)
+    .map((x) => x.r)
+    .sort((a, b) => a - b);
+}
+
 export function continueMatch(match: Match): Match {
   const next = cloneMatch(match);
-  const occupied: Array<{ r: number; c: number }> = [];
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      if (!isEmpty(next.board[r][c])) occupied.push({ r, c });
-    }
-  }
-  occupied.sort(() => Math.random() - 0.5);
-  const remove = Math.min(6, occupied.length);
-  for (let i = 0; i < remove; i++) {
-    const cell = occupied[i]!;
-    next.board[cell.r][cell.c] = { t: "e" };
-  }
+  // Predictable: Continue always empties the two fullest rows, then deals a
+  // tray that's checked to fit.
+  for (const r of continueRows(next.board)) for (let c = 0; c < SIZE; c++) next.board[r]![c] = { t: "e" };
   next.over = false;
-  fillTray(next, defaultRng(), false);
+  fillTray(next, dealRng(next), false);
   checkOver(next);
   return next;
 }

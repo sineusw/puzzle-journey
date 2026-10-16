@@ -28,7 +28,7 @@ export function PowerGlyph({ name }: { name: "hammer" | "refresh" | "bomb" | "fr
 function BombFace() {
   const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true">
+    <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
       <defs>
         <radialGradient id={`${id}-b`} cx="36%" cy="34%" r="70%">
           <stop offset="0%" stopColor="#8a70a0" />
@@ -37,13 +37,13 @@ function BombFace() {
         </radialGradient>
       </defs>
       {/* ball */}
-      <circle cx="16" cy="18" r="10.4" fill="#0b0610" stroke="#e0b8f0" strokeWidth="1.4" />
-      <circle cx="16" cy="18" r="9.2" fill={`url(#${id}-b)`} />
-      <ellipse cx="12.6" cy="14.4" rx="3.4" ry="2.1" fill="rgba(255,255,255,0.32)" />
+      <circle cx="16" cy="16.6" r="10.4" fill="#0b0610" stroke="#e0b8f0" strokeWidth="1.4" />
+      <circle cx="16" cy="16.6" r="9.2" fill={`url(#${id}-b)`} />
+      <ellipse cx="12.6" cy="13" rx="3.4" ry="2.1" fill="rgba(255,255,255,0.32)" />
       {/* cap + short fuse straight up, spark on top: all on the centre line */}
-      <rect x="13.4" y="5.6" width="5.2" height="3.6" rx="1" fill="#e8d4a0" stroke="#fff1bf" strokeWidth="0.6" />
-      <path d="M16 5.6 V3.2" stroke="#d98822" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M16 0.2l.8 1.7 1.8.7-1.8.7-.8 1.7-.8-1.7-1.8-.7 1.8-.7z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.4" />
+      <rect x="13.6" y="4.2" width="4.8" height="3" rx="1" fill="#e8d4a0" stroke="#fff1bf" strokeWidth="0.6" />
+      <path d="M16 4.2 V2.6" stroke="#d98822" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M16 -0.6l.7 1.4 1.5.6-1.5.6-.7 1.4-.7-1.4-1.5-.6 1.5-.6z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.4" />
     </svg>
   );
 }

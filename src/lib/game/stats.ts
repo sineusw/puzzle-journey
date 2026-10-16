@@ -35,6 +35,8 @@ export type RunStats = {
   /** Empty cells left on the board at the end. */
   spacesLeft: number;
   won: boolean;
+  /** The run was picked up again after a reload, so its clock isn't complete. */
+  resumed?: boolean;
 };
 
 export function emptyRun(mode: string, levelId: number | null, now = Date.now()): RunStats {
@@ -179,8 +181,11 @@ export function addRun(card: PlayerCard, run: RunStats, iq: number, streak: numb
   b.streak = Math.max(b.streak, streak);
   b.pieces = Math.max(b.pieces, run.pieces);
   if (run.won && run.levelId) {
-    const secs = seconds(run);
-    b.fastest = b.fastest ? Math.min(b.fastest, secs) : secs;
+    // A resumed run's clock only covers part of the level: not a fair time.
+    if (!run.resumed) {
+      const secs = seconds(run);
+      b.fastest = b.fastest ? Math.min(b.fastest, secs) : secs;
+    }
     b.tidiest = Math.min(b.tidiest, run.spacesLeft);
   }
   const key = dayKey(now);

@@ -34,6 +34,11 @@ import {
   peelCell,
   type Cell,
   type Piece,
+  occupancy,
+  bulkyFactor,
+  continueRows,
+  dealRng,
+  checkOver,
 } from "./engine.ts";
 
 function block(c: Piece["color"] = "cyan"): Cell {
@@ -582,6 +587,87 @@ describe("Block Blast scoring rules", () => {
     assert.equal(praiseFor(2, false), "Good!");
     assert.equal(praiseFor(4, false), "Excellent!");
     assert.equal(praiseFor(1, true), "Perfect!");
+  });
+
+  describe("fair dealing", () => {
+    it("deals the same trays from the same seed and board", () => {
+      const a = newSandboxMatch();
+      const b = newSandboxMatch();
+      a.seed = b.seed = 12345;
+      a.deals = b.deals = 0;
+      a.tray = [null, null, null];
+      b.tray = [null, null, null];
+      refillIfNeeded(a);
+      refillIfNeeded(b);
+      assert.deepEqual(a.tray.map((p) => p && [p.shape, p.cells, p.color]), b.tray.map((p) => p && [p.shape, p.cells, p.color]));
+    });
+
+    it("every dealt tray can be fully placed from the board it was dealt on", () => {
+      let seed = 1;
+      for (let g = 0; g < 40; g++) {
+        const m = newSandboxMatch();
+        m.seed = seed++;
+        for (let step = 0; step < 60 && !m.over; step++) {
+          if (m.tray.every((p) => p === null)) {
+            refillIfNeeded(m);
+            const dealt = (m.tray as Array<Piece | null>).filter((p): p is Piece => p !== null);
+            if (!m.over) assert.ok(setIsPlayable(m.board, dealt, 20000) || occupancy(m.board) > 0.5, "playable tray");
+          }
+          // Play the first piece that fits, at its first legal spot.
+          const i = m.tray.findIndex((p) => p && canPlaceAnywhere(m.board, p.cells));
+          if (i < 0) break;
+          const p = m.tray[i]!;
+          let done = false;
+          for (let r = 0; r < SIZE && !done; r++)
+            for (let c = 0; c < SIZE && !done; c++)
+              if (canPlace(m.board, p.cells, r, c)) {
+                Object.assign(m, placePiece(m, i, r, c).match);
+                done = true;
+              }
+        }
+      }
+    });
+
+    it("game over only when no remaining piece fits", () => {
+      const m = newSandboxMatch();
+      m.board = emptyBoard();
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if ((r + c) % 2 === 0) m.board[r][c] = block();
+      m.tray = [piece([[0, 0], [0, 1]]), null, null];
+      assert.equal(checkOver(m).over, true);
+      m.tray = [piece([[0, 0], [0, 1]]), piece([[0, 0]]), null];
+      assert.equal(checkOver(m).over, false);
+    });
+
+    it("leans toward small pieces as the board fills (board state only)", () => {
+      assert.equal(bulkyFactor(0.1), 1);
+      assert.equal(bulkyFactor(0.45), 0.6);
+      assert.equal(bulkyFactor(0.7), 0.3);
+    });
+
+    it("Continue always empties the two fullest rows", () => {
+      const board = emptyBoard();
+      board[2] = filledRow();
+      board[2][0] = { t: "e" };
+      board[5] = filledRow();
+      board[7][0] = block();
+      assert.deepEqual(continueRows(board), [2, 5]);
+      const m = newSandboxMatch();
+      m.board = board;
+      m.over = true;
+      const next = continueMatch(m);
+      assert.ok(next.board[2].every((c) => c.t === "e") && next.board[5].every((c) => c.t === "e"));
+      assert.equal(next.over, false);
+    });
+
+    it("deal streams advance per deal", () => {
+      const m = newSandboxMatch();
+      m.seed = 7;
+      m.deals = 0;
+      const a = dealRng(m)();
+      const b = dealRng(m)();
+      assert.notEqual(a, b);
+      assert.equal(m.deals, 2);
+    });
   });
 });
 

@@ -83,4 +83,8 @@ describe("player cards and awards", () => {
     const first = addRun(emptyCard(), run({ bestCombo: 3 }), 110, 1, now);
     assert.deepEqual(awardsFor("me", { me: first }, emptyCard(), now), []);
   });
+  it("doesn't record a fastest time for a run resumed after a reload", () => {
+    const card = addRun(emptyCard(), { ...run({ won: true, levelId: 3 }), resumed: true }, 100, 1, now);
+    assert.equal(card.best.fastest, 0);
+  });
 });
