@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Gamepad2, Home, MoreHorizontal, Music, Paintbrush, Trophy, Volume2, VolumeX } from "lucide-react";
+import { JungleAmbience } from "./ambient";
+import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
 import { ADVENTURE, goalLabel, xpForLevel } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
@@ -57,6 +58,7 @@ export function GameShell() {
     <div className="pj-root" data-skin={skin}>
       <div className="pj-stars" />
       <NightIsle />
+      <JungleAmbience />
       <VisitorDirector />
       <div className="pj-stage">
         <Hud />
@@ -77,7 +79,7 @@ export function GameShell() {
               ["home", "Home", Home],
               ["adventure", "Play", Gamepad2],
               ["challenges", "Challenges", Trophy],
-              ["skins", "Skins", Paintbrush],
+              ["ranks", "Ranks", Crown],
               ["more", "More", MoreHorizontal],
             ] as const
           ).map(([id, label, Icon]) => (

@@ -117,6 +117,8 @@ export type ClearInfo = {
   bombs: number;
   rockets: number;
   blasts: number;
+  /** Specials that went off, in order, for captions and effects. */
+  fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
 };
 
 export type PlaceResult = {
@@ -187,6 +189,14 @@ const SHAPES: Shape[] = [
 ];
 
 const SHAPE_MAP = new Map(SHAPES.map((s) => [s.id, s]));
+
+/** Cells of a shape by id (for the shape gallery). */
+export function shapeCells(id: string): CellPos[] {
+  return SHAPE_MAP.get(id)?.cells ?? [[0, 0]];
+}
+
+/** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
+export const UNUSUAL_SHAPES = ["diag2", "h3", "u5", "plus", "corner5", "z5", "t5", "i5", "o9"] as const;
 const WEIGHT_SUM = SHAPES.reduce((a, s) => a + s.weight, 0);
 
 let seq = 1;
@@ -546,6 +556,7 @@ function applyLineClear(board: Cell[][], rows: number[], cols: number[]): ClearI
     bombs: 0,
     rockets: 0,
     blasts: 0,
+    fired: [],
   };
 }
 
@@ -559,6 +570,7 @@ type SpecialAcc = {
   rockets: number;
   blasts: number;
   queued: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
+  fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
   extra: Array<{ r: number; c: number; cell: Cell }>;
 };
 
@@ -574,6 +586,7 @@ function hitCell(board: Cell[][], r: number, c: number, acc: SpecialAcc): boolea
 }
 
 function fireSpecial(board: Cell[][], r: number, c: number, sp: Exclude<SpecialId, "stone">, acc: SpecialAcc): void {
+  acc.fired.push({ r, c, sp });
   if (sp === "bomb") {
     acc.bombs++;
     for (let rr = r - 1; rr <= r + 1; rr++) {
@@ -606,13 +619,14 @@ export function resolveClears(board: Cell[][]): ClearInfo | null {
     bombs: 0,
     rockets: 0,
     blasts: 0,
+    fired: [],
   };
   const seen = new Set<string>();
   for (let wave = 0; wave < SIZE; wave++) {
     const { rows, cols } = findFullLines(board);
     if (rows.length + cols.length === 0) break;
     const info = applyLineClear(board, rows, cols);
-    const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], extra: [] };
+    const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], fired: [], extra: [] };
     const fired = new Set<string>();
     for (const cell of info.cells) {
       const sp = specialOf(cell.cell);
@@ -637,6 +651,7 @@ export function resolveClears(board: Cell[][]): ClearInfo | null {
     merged.bombs += acc.bombs;
     merged.rockets += acc.rockets;
     merged.blasts += acc.blasts;
+    merged.fired.push(...acc.fired);
     for (const r of rows) if (!merged.rows.includes(r)) merged.rows.push(r);
     for (const c of cols) if (!merged.cols.includes(c)) merged.cols.push(c);
     for (const cell of info.cells) {

@@ -1,4 +1,5 @@
 import { newLevelMatch, sanitizeMatch, type Match } from "./engine";
+import { emptyCard, type PlayerCard } from "./stats.ts";
 import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content";
 
 export const SAVE_VERSION = 3;
@@ -28,6 +29,16 @@ export type Profile = {
   sandboxBest: number;
   /** Adventure unlocks whose "New!" card the player has already seen. */
   seenUnlocks: UnlockId[];
+  /** Shapes the player has already met ("New shape!" tag). */
+  seenShapes: string[];
+  /** Specials the player has had explained in-game. */
+  seenSpecialTips: string[];
+  /** Saw the "Not your usual blocks" intro. */
+  seenShapesIntro: boolean;
+  /** This player's records (also shared on the leaderboard when possible). */
+  card: PlayerCard;
+  /** Levels won in a row (Classic/Adventure); a loss resets it. */
+  levelStreak: number;
   skin: SkinId;
   seenHowTo: boolean;
   match: Match | null;
@@ -60,6 +71,11 @@ export function defaultProfile(): Profile {
     classic: { unlocked: 1, stars: {} },
     sandboxBest: 0,
     seenUnlocks: [],
+    seenShapes: [],
+    seenSpecialTips: [],
+    seenShapesIntro: false,
+    card: emptyCard(),
+    levelStreak: 0,
     skin: "classic",
     seenHowTo: false,
     match: null,
@@ -91,6 +107,11 @@ function migrate(raw: Profile): Profile {
     },
     sandboxBest: raw.sandboxBest ?? 0,
     seenUnlocks: raw.seenUnlocks ?? [],
+    seenShapes: raw.seenShapes ?? [],
+    seenSpecialTips: raw.seenSpecialTips ?? [],
+    seenShapesIntro: raw.seenShapesIntro ?? false,
+    card: raw.card?.best ? { ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } } : emptyCard(),
+    levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start
     // the player on a fresh run so an old special-filled board doesn't carry
     // over into the plain-block start.

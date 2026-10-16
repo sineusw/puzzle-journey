@@ -44,8 +44,8 @@ export type UnlockInfo = {
 
 export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
   stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Clear a row or column with a star gem in it for bonus points.", art: "/art/tiles/star-blue.webp" },
-  arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Clear an arrow block and it wipes its whole row or column.", art: "/art/tiles/cyan.webp", special: "rocketV" },
-  bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Clear a bomb block and it blasts everything around it.", art: "/art/tiles/violet.webp", special: "bomb" },
+  arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Fill a row or column that has an arrow block in it. When that line clears, the arrow fires and wipes the line it points along too.", art: "/art/tiles/cyan.webp", special: "rocketV" },
+  bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Fill a row or column that has a bomb block in it. When that line clears, the bomb also clears every block around it.", art: "/art/tiles/violet.webp", special: "bomb" },
   milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.png" },
   stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones fill a gap but take two clears to break.", art: "/art/tiles/stone.webp" },
   kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.png" },

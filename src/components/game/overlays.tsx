@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  Crown,
   Info,
   Lock,
+  Paintbrush,
   Sparkles,
   Music,
   RotateCcw,
@@ -30,7 +32,10 @@ import { formatInt } from "@/lib/utils";
 import { GameIcon, type IconName } from "./icons";
 import * as audio from "@/lib/game/audio";
 import { cheer } from "@/lib/game/voice";
+import { nameFor, useBoard } from "@/lib/game/leaderboard";
+import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
 import { SpecialFace } from "./tile-art";
+import { ShapeGallery, SpecialDemo } from "./explainers";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
@@ -153,6 +158,7 @@ export function TabScreens() {
       {tab === "adventure" ? <AdventureScreen /> : null}
       {tab === "challenges" ? <ChallengeScreen /> : null}
       {tab === "skins" ? <SkinsScreen /> : null}
+      {tab === "ranks" ? <RanksScreen /> : null}
       {tab === "more" ? <MoreScreen /> : null}
     </div>
   );
@@ -418,14 +424,30 @@ function HowSheet() {
     <div className="pj-sheet text-left">
       <h2 className="font-display text-2xl text-cream">How to play</h2>
       <ol className="mt-3 space-y-2 text-[15px] leading-snug text-cream/90">
-        <li>1. Drag a next-block from the tray under the board onto the grid.</li>
+        <li>1. Drag a block from the tray under the board onto the grid.</li>
         <li>2. Fill a whole row or column to clear it. Fill several and they all pop at once.</li>
-        <li>3. Chain clears on back-to-back drops for combos.</li>
-        <li>4. Blocks don’t rotate — plan around the shapes you’re given.</li>
-        <li>5. Three ways to play: Adventure, Classic levels with plain blocks, and Sandbox for a high score.</li>
-        <li>6. Adventure starts with plain blocks. New special blocks and Island Visitors join one at a time as you travel.</li>
-        <li>7. Hammer, reroll, bomb, and frost get you out of tight spots.</li>
+        <li>3. Clear again within 3 drops to keep your combo going.</li>
       </ol>
+      <h3 className="pj-how-h">Not your usual blocks</h3>
+      <ShapeGallery />
+      <p className="pj-how-p">
+        These aren’t Tetris pieces. Some have <b>gaps</b> between their blocks, the gaps stay empty, and pieces <b>never rotate</b>. Look at all
+        three before you drop one.
+      </p>
+      <h3 className="pj-how-h">Special blocks (Adventure)</h3>
+      <SpecialDemo kind="rocketV" />
+      <ul className="pj-how-legend">
+        <li><span className="pj-how-ico"><SpecialFace kind="rocketV" /></span><span><b>↕ arrow:</b> wipes its whole column</span></li>
+        <li><span className="pj-how-ico"><SpecialFace kind="rocketH" /></span><span><b>↔ arrow:</b> wipes its whole row</span></li>
+        <li><span className="pj-how-ico"><SpecialFace kind="bomb" /></span><span><b>Bomb:</b> clears the blocks around it</span></li>
+        <li><span className="pj-how-ico"><SpecialFace kind="blast" /></span><span><b>Golden:</b> clears the whole board</span></li>
+      </ul>
+      <p className="pj-how-p">Specials go off only when a row or column they’re in clears. Placing them does nothing on its own.</p>
+      <h3 className="pj-how-h">Ways to play</h3>
+      <p className="pj-how-p">
+        <b>Adventure</b> adds one new special block or Island Visitor at a time. <b>Classic</b> is plain-block levels. <b>Sandbox</b> is endless,
+        for your high score. After each run you get a Puzzle IQ and can win awards on the Ranks tab.
+      </p>
       <button
         type="button"
         className="pj-btn pj-btn-primary mt-5 w-full"
@@ -466,6 +488,60 @@ function useCountUp(target: number, ms: number, startDelay: number): number {
     return () => cancelAnimationFrame(raf);
   }, [target, ms, startDelay]);
   return value;
+}
+
+/** Puzzle IQ reveal plus the "paper plate" awards this run earned. */
+function IqAndAwards({ delay }: { delay: number }) {
+  const result = useGame((s) => s.lastResult);
+  const [shownAwards, setShownAwards] = useState(0);
+  const iq = result?.iq ?? 100;
+  const shownIq = useCountUp(iq - 70, 900, delay);
+  const label = iqLabel(iq, result?.pct ?? null, result?.versus ?? "your games");
+  const awards = result?.awards ?? [];
+  useEffect(() => {
+    if (!result) return;
+    const timers: number[] = [];
+    timers.push(window.setTimeout(() => audio.feelMilestone(), delay + 950));
+    awards.forEach((a, i) =>
+      timers.push(
+        window.setTimeout(() => {
+          setShownAwards(i + 1);
+          audio.feelStar(Math.min(i, 2));
+          if (i === 0) cheer(a.kind === "first" ? `You won ${a.title}!` : "New personal record!", { delayMs: 150 });
+        }, delay + 1300 + i * 550),
+      ),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // Play once when the results open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!result) return null;
+  return (
+    <div className="pj-iq-block">
+      <div className="pj-iq" data-testid="puzzle-iq">
+        <div className="pj-iq-label">Puzzle IQ</div>
+        <div className="pj-iq-value tabular-nums">{70 + shownIq}</div>
+        <div className="pj-iq-headline">{label.headline}</div>
+        <div className="pj-iq-note">{label.note}</div>
+      </div>
+      {awards.length ? (
+        <ul className="pj-awards" data-testid="awards">
+          {awards.slice(0, shownAwards).map((a) => (
+            <li key={a.title} className={`pj-award is-${a.kind}`}>
+              <span className="pj-award-plate" aria-hidden="true">
+                <Crown className="size-4" />
+              </span>
+              <span className="pj-award-text">
+                <strong>{a.kind === "first" ? `#1 · ${a.title}` : a.title}</strong>
+                <span>{a.value}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="pj-iq-fine">Puzzle IQ rates this run's play, not a real IQ test.</p>
+    </div>
+  );
 }
 
 function RunStats() {
@@ -534,6 +610,7 @@ function OverSheet() {
         <p className="text-xs text-muted">Best {formatInt(Math.max(best, match.score))}</p>
       )}
       <RunStats />
+      <IqAndAwards delay={700} />
       <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
         {match.levelId ? "Try again" : "Play again"}
       </button>
@@ -607,6 +684,7 @@ function WonSheet() {
       <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
       <p className="text-xs text-muted">{match.goal ? goalLabel(match.goal) : "Challenge complete"}</p>
       <RunStats />
+      <IqAndAwards delay={900 + stars * 450} />
       {reward ? (
         <p className="pj-result-reward">
           <GameIcon name="coin" className="inline size-5" /> +{reward.coins}
@@ -650,8 +728,10 @@ function IntroSheet() {
         <Sparkles className="mr-1 inline size-4" />
         New on this island
       </p>
-      <div className={`pj-intro-art is-${info.kind}`}>
-        {info.kind === "visitor" ? (
+      <div className={`pj-intro-art is-${info.kind}${info.special ? " is-demo" : ""}`}>
+        {info.special ? (
+          <SpecialDemo kind={info.special} />
+        ) : info.kind === "visitor" ? (
           <img src={info.art} alt="" />
         ) : (
           <span className="pj-intro-tile" style={{ backgroundImage: `url(${info.art})` }}>
@@ -660,7 +740,12 @@ function IntroSheet() {
         )}
       </div>
       <h2 className="mt-2 font-display text-3xl text-cream">{info.name}</h2>
-      <p className="mx-auto mt-2 max-w-[28ch] text-sm text-cream/85">{info.blurb}</p>
+      <p className="mx-auto mt-2 max-w-[30ch] text-sm text-cream/85">{info.blurb}</p>
+      {unlock === "arrows" ? (
+        <p className="mx-auto mt-2 max-w-[30ch] text-sm text-cream/85">
+          Look at the arrow: <b>↕</b> wipes the column, <b>↔</b> wipes the row. It only fires when a line through it clears.
+        </p>
+      ) : null}
       <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
         Let’s go
       </button>
@@ -700,6 +785,68 @@ function AdventureScreen() {
       <p className="mt-2 text-sm text-muted">{active.blurb}</p>
       <div className="mt-3">
         {mode === "adventure" ? <AdventureList /> : mode === "classic" ? <ClassicList /> : <SandboxCard />}
+      </div>
+    </div>
+  );
+}
+
+function RanksScreen() {
+  const board = useBoard();
+  const [scope, setScope] = useState<"today" | "all">("today");
+  const today = dayKey();
+  const cats = categories().filter((c) => c.scope === scope);
+  const players = Object.keys(board.cards).length;
+  return (
+    <div data-testid="ranks">
+      <h2 className="font-display text-2xl">Leaderboard</h2>
+      <p className="mt-1 text-sm text-muted">
+        {board.mode === "shared"
+          ? `${players} ${players === 1 ? "player" : "players"} on this island. ${board.canPost ? "Your scores post automatically." : "You can watch, but ask the owner for edit access to post scores."}`
+          : "Your personal records. Play on the shared game page to compete with friends."}
+      </p>
+      <div className="pj-modes mt-3" role="tablist" aria-label="Leaderboard period">
+        {(
+          [
+            ["today", "Today"],
+            ["all", "All-time"],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={scope === id} className={`pj-mode-tab ${scope === id ? "is-on" : ""}`} onClick={() => setScope(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 space-y-2">
+        {cats.map((cat) => {
+          const ranked = rank(cat, board.cards, today);
+          const myIdx = ranked.findIndex((r) => r.id === board.myId);
+          const top = ranked.slice(0, 3);
+          return (
+            <div key={cat.id} className="pj-card pj-rank-card">
+              <div className="pj-rank-title">{cat.title}</div>
+              {ranked.length === 0 ? (
+                <div className="text-xs text-muted">No one yet. Be the first!</div>
+              ) : (
+                <ol className="pj-rank-list">
+                  {top.map((r, i) => (
+                    <li key={r.id} className={r.id === board.myId ? "is-me" : ""}>
+                      <span className={`pj-rank-pos is-${i + 1}`}>{i === 0 ? <Crown className="size-3.5" /> : i + 1}</span>
+                      <span className="pj-rank-name">{nameFor(r.id, board)}</span>
+                      <span className="pj-rank-val tabular-nums">{cat.format(r.value)}</span>
+                    </li>
+                  ))}
+                  {myIdx >= 3 ? (
+                    <li className="is-me">
+                      <span className="pj-rank-pos">{myIdx + 1}</span>
+                      <span className="pj-rank-name">You</span>
+                      <span className="pj-rank-val tabular-nums">{cat.format(ranked[myIdx]!.value)}</span>
+                    </li>
+                  ) : null}
+                </ol>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -810,6 +957,7 @@ function SkinsScreen() {
 
 function MoreScreen() {
   const profile = useGame((s) => s.profile);
+  const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
   const startSandbox = useGame((s) => s.startSandbox);
   const xpNeed = xpForLevel(profile.level);
@@ -830,6 +978,10 @@ function MoreScreen() {
         <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setPanel("settings")}>
           <Settings className="mr-2 inline size-4" />
           Settings
+        </button>
+        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setTab("skins")}>
+          <Paintbrush className="mr-2 inline size-4" />
+          Block skins
         </button>
         <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={startSandbox}>
           <RotateCcw className="mr-2 inline size-4" />

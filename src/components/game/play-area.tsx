@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as PE } from "react";
-import { bounds, canPlaceAnywhere, COMBO_WINDOW, placeFromCell, previewClear, SIZE, snapPlace, type Cell, type Piece } from "@/lib/game/engine";
+import { bounds, canPlaceAnywhere, COMBO_WINDOW, placeFromCell, previewClear, SIZE, snapPlace, UNUSUAL_SHAPES, type Cell, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize } from "./block";
@@ -54,6 +54,8 @@ let lastFxId = 0;
 export function PlayArea() {
   const board = useGame((s) => s.match.board);
   const tray = useGame((s) => s.match.tray);
+  const seenShapes = useGame((s) => s.profile.seenShapes);
+  const comboHeat = useGame((s) => (s.match.combo >= 5 ? "hot" : s.match.combo >= 2 ? "warm" : undefined));
   const over = useGame((s) => s.match.over);
   const selected = useGame((s) => s.selected);
   const targeting = useGame((s) => s.targeting);
@@ -72,6 +74,12 @@ export function PlayArea() {
   const frameReq = useRef<number | null>(null);
   const skipClick = useRef(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // Hold the background ambience still while a piece is being dragged.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (dragIndex !== null) root.dataset.dragging = "1";
+    else delete root.dataset.dragging;
+  }, [dragIndex]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const previewKey = useRef("");
   const previewLines = useRef(0);
@@ -212,6 +220,7 @@ export function PlayArea() {
         if (!latest) return;
         placeGhost(latest);
         updatePreview(latest);
+        if (latest.moved) runnerRef.current?.trail(latest.x, latest.y - latest.lift, latest.piece.color);
       });
     };
     const onUp = (e: PointerEvent) => {
@@ -325,7 +334,7 @@ export function PlayArea() {
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
       <div ref={rowRef} className="pj-board-row">
         <SideRails side="l" />
-        <div ref={frameRef} className="pj-frame">
+        <div ref={frameRef} className="pj-frame" data-combo={comboHeat}>
           <ComboMeter />
           <BoardGrid
             gridRef={gridRef}
@@ -340,6 +349,7 @@ export function PlayArea() {
       </div>
 
       <div className="pj-tray-wrap">
+        <TrayTip tray={tray} />
         <div className="pj-tray" data-testid="tray">
           {tray.map((piece, i) => (
             <TraySlot
@@ -351,6 +361,7 @@ export function PlayArea() {
               lifted={dragIndex === i}
               disabled={!piece || over || visitorBusy}
               onDown={onPieceDown}
+              isNew={Boolean(piece && (UNUSUAL_SHAPES as readonly string[]).includes(piece.shape) && !seenShapes.includes(piece.shape))}
             />
           ))}
         </div>
@@ -500,6 +511,31 @@ const BoardCell = memo(
 
 /* ------------------------------------------------------------------- tray */
 
+const TIP_TEXT: Record<string, { title: string; body: string }> = {
+  rocketV: { title: "Arrow block ↕", body: "When a row or column through it clears, the arrow also wipes its whole column." },
+  rocketH: { title: "Arrow block ↔", body: "When a row or column through it clears, the arrow also wipes its whole row." },
+  bomb: { title: "Bomb block", body: "When a line through it clears, it also clears every block around it." },
+  blast: { title: "Golden block", body: "When a line through it clears, the whole board clears." },
+};
+
+/** First time a special block shows up in the tray, say what it does. */
+const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
+  const seen = useGame((s) => s.profile.seenSpecialTips);
+  const dismissTip = useGame((s) => s.dismissTip);
+  const sp = tray.find((p) => p?.special && p.special !== "stone" && !seen.includes(p.special))?.special;
+  if (!sp || !TIP_TEXT[sp]) return null;
+  const tip = TIP_TEXT[sp]!;
+  return (
+    <div className="pj-tray-tip" role="status" data-testid="tray-tip">
+      <strong>{tip.title}</strong>
+      <span>{tip.body}</span>
+      <button type="button" className="pj-tray-tip-ok" onClick={() => dismissTip(sp)}>
+        Got it
+      </button>
+    </div>
+  );
+});
+
 const TraySlot = memo(function TraySlot({
   index,
   piece,
@@ -508,6 +544,7 @@ const TraySlot = memo(function TraySlot({
   lifted,
   disabled,
   onDown,
+  isNew,
 }: {
   index: number;
   piece: Piece | null;
@@ -516,6 +553,7 @@ const TraySlot = memo(function TraySlot({
   lifted: boolean;
   disabled: boolean;
   onDown: (index: number, e: PE<HTMLButtonElement>) => void;
+  isNew?: boolean;
 }) {
   return (
     <button
@@ -531,6 +569,7 @@ const TraySlot = memo(function TraySlot({
       aria-label={piece ? `Next block ${index + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${index + 1}`}
     >
       {piece ? <PieceGrid piece={piece} cell={TRAY_CELL} faded={!fits || lifted} /> : null}
+      {isNew && !lifted ? <span className="pj-new-tag">New shape</span> : null}
     </button>
   );
 });

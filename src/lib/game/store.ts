@@ -38,6 +38,8 @@ import {
 } from "./save";
 import * as audio from "./audio";
 import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
+import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
+import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import {
   applyVisitorAction,
   nextVisitAt,
@@ -48,7 +50,7 @@ import {
   type VisitorId,
 } from "./visitors";
 
-export type Tab = "home" | "adventure" | "challenges" | "skins" | "more";
+export type Tab = "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
   | null
   | "shop"
@@ -95,10 +97,32 @@ export type BoardFx = {
   newBest: boolean;
   /** The next move is the last chance to keep the combo alive. */
   comboWarning: boolean;
+  /** Special blocks that went off (for their beams). */
+  fired?: Array<{ r: number; c: number; sp: "bomb" | "rocketH" | "rocketV" | "blast" }>;
+  /** A one-line explanation, shown the first time each special fires in a run. */
+  caption?: string | null;
+};
+
+/** What each special block did, in plain words. */
+export const SPECIAL_CAPTION: Record<"bomb" | "rocketH" | "rocketV" | "blast", string> = {
+  rocketV: "Arrow fired! ↕ It wiped its whole column.",
+  rocketH: "Arrow fired! ↔ It wiped its whole row.",
+  bomb: "Bomb! It cleared every block around it.",
+  blast: "Golden block! It cleared the whole board.",
+};
+
+/** What the results screen shows about the run that just ended. */
+export type RunResult = {
+  iq: number;
+  /** Percentile vs. scores on the board (or the player's own games). */
+  pct: number | null;
+  versus: "players" | "your games";
+  awards: Award[];
+  run: RunStats;
 };
 
 /** Per-run flags so each milestone is celebrated once. */
-type RunFlags = { half: boolean; almost: boolean; newBest: boolean; bestAtStart: number };
+type RunFlags = { half: boolean; almost: boolean; newBest: boolean; bestAtStart: number; explained?: string[] };
 
 type GameStore = {
   ready: boolean;
@@ -111,6 +135,8 @@ type GameStore = {
   targeting: PowerId | null;
   fx: BoardFx | null;
   run: RunFlags;
+  runStats: RunStats;
+  lastResult: RunResult | null;
   toast: string | null;
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
@@ -148,6 +174,8 @@ type GameStore = {
   buy: (itemId: string) => void;
   setSkin: (skin: SkinId) => void;
   toggleSetting: (key: "sfx" | "music" | "shake" | "voice") => void;
+  /** Mark a one-time tip (e.g. a special block's explanation) as read. */
+  dismissTip: (key: string) => void;
   resetProgress: () => void;
   dismissLevelUp: () => void;
   setToast: (msg: string | null) => void;
@@ -232,6 +260,8 @@ export const useGame = create<GameStore>((set, get) => ({
   targeting: null,
   fx: null,
   run: { half: false, almost: false, newBest: false, bestAtStart: 0 },
+  runStats: emptyRun("adventure", 1),
+  lastResult: null,
   toast: null,
   levelUpTo: null,
   introUnlock: null,
@@ -250,14 +280,17 @@ export const useGame = create<GameStore>((set, get) => ({
     audio.setMuted(profile.settings.sfx, profile.settings.music);
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
+    void connectBoard(profile.card);
     const match = sanitizeMatch(profile.match ?? firstMatch());
     set({
       ready: true,
       profile,
       match,
       started: false,
-      panel: profile.seenHowTo ? null : "how",
+      // Returning players see the updated How to play once (new shapes + specials).
+      panel: profile.seenHowTo && profile.seenShapesIntro ? null : "how",
       run: runFlagsFor(match, profile, true),
+      runStats: emptyRun(match.mode, match.levelId),
     });
   },
 
@@ -282,8 +315,8 @@ export const useGame = create<GameStore>((set, get) => ({
   setPanel: (panel) => {
     if (panel) audio.sfxUi();
     const { profile } = get();
-    if (panel !== "how" && !profile.seenHowTo) {
-      set({ panel, profile: { ...profile, seenHowTo: true } });
+    if (panel !== "how" && (!profile.seenHowTo || !profile.seenShapesIntro)) {
+      set({ panel, profile: { ...profile, seenHowTo: true, seenShapesIntro: true } });
       persistSoon(get);
       return;
     }
@@ -312,6 +345,26 @@ export const useGame = create<GameStore>((set, get) => ({
     nextProfile = applyQuestScore(leveled.profile, result.match);
     if (result.match.mode === "sandbox") {
       nextProfile = { ...nextProfile, sandboxBest: Math.max(nextProfile.sandboxBest, result.match.score) };
+    }
+    // Run stats for the results screen and leaderboard.
+    const rs: RunStats = { ...get().runStats, colors: { ...get().runStats.colors }, lineTimes: [...get().runStats.lineTimes] };
+    const now = Date.now();
+    rs.pieces += 1;
+    rs.score = result.match.score;
+    rs.bestCombo = result.match.bestCombo;
+    rs.perfects = result.match.perfects;
+    if (result.clear) {
+      rs.lines += result.clear.lines;
+      for (let i = 0; i < result.clear.lines; i++) rs.lineTimes.push(now);
+      for (const { cell } of result.clear.cells) {
+        if (cell.t === "b" || cell.t === "s") rs.colors[cell.c] = (rs.colors[cell.c] ?? 0) + 1;
+      }
+    }
+    let lastResult = get().lastResult;
+    if (result.match.won || result.match.over) {
+      const finished = finishRun(rs, result.match, nextProfile);
+      nextProfile = finished.profile;
+      lastResult = finished.result;
     }
     if (result.match.won) {
       const ratio = result.match.goal ? result.match.goalProgress / result.match.goal.value : 1;
@@ -376,6 +429,19 @@ export const useGame = create<GameStore>((set, get) => ({
       run.newBest = true;
       newBest = true;
     }
+    // Explain each kind of special the first time it fires in a run.
+    let caption: string | null = null;
+    for (const f of clear?.fired ?? []) {
+      const seen = run.explained ?? [];
+      if (!seen.includes(f.sp)) {
+        caption = SPECIAL_CAPTION[f.sp];
+        run.explained = [...seen, f.sp];
+        break;
+      }
+    }
+    if (placedPiece && !nextProfile.seenShapes.includes(placedPiece.shape)) {
+      nextProfile = { ...nextProfile, seenShapes: [...nextProfile.seenShapes, placedPiece.shape] };
+    }
     const fx: BoardFx = {
       id: fxSeq++,
       landed,
@@ -393,6 +459,8 @@ export const useGame = create<GameStore>((set, get) => ({
       milestone,
       newBest,
       comboWarning: !clear && m.combo > 0 && m.sinceClear === COMBO_WINDOW - 1,
+      fired: clear?.fired ?? [],
+      caption,
     };
     set({
       match: result.match,
@@ -400,6 +468,8 @@ export const useGame = create<GameStore>((set, get) => ({
       selected: result.match.tray.findIndex((p) => p),
       fx,
       run,
+      runStats: rs,
+      lastResult,
       levelUpTo: leveled.leveled,
       panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,
     });
@@ -565,7 +635,9 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const next = continueMatch(match);
     audio.sfxWin();
+    const prev = get().runStats;
     set({
+      runStats: { ...emptyRun(next.mode, next.levelId), startedAt: prev.startedAt },
       match: next,
       profile: { ...profile, gems: profile.gems - CONTINUE_COST },
       panel: null,
@@ -681,6 +753,12 @@ export const useGame = create<GameStore>((set, get) => ({
     persistSoon(get);
   },
 
+  dismissTip: (key) => {
+    const { profile } = get();
+    if (profile.seenSpecialTips.includes(key)) return;
+    set({ profile: { ...profile, seenSpecialTips: [...profile.seenSpecialTips, key] } });
+    persistSoon(get);
+  },
   toggleSetting: (key) => {
     const { profile } = get();
     const settings = { ...profile.settings, [key]: !profile.settings[key] };
@@ -766,6 +844,35 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 }));
 
+/**
+ * A run just ended: score it (Puzzle IQ), fold it into the player's card,
+ * work out percentile and awards, and post the card to the leaderboard.
+ */
+function finishRun(rs: RunStats, match: Match, profile: Profile): { profile: Profile; result: RunResult } {
+  const run: RunStats = { ...rs, endedAt: Date.now(), won: match.won, spacesLeft: match.board.flat().filter((c) => c.t === "e").length };
+  const iq = puzzleIq(run);
+  const levelMode = match.mode === "classic" || match.mode === "adventure";
+  const levelStreak = levelMode ? (match.won ? profile.levelStreak + 1 : 0) : profile.levelStreak;
+  const before = profile.card;
+  const card = addRun(before, run, iq, levelStreak);
+  const board = useBoard.getState();
+  const cards = { ...board.cards, [board.myId]: card };
+  // Compare against real results only: other players' recent IQs, or the
+  // player's own earlier games when there aren't enough of those.
+  const others = Object.entries(cards)
+    .filter(([id]) => id !== board.myId)
+    .flatMap(([, c]) => c.iqs ?? []);
+  let pct = percentileOf(iq, others);
+  let versus: RunResult["versus"] = "players";
+  if (pct === null) {
+    pct = percentileOf(iq, before.iqs ?? []);
+    versus = "your games";
+  }
+  const awards = awardsFor(board.myId, cards, Object.keys(cards).length > 1 ? null : before);
+  void postCard(card);
+  return { profile: { ...profile, card, levelStreak }, result: { iq, pct, versus, awards, run } };
+}
+
 /** Fresh milestone flags; `resume` keeps flags already earned in a saved run. */
 function runFlagsFor(match: Match, profile: Profile, resume: boolean): RunFlags {
   const pct = match.goal ? match.goalProgress / match.goal.value : 0;
@@ -797,6 +904,7 @@ function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => vo
     visitorSeen: {},
     visitorFeatured: null,
     run: runFlagsFor(match, profile, false),
+    runStats: emptyRun(match.mode, match.levelId),
     profile: { ...profile, games: profile.games + 1, seenHowTo: true },
   });
   persistSoon(get);

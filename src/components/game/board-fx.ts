@@ -93,7 +93,10 @@ export class BoardFxRunner {
       );
     }
 
-    if (e.placedCells > 0) audio.feelPlace(e.placedCells);
+    if (e.placedCells > 0) {
+      audio.feelPlace(e.placedCells);
+      if (!reduce) this.landRing(e.landed, boxOf);
+    }
 
     // Clear: line flashes, then each block pops in a wave from the landing point.
     const delays: number[] = [];
@@ -144,6 +147,17 @@ export class BoardFxRunner {
       else if (e.special === "rocket") audio.sfxRocket();
       audio.feelClear(delays, Math.max(1, e.rows.length + e.cols.length), e.combo);
     }
+    // Special blocks: a bright beam along an arrow's line, a ring for a bomb.
+    for (const f of e.fired ?? []) {
+      if (f.sp === "rocketV") this.beam(gridBox, "col", f.c, cell, reduce);
+      else if (f.sp === "rocketH") this.beam(gridBox, "row", f.r, cell, reduce);
+      else if (f.sp === "bomb") {
+        const b = boxOf(f.r, f.c);
+        this.fx.ring(b.left + b.width / 2, b.top + b.height / 2, { color: "#ffb04a", from: cell * 0.3, to: cell * 1.8, ms: 450, width: 5 });
+        this.fx.burst("sparkle", b.left + b.width / 2, b.top + b.height / 2, { count: 14, color: ["#ffd27a", "#ff7a3c"], speed: 260, size: 5 });
+      }
+    }
+    if (e.caption) this.caption(gridBox, e.caption, reduce);
     if (e.gained > 0 && e.cleared.length) this.scorePop(originX, originY, e.gained, reduce);
     const word = e.praise ?? (e.cleared.length && e.placedCells > 0 ? MINI_PRAISE[miniIdx++ % MINI_PRAISE.length]! : null);
     if (word) this.praise(gridBox, word, e.perfect, reduce, !e.praise);
@@ -232,6 +246,88 @@ export class BoardFxRunner {
         { transform: "translate(-50%, -180%) scale(1)", opacity: 0 },
       ],
       { duration: reduce ? 500 : 900, easing: "ease-out" },
+    ).finished.then(() => el.remove(), () => el.remove());
+  }
+
+  private lastTrail = 0;
+
+  /** A faint sparkle trail behind a dragged piece (throttled). */
+  trail(x: number, y: number, color: keyof typeof BLOCK_HEX): void {
+    const now = performance.now();
+    if (now - this.lastTrail < 45 || reducedMotion()) return;
+    this.lastTrail = now;
+    this.fx.burst("sparkle", x + (Math.random() - 0.5) * 24, y + (Math.random() - 0.5) * 24, { count: 1, color: ["#ffffff", BLOCK_HEX[color]], speed: 30, size: 3 });
+  }
+
+  /** A glowing beam along an arrow block's row or column. */
+  private beam(grid: DOMRect, kind: "row" | "col", i: number, cell: number, reduce: boolean): void {
+    const bar = document.createElement("div");
+    bar.className = `pj-beam is-${kind}`;
+    if (kind === "row") {
+      bar.style.left = `${grid.left}px`;
+      bar.style.top = `${grid.top + i * cell + cell * 0.3}px`;
+      bar.style.width = `${grid.width}px`;
+      bar.style.height = `${cell * 0.4}px`;
+    } else {
+      bar.style.left = `${grid.left + i * cell + cell * 0.3}px`;
+      bar.style.top = `${grid.top}px`;
+      bar.style.width = `${cell * 0.4}px`;
+      bar.style.height = `${grid.height}px`;
+    }
+    this.layer.appendChild(bar);
+    const axis = kind === "row" ? "scaleX" : "scaleY";
+    bar.animate(
+      [
+        { transform: `${axis}(0)`, opacity: 1 },
+        { transform: `${axis}(1)`, opacity: 1, offset: 0.35 },
+        { transform: `${axis}(1) scale(1.4)`, opacity: 0 },
+      ],
+      { duration: reduce ? 200 : 520, easing: "cubic-bezier(0.2, 0.8, 0.3, 1)" },
+    ).finished.then(() => bar.remove(), () => bar.remove());
+  }
+
+  /** A soft glow ring under the blocks that just landed. */
+  private landRing(cells: Array<{ r: number; c: number }>, boxOf: (r: number, c: number) => { left: number; top: number; width: number; height: number }): void {
+    if (!cells.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const { r, c } of cells) {
+      const b = boxOf(r, c);
+      x0 = Math.min(x0, b.left); y0 = Math.min(y0, b.top);
+      x1 = Math.max(x1, b.left + b.width); y1 = Math.max(y1, b.top + b.height);
+    }
+    const el = document.createElement("div");
+    el.className = "pj-land-ring";
+    el.style.left = `${x0}px`;
+    el.style.top = `${y0}px`;
+    el.style.width = `${x1 - x0}px`;
+    el.style.height = `${y1 - y0}px`;
+    this.layer.appendChild(el);
+    el.animate(
+      [
+        { transform: "scale(0.92)", opacity: 0.9 },
+        { transform: "scale(1.18)", opacity: 0 },
+      ],
+      { duration: 420, easing: "ease-out" },
+    ).finished.then(() => el.remove(), () => el.remove());
+  }
+
+  /** A plain-words explanation under the board. */
+  private caption(grid: DOMRect, text: string, reduce: boolean): void {
+    this.layer.querySelectorAll(".pj-fx-caption").forEach((n) => n.remove());
+    const el = document.createElement("div");
+    el.className = "pj-fx-caption";
+    el.textContent = text;
+    el.style.left = `${grid.left + grid.width / 2}px`;
+    el.style.top = `${grid.top + grid.height * 0.86}px`;
+    this.layer.appendChild(el);
+    el.animate(
+      [
+        { transform: "translate(-50%, -30%)", opacity: 0 },
+        { transform: "translate(-50%, -50%)", opacity: 1, offset: 0.08 },
+        { transform: "translate(-50%, -50%)", opacity: 1, offset: 0.88 },
+        { transform: "translate(-50%, -50%)", opacity: 0 },
+      ],
+      { duration: reduce ? 2600 : 3200, delay: 250, easing: "ease-out", fill: "both" },
     ).finished.then(() => el.remove(), () => el.remove());
   }
 
