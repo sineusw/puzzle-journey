@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
 import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
 import { ADVENTURE, goalLabel, xpForLevel } from "@/lib/game/content";
@@ -126,14 +126,14 @@ function Hud() {
       </div>
       <div className="pj-chip">
         <GameIcon name="coin" className="pj-chip-ico" />
-        <span className="tabular-nums">{formatInt(coins)}</span>
+        <Counter value={coins} />
         <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get coins">
           +
         </button>
       </div>
       <div className="pj-chip">
         <GameIcon name="gem" className="pj-chip-ico" />
-        <span className="tabular-nums">{formatInt(gems)}</span>
+        <Counter value={gems} />
         <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get gems">
           +
         </button>
@@ -162,6 +162,29 @@ function Hud() {
         <GameIcon name="settings" className="pj-gear" />
       </button>
     </header>
+  );
+}
+
+/** A number that bumps and floats "+N" whenever it goes up. */
+function Counter({ value }: { value: number }) {
+  const prev = useRef(value);
+  const [gain, setGain] = useState<{ n: number; k: number } | null>(null);
+  useEffect(() => {
+    const diff = value - prev.current;
+    prev.current = value;
+    if (diff > 0) setGain({ n: diff, k: Date.now() });
+  }, [value]);
+  return (
+    <span className="pj-counter">
+      <span key={gain?.k ?? 0} className={`tabular-nums${gain ? " is-bump" : ""}`}>
+        {formatInt(value)}
+      </span>
+      {gain ? (
+        <span key={`g${gain.k}`} className="pj-counter-gain" aria-hidden="true">
+          +{formatInt(gain.n)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -196,6 +219,7 @@ function TitleBar() {
           </div>
           <div className="pj-objective-track" aria-hidden="true">
             <span style={{ width: `${goalPct}%` }} />
+            {goalProgress > 0 ? <i key={`g${goalProgress}`} className="pj-objective-shine" style={{ width: `${goalPct}%` }} /> : null}
           </div>
         </div>
       ) : (

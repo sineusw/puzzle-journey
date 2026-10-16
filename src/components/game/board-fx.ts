@@ -207,6 +207,7 @@ export class BoardFxRunner {
         }
       }
     }
+    if (e.power && !reduce) this.powerUp(e.power, gridBox, boxOf, e.origin, cell);
     if (e.star) {
       // Star blocks pay out the moment they land.
       const b = boxOf(e.star.r, e.star.c);
@@ -264,6 +265,104 @@ export class BoardFxRunner {
         { duration: 320, easing: "ease-out" },
       );
     }
+  }
+
+  /** Big, distinct effects for each power-up. */
+  private powerUp(
+    power: NonNullable<BoardFx["power"]>,
+    grid: DOMRect,
+    boxOf: (r: number, c: number) => { left: number; top: number; width: number; height: number },
+    at: { r: number; c: number },
+    cell: number,
+  ): void {
+    const b = boxOf(Math.round(at.r), Math.round(at.c));
+    const x = b.left + b.width / 2;
+    const y = b.top + b.height / 2;
+    if (power === "hammer") {
+      // The hammer swings down onto the cell: impact ring, stone chips, sparks.
+      const icon = this.icon("/icons/hammer.png", x + cell * 0.6, y - cell * 0.9, cell * 1.6);
+      icon.animate(
+        [
+          { transform: "translate(-50%, -50%) rotate(-70deg) scale(0.6)", opacity: 0 },
+          { transform: "translate(-50%, -50%) rotate(-80deg) scale(1.1)", opacity: 1, offset: 0.35 },
+          { transform: "translate(-80%, -10%) rotate(25deg) scale(1)", opacity: 1, offset: 0.55 },
+          { transform: "translate(-80%, -10%) rotate(15deg) scale(1)", opacity: 0 },
+        ],
+        { duration: 620, easing: "ease-in" },
+      ).finished.then(() => icon.remove(), () => icon.remove());
+      window.setTimeout(() => {
+        this.fx.ring(x, y, { color: "#ffffff", from: cell * 0.2, to: cell * 2.2, ms: 420, width: 9 });
+        this.fx.burst("debris", x, y, { count: 16, color: ["#cfc7b8", "#8b909c", "#ffffff"], speed: 380, size: cell * 0.16 });
+        this.fx.burst("sparkle", x, y, { count: 18, color: ["#fff3c4", "#ffffff"], speed: 300, size: 5 });
+        this.flash(grid, 0.4, "#ffffff");
+      }, 330);
+    } else if (power === "bomb") {
+      const icon = this.icon("/icons/bomb.png", x, y, cell * 1.4);
+      icon.animate(
+        [
+          { transform: "translate(-50%, -120%) scale(0.4)", opacity: 0 },
+          { transform: "translate(-50%, -50%) scale(1.1)", opacity: 1, offset: 0.5 },
+          { transform: "translate(-50%, -50%) scale(1.5)", opacity: 0 },
+        ],
+        { duration: 420, easing: "ease-in" },
+      ).finished.then(() => icon.remove(), () => icon.remove());
+      window.setTimeout(() => {
+        this.fx.ring(x, y, { color: "#ffb04a", from: cell * 0.3, to: cell * 3.6, ms: 560, width: 12 });
+        this.fx.ring(x, y, { color: "#ff5d3c", from: cell * 0.2, to: cell * 2.4, ms: 480, width: 8 });
+        this.fx.burst("sparkle", x, y, { count: 34, color: ["#fff3c4", "#ffd27a", "#ff7a3c"], speed: 440, size: 6 });
+        this.fx.burst("debris", x, y, { count: 16, color: ["#3a2448", "#ff9a3c"], speed: 400, size: cell * 0.16 });
+        this.flash(grid, 0.8, "#ffb04a");
+        this.screenGlow("#ff8a3a");
+      }, 300);
+    } else if (power === "refresh") {
+      // A whirl over the tray as the new pieces arrive.
+      const tray = document.querySelector<HTMLElement>('[data-testid="tray"]')?.getBoundingClientRect();
+      if (!tray) return;
+      const cx = tray.left + tray.width / 2;
+      const cy = tray.top + tray.height / 2;
+      for (let i = 0; i < 3; i++) window.setTimeout(() => this.fx.ring(cx, cy, { color: ["#6fe05a", "#5fd2ff", "#ffc93c"][i]!, from: 10, to: tray.width * 0.55, ms: 520, width: 6 }), i * 110);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        window.setTimeout(() => this.fx.burst("sparkle", cx + Math.cos(a) * tray.width * 0.32, cy + Math.sin(a) * tray.height * 0.35, { count: 3, color: ["#ffffff", "#6fe05a"], speed: 120, size: 5 }), i * 30);
+      }
+    } else if (power === "freeze") {
+      // Frost sweeps across the board and snowflakes drift down.
+      const el = document.createElement("div");
+      el.className = "pj-frost";
+      el.style.left = `${grid.left}px`;
+      el.style.top = `${grid.top}px`;
+      el.style.width = `${grid.width}px`;
+      el.style.height = `${grid.height}px`;
+      this.layer.appendChild(el);
+      el.animate([{ opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0 0 0)", offset: 0.35 }, { opacity: 0, clipPath: "inset(0 0 0 0)" }], {
+        duration: 1300,
+        easing: "ease-out",
+      }).finished.then(() => el.remove(), () => el.remove());
+      for (let i = 0; i < 16; i++) {
+        window.setTimeout(() => this.fx.burst("feather", grid.left + Math.random() * grid.width, grid.top + Math.random() * grid.height * 0.4, { count: 1, color: "#e6f8ff", speed: 40, size: 5 }), i * 50);
+      }
+      this.screenGlow("#9af7ff");
+    }
+    audio.feelMilestone();
+  }
+
+  private icon(src: string, x: number, y: number, size: number): HTMLImageElement {
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "";
+    img.className = "pj-fx-icon";
+    img.style.left = `${x}px`;
+    img.style.top = `${y}px`;
+    img.style.width = `${size}px`;
+    this.layer.appendChild(img);
+    return img;
+  }
+
+  /** Sparkles where a piece is picked up from the tray. */
+  pickup(x: number, y: number, color: keyof typeof BLOCK_HEX): void {
+    if (reducedMotion()) return;
+    this.fx.burst("sparkle", x, y, { count: 10, color: ["#ffffff", BLOCK_HEX[color]], speed: 160, size: 5 });
+    this.fx.ring(x, y, { color: BLOCK_HEX[color], from: 6, to: 46, ms: 320, width: 4 });
   }
 
   /** The most common color among cleared blocks, for the shockwave tint. */

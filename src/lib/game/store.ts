@@ -23,6 +23,7 @@ import {
   CONTINUE_COST,
   QUESTS,
   adventureFeatures,
+  goalLabel,
   xpForLevel,
   type PowerId,
   type SkinId,
@@ -103,6 +104,8 @@ export type BoardFx = {
   fired?: Array<{ r: number; c: number; sp: "bomb" | "rocketH" | "rocketV" | "blast" }>;
   /** A one-line explanation, shown the first time each special fires in a run. */
   caption?: string | null;
+  /** A power-up just used (its own big effect). */
+  power?: "hammer" | "bomb" | "refresh" | "freeze" | null;
   /** A star block that paid out on drop (sparkle + "+50 ★"). */
   star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
@@ -145,6 +148,8 @@ type GameStore = {
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
   introUnlock: UnlockId | null;
+  /** Banner shown when a run starts ("Island 5 · Lanterns"). */
+  runBanner: { id: number; title: string; sub: string } | null;
   /** The hands-on tutorial in progress (the real game waits in `saved`). */
   tutorial: { lesson: LessonId; index: number; phase: "intro" | "play" | "praise" | "done"; saved: Match } | null;
   /** Open a lesson; `welcome` shows the Start / Skip screen first. */
@@ -280,6 +285,7 @@ export const useGame = create<GameStore>((set, get) => ({
   levelUpTo: null,
   introUnlock: null,
   tutorial: null,
+  runBanner: null,
   visitorBusy: false,
   visitorEvent: null,
   visitorApplied: false,
@@ -545,7 +551,7 @@ export const useGame = create<GameStore>((set, get) => ({
         1,
       );
       audio.sfxUi();
-      set({ match: next, profile: nextProfile, targeting: null, selected: next.tray.findIndex((p) => p) });
+      set({ match: next, profile: nextProfile, targeting: null, selected: next.tray.findIndex((p) => p), fx: powerFx("refresh") });
       persistSoon(get);
       return;
     }
@@ -562,6 +568,7 @@ export const useGame = create<GameStore>((set, get) => ({
         profile: nextProfile,
         targeting: null,
         toast: "Combo shield ready for two drops.",
+        fx: powerFx("freeze"),
       });
       persistSoon(get);
       window.setTimeout(() => set({ toast: null }), 1600);
@@ -606,12 +613,13 @@ export const useGame = create<GameStore>((set, get) => ({
         combo: 0,
         praise: null,
         perfect: false,
-        shake: targeting === "bomb" && profile.settings.shake,
+        shake: profile.settings.shake,
         placedCells: 0,
         special: null,
         milestone: null,
         newBest: false,
         comboWarning: false,
+        power: targeting,
       },
     });
     persistSoon(get);
@@ -926,6 +934,29 @@ function finishRun(rs: RunStats, match: Match, profile: Profile): { profile: Pro
   return { profile: { ...profile, card, levelStreak }, result: { iq, pct, versus, awards, run } };
 }
 
+/** An effects event for a power-up that doesn't touch board cells. */
+function powerFx(power: "refresh" | "freeze"): BoardFx {
+  return {
+    id: fxSeq++,
+    landed: [],
+    cleared: [],
+    rows: [],
+    cols: [],
+    origin: { r: 3.5, c: 3.5 },
+    gained: 0,
+    combo: 0,
+    praise: null,
+    perfect: false,
+    shake: false,
+    placedCells: 0,
+    special: null,
+    milestone: null,
+    newBest: false,
+    comboWarning: false,
+    power,
+  };
+}
+
 /** One move in the tutorial: it must go on the glowing spot. */
 function tutorialPlace(get: () => GameStore, set: (partial: Partial<GameStore>) => void, trayIndex: number, row: number, col: number): boolean {
   const { tutorial, match, profile } = get();
@@ -1045,8 +1076,21 @@ function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => vo
     run: runFlagsFor(match, profile, false),
     runStats: emptyRun(match.mode, match.levelId),
     profile: { ...profile, games: profile.games + 1, seenHowTo: true },
+    runBanner: bannerFor(match),
   });
   persistSoon(get);
+}
+
+let bannerSeq = 1;
+function bannerFor(match: Match): GameStore["runBanner"] {
+  const sub = match.goal ? goalLabel(match.goal) : "Chase your best score";
+  if (match.mode === "adventure" && match.levelId) {
+    const lvl = ADVENTURE.find((l) => l.id === match.levelId);
+    return { id: bannerSeq++, title: `Island ${match.levelId}${lvl ? ` · ${lvl.name}` : ""}`, sub };
+  }
+  if (match.mode === "classic" && match.levelId) return { id: bannerSeq++, title: `Classic · Level ${match.levelId}`, sub };
+  if (match.mode === "sandbox") return { id: bannerSeq++, title: "Sandbox", sub };
+  return { id: bannerSeq++, title: "Challenge", sub };
 }
 
 function startVisit(

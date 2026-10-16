@@ -64,6 +64,7 @@ export function PlayArea() {
     const step = LESSONS[tutorial.lesson][tutorial.index];
     return step ? new Set(targetCells(step).map(({ r, c }) => `${r}-${c}`)) : null;
   }, [tutorial]);
+  const shield = useGame((s) => s.match.shield);
   const comboHeat = useGame((s) => (s.match.combo >= 5 ? "hot" : s.match.combo >= 2 ? "warm" : undefined));
   const over = useGame((s) => s.match.over);
   const selected = useGame((s) => s.selected);
@@ -275,6 +276,7 @@ export function PlayArea() {
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     audio.feelPickup();
+    runnerRef.current?.pickup(e.clientX, e.clientY, piece.color);
     previewLines.current = 0;
     dragRef.current = {
       index,
@@ -355,7 +357,7 @@ export function PlayArea() {
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
       <div ref={rowRef} className="pj-board-row">
         <SideRails side="l" />
-        <div ref={frameRef} className="pj-frame" data-combo={comboHeat}>
+        <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
           <ComboMeter />
           <BoardGrid
             gridRef={gridRef}
@@ -400,6 +402,7 @@ export function PlayArea() {
       <div ref={fxHostRef} className="pj-boardfx-host" aria-hidden="true" />
       <VisitorLayer grid={gridRef.current} />
       <TutorialHand dragging={dragIndex !== null} />
+      <RunBanner />
     </div>
   );
 }
@@ -608,3 +611,27 @@ const TraySlot = memo(function TraySlot({
     </button>
   );
 });
+
+/** "Island 5 · Lanterns" ribbon that sweeps in when a run starts. */
+export function RunBanner() {
+  const banner = useGame((s) => s.runBanner);
+  const panel = useGame((s) => s.panel);
+  const [shown, setShown] = useState<number | null>(null);
+  const done = useRef(0);
+  useEffect(() => {
+    // Once per run, as soon as no menu or card is covering the board.
+    if (!banner || panel || done.current === banner.id) return;
+    done.current = banner.id;
+    setShown(banner.id);
+    audio.feelMilestone();
+    const t = window.setTimeout(() => setShown(null), 2200);
+    return () => window.clearTimeout(t);
+  }, [banner, panel]);
+  if (!banner || shown !== banner.id) return null;
+  return (
+    <div className="pj-run-banner" key={banner.id} aria-live="polite">
+      <strong>{banner.title}</strong>
+      <span>{banner.sub}</span>
+    </div>
+  );
+}

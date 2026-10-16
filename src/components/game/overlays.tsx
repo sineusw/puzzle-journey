@@ -162,7 +162,7 @@ export function TabScreens() {
   const tab = useGame((s) => s.tab);
   if (tab === "home") return null;
   return (
-    <div className="pj-screen">
+    <div className="pj-screen pj-tabscreen-in" key={tab}>
       {tab === "adventure" ? <AdventureScreen /> : null}
       {tab === "challenges" ? <ChallengeScreen /> : null}
       {tab === "skins" ? <SkinsScreen /> : null}
