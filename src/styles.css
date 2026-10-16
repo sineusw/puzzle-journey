@@ -3284,3 +3284,17 @@ svg.pj-sp { display: block; max-width: none; }
 @keyframes pj-cheer-body { from { scale: 1.06 0.94; rotate: -4deg; } to { scale: 0.96 1.05; rotate: 4deg; } }
 @media (prefers-reduced-motion: reduce) { .pj-cheer, .pj-cheer img { animation-duration: 0.01ms; } }
 .pj-ch-stamp { right: auto; left: -6px; top: -8px; width: 26px; height: 26px; font-size: 0.85rem; }
+/* Character parts stack on one canvas; each turns around its own joint. */
+.pj-actor-part { position: absolute; left: 0; top: 0; width: 100%; height: 100%; max-width: none; pointer-events: none; user-select: none; will-change: transform; }
+.pj-ch-claim {
+  flex: none; display: grid; justify-items: center; gap: 1px; padding: 8px 12px; border-radius: 14px;
+  font-family: var(--font-display); font-size: 1rem; color: #3b2300;
+  background: linear-gradient(#ffe38a, #e0a12a); box-shadow: 0 4px 0 #9a5a08, 0 0 18px rgb(255 200 80 / 0.6);
+  animation: pj-claim-pulse 0.9s ease-in-out infinite alternate;
+}
+.pj-ch-claim span { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-sans); font-size: 0.72rem; font-weight: 900; }
+.pj-ch-claim:active { translate: 0 2px; box-shadow: 0 2px 0 #9a5a08; }
+@keyframes pj-claim-pulse { to { scale: 1.07; box-shadow: 0 4px 0 #9a5a08, 0 0 28px rgb(255 210 90 / 0.9); } }
+.pj-fly-coin { position: fixed; z-index: 200; width: 26px; height: 26px; pointer-events: none; filter: drop-shadow(0 3px 3px rgb(0 0 0 / 0.4)); }
+.pj-ch-card:has(.pj-ch-claim) { box-shadow: inset 0 0 0 2px rgb(255 210 90 / 0.8), 0 0 22px rgb(255 200 80 / 0.35); }
+@media (prefers-reduced-motion: reduce) { .pj-ch-claim { animation: none; } }

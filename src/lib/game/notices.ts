@@ -12,6 +12,8 @@ export type Notice = {
   title: string;
   sub?: string;
   tone?: "win" | "friend" | "info";
+  /** Tapping the notice opens this tab. */
+  action?: "challenges";
 };
 
 type NoticeState = { queue: Notice[] };

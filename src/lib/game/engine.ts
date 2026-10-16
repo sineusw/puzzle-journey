@@ -123,6 +123,8 @@ export type ClearInfo = {
   blasts: number;
   /** Specials that went off, in order, for captions and effects. */
   fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
+  /** A star block's color sweep: which color popped and how many blocks. */
+  swept?: { color: ColorId; count: number };
 };
 
 export type PlaceResult = {
@@ -861,7 +863,37 @@ export function previewClear(
 ): ClearInfo | null {
   if (!canPlace(board, piece.cells, row, col)) return null;
   const next = cloneBoard(board);
-  return settlePiece(next, piece, row, col);
+  return settleWithStar(next, piece, row, col);
+}
+
+/**
+ * A star block is a color bomb: drop it and every block of its color on the
+ * board pops (the piece itself included).
+ */
+export function colorSweep(board: Cell[][], color: ColorId): ClearInfo | null {
+  const cells: ClearInfo["cells"] = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cell = board[r]![c]!;
+      if ((cell.t === "b" || cell.t === "s") && cell.c === color) {
+        cells.push({ r, c, cell: { ...cell } });
+        peelCell(board, r, c);
+      }
+    }
+  }
+  if (!cells.length) return null;
+  return { rows: [], cols: [], cells, lines: 0, intersections: 0, stars: 0, golds: 0, waves: 1, bombs: 0, rockets: 0, blasts: 0, fired: [], swept: { color, count: cells.length } };
+}
+
+/** Put a piece down, then (for a star block) sweep its color. */
+function settleWithStar(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  const star = piece.starAt !== null;
+  const clear = settlePiece(board, star ? { ...piece, starAt: null, gold: false } : piece, row, col);
+  if (!star) return clear;
+  const sweep = colorSweep(board, piece.color);
+  const merged = mergeClears(clear, sweep);
+  if (merged && sweep?.swept) merged.swept = sweep.swept;
+  return merged;
 }
 
 function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): void {
@@ -890,7 +922,7 @@ function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): vo
  */
 function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number, perfect: boolean): number {
   let score = piece.cells.length * 10;
-  if (clear && (clear.lines > 0 || clear.bombs || clear.rockets || clear.blasts)) {
+  if (clear && (clear.lines > 0 || clear.bombs || clear.rockets || clear.blasts || clear.swept)) {
     const n = clear.lines;
     const lineScore = (100 * n * (n + 1)) / 2;
     score += lineScore * combo;
@@ -899,6 +931,7 @@ function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number, perfect:
     score += clear.bombs * 80 * combo;
     score += clear.rockets * 70 * combo;
     score += clear.blasts * 240 * combo;
+    score += (clear.swept?.count ?? 0) * 15 * combo;
     if (perfect) score += PERFECT_BONUS * combo;
   }
   return score;
@@ -1121,8 +1154,7 @@ export function placePiece(
   const next = cloneMatch(match);
   // A star block pays its bonus the moment it's dropped, then is a plain block.
   const starBonus = piece.starAt !== null ? (piece.gold ? STAR_BONUS_GOLD : STAR_BONUS) : 0;
-  const placed = starBonus ? { ...piece, starAt: null, gold: false } : piece;
-  const clear = settlePiece(next.board, placed, row, col);
+  const clear = settleWithStar(next.board, piece, row, col);
   next.tray[trayIndex] = null;
   next.moves += 1;
 

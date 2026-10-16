@@ -14,6 +14,7 @@ import {
   PLAIN_FEATURES,
   COMBO_WINDOW,
   type Cell,
+  type ColorId,
   type Match,
 } from "./engine";
 import {
@@ -43,7 +44,7 @@ import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
 import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
-import { applyChallengeEvent, type ChallengeEvent } from "./challenges.ts";
+import { ALL_CHALLENGES, applyChallengeEvent, type ChallengeEvent } from "./challenges.ts";
 import { notify } from "./notices.ts";
 import { cheer } from "./voice";
 import {
@@ -109,6 +110,8 @@ export type BoardFx = {
   caption?: string | null;
   /** A power-up just used (its own big effect). */
   power?: "hammer" | "bomb" | "refresh" | "freeze" | null;
+  /** A color pop (star block or Pip's paint): which color and how many. */
+  swept?: { color: ColorId; count: number } | null;
   /** A star block that paid out on drop (sparkle + "+50 ★"). */
   star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
@@ -151,6 +154,8 @@ type GameStore = {
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
   introUnlock: UnlockId | null;
+  /** Collect a finished challenge's coins and gems. */
+  claimChallenge: (id: string) => void;
   /** Banner shown when a run starts ("Island 5 · Lanterns"). */
   runBanner: { id: number; title: string; sub: string } | null;
   /** The hands-on tutorial in progress (the real game waits in `saved`). */
@@ -254,12 +259,8 @@ function trackChallenges(profile: Profile, ev: ChallengeEvent): Profile {
   const { state, completed } = applyChallengeEvent(profile.challenges, ev);
   let p: Profile = { ...profile, challenges: state };
   if (!completed.length) return p;
-  let coins = 0;
-  let gems = 0;
   for (const c of completed) {
-    coins += c.reward.coins;
-    gems += c.reward.gems;
-    notify({ icon: c.icon, title: `${c.title} complete!`, sub: `+${c.reward.coins} coins · +${c.reward.gems} gems`, tone: "win" });
+    notify({ icon: c.icon, title: `${c.title} complete!`, sub: `Tap to claim +${c.reward.coins} coins`, tone: "win", action: "challenges" });
   }
   audio.feelMilestone();
   audio.feelCoins(3);
@@ -267,7 +268,7 @@ function trackChallenges(profile: Profile, ev: ChallengeEvent): Profile {
   const w = state.done.filter((id) => id.startsWith("w-")).length;
   const recent = [...(p.card.recent ?? []), ...completed.map((c) => ({ t: c.title, icon: c.icon, at: Date.now() }))].slice(-6);
   const card = { ...p.card, ch: { day: state.day, n, week: state.week, w }, recent, updatedAt: Date.now() };
-  p = { ...p, coins: p.coins + coins, gems: p.gems + gems, card };
+  p = { ...p, card };
   void postCard(card);
   return p;
 }
@@ -457,7 +458,7 @@ export const useGame = create<GameStore>((set, get) => ({
         lines,
         score_run: result.match.score,
         combo: result.match.combo,
-        specials: result.clear?.fired.length ?? 0,
+        specials: (result.clear?.fired.length ?? 0) + (result.clear?.swept ? 1 : 0),
         perfects: result.perfect ? 1 : 0,
         multi: lines >= 2 ? 1 : 0,
         pieces: 1,
@@ -566,6 +567,7 @@ export const useGame = create<GameStore>((set, get) => ({
       comboWarning: !clear && m.combo > 0 && m.sinceClear === COMBO_WINDOW - 1,
       fired: clear?.fired ?? [],
       caption,
+      swept: clear?.swept ?? null,
       star: result.star ?? null,
     };
     set({
@@ -855,6 +857,24 @@ export const useGame = create<GameStore>((set, get) => ({
     persistSoon(get);
   },
 
+  claimChallenge: (id) => {
+    const { profile } = get();
+    const st = profile.challenges;
+    if (!st.done.includes(id) || (st.claimed ?? []).includes(id)) return;
+    const def = ALL_CHALLENGES.find((c) => c.id === id);
+    if (!def) return;
+    audio.feelCoins(6);
+    audio.feelMilestone();
+    set({
+      profile: {
+        ...profile,
+        coins: profile.coins + def.reward.coins,
+        gems: profile.gems + def.reward.gems,
+        challenges: { ...st, claimed: [...(st.claimed ?? []), id] },
+      },
+    });
+    persistSoon(get);
+  },
   dismissTip: (key) => {
     const { profile } = get();
     if (profile.seenSpecialTips.includes(key)) return;
@@ -927,6 +947,8 @@ export const useGame = create<GameStore>((set, get) => ({
             milestone: null,
             newBest: false,
             comboWarning: false,
+            fired: clear.fired,
+            swept: clear.swept ?? null,
           }
         : get().fx,
     });

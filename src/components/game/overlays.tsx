@@ -49,9 +49,10 @@ export function SideRails({ side }: { side: "l" | "r" }) {
   const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
   const setTab = useGame((s) => s.setTab);
   // Red dot while today's challenges aren't all done.
+  // Red dot while there's a reward to claim or today's set isn't done.
   const challengesLeft = useGame((s) => {
     const st = rollover(s.profile.challenges);
-    return dailySet(st.day).some((c) => !st.done.includes(c.id));
+    return st.done.some((id) => !(st.claimed ?? []).includes(id)) || dailySet(st.day).some((c) => !st.done.includes(c.id));
   });
 
   if (side === "l") {

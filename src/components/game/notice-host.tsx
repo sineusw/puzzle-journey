@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { dismissNotice, NOTICE_MS, useNotices } from "@/lib/game/notices";
+import { useGame } from "@/lib/game/store";
 
 /**
  * Shows the notice queue one at a time near the top of the screen, over
@@ -8,6 +9,7 @@ import { dismissNotice, NOTICE_MS, useNotices } from "@/lib/game/notices";
  */
 export function NoticeHost() {
   const current = useNotices((s) => s.queue[0]);
+  const setTab = useGame((s) => s.setTab);
   useEffect(() => {
     if (!current) return;
     const t = window.setTimeout(() => dismissNotice(current.id), NOTICE_MS);
@@ -20,7 +22,10 @@ export function NoticeHost() {
       key={current.id}
       className={`pj-notice is-${current.tone ?? "info"}`}
       style={{ ["--ms" as string]: `${NOTICE_MS}ms` }}
-      onClick={() => dismissNotice(current.id)}
+      onClick={() => {
+        dismissNotice(current.id);
+        if (current.action === "challenges") setTab("challenges");
+      }}
       role="status"
       aria-live="polite"
       data-testid="notice"

@@ -546,7 +546,7 @@ const BoardCell = memo(
 
 const TIP_TEXT: Record<string, { title: string; body: string }> = {
   ...Object.fromEntries(Object.entries(SPECIAL_WORDS).map(([k, w]) => [k, { title: w.name, body: w.does }])),
-  star: { title: "Star block", body: "Drop it anywhere and get bonus points right away. No full row needed!" },
+  star: { title: "Star block = color bomb!", body: "Drop it anywhere and every block of its color on the board pops. No full row needed!" },
   stone: { title: "Stone block", body: "Stones are tough. Clear blocks right next to a stone two times and it breaks." },
 };
 

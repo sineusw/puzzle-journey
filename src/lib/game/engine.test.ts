@@ -295,14 +295,22 @@ describe("puzzle journey engine", () => {
     assert.ok(cell.t === "b" && !cell.sp);
   });
 
-  it("a star block pays its bonus as soon as it's dropped", () => {
+  it("a star block is a color bomb: every block of its color pops", () => {
     const board = emptyBoard();
+    board[0][0] = block("amber");
+    board[5][6] = block("amber");
+    board[2][2] = block("cyan");
     const star = piece([[0, 0], [0, 1]], "amber");
     star.starAt = 0;
     const result = placePiece(matchWith(board, [star, null, null]), 0, 3, 3);
-    assert.equal(result.gained, 20 + STAR_BONUS);
     assert.equal(result.star?.bonus, STAR_BONUS);
-    assert.equal(result.match.board[3][3].t, "b"); // now a plain block
+    assert.equal(result.clear?.swept?.color, "amber");
+    assert.equal(result.clear?.swept?.count, 4); // two on the board + the piece's two
+    assert.equal(result.match.board[0][0].t, "e");
+    assert.equal(result.match.board[5][6].t, "e");
+    assert.equal(result.match.board[3][3].t, "e");
+    assert.equal(result.match.board[2][2].t, "b"); // other colors stay
+    assert.ok(result.gained > STAR_BONUS);
   });
 
   it("a stone cracks when blocks next to it clear, no line through it needed", () => {

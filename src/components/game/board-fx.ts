@@ -26,6 +26,8 @@ const BLOCK_HEX: Record<ColorId | "stone", string> = {
   stone: "#cfc7b8",
 };
 
+const COLOR_WORD: Record<ColorId, string> = { cyan: "sky blue", azure: "blue", lime: "green", pink: "pink", amber: "gold", orange: "orange", violet: "purple" };
+
 /** Small praise for a single-line clear, so every match is acknowledged. */
 const MINI_PRAISE = ["Nice!", "Sweet!", "Neat!", "Good one!", "Clean!"];
 let miniIdx = 0;
@@ -208,6 +210,24 @@ export class BoardFxRunner {
       }
     }
     if (e.power && !reduce) this.powerUp(e.power, gridBox, boxOf, e.origin, cell);
+    if (e.swept) {
+      // Color pop: a rainbow ring and burst on every block of that color.
+      const hex = BLOCK_HEX[e.swept.color];
+      for (const item of e.cleared) {
+        if ((item.cell.t !== "b" && item.cell.t !== "s") || item.cell.c !== e.swept.color) continue;
+        const b = boxOf(item.r, item.c);
+        const x = b.left + b.width / 2;
+        const y = b.top + b.height / 2;
+        const d = Math.hypot(item.r - e.origin.r, item.c - e.origin.c) * 40;
+        window.setTimeout(() => {
+          this.fx.ring(x, y, { color: hex, from: 4, to: cell * 1.3, ms: 420, width: 5 });
+          if (!reduce) this.fx.burst("sparkle", x, y, { count: 8, color: ["#ffffff", hex, "#fff3a0"], speed: 220, size: 5 });
+        }, d);
+      }
+      if (!reduce) this.screenGlow(hex);
+      this.caption(gridBox, `★ COLOR POP! ${e.swept.count} ${COLOR_WORD[e.swept.color]} blocks popped!`, reduce);
+      audio.feelPerfect();
+    }
     if (e.star) {
       // Star blocks pay out the moment they land.
       const b = boxOf(e.star.r, e.star.c);

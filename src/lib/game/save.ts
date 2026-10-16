@@ -118,7 +118,8 @@ function migrate(raw: Profile): Profile {
     seenSpecialTips: raw.seenSpecialTips ?? [],
     seenShapesIntro: raw.seenShapesIntro ?? false,
     tutorialDone: raw.tutorialDone ?? false,
-    challenges: raw.challenges?.progress ? rollover(raw.challenges) : emptyChallenges(),
+    // Challenges finished before rewards became claimable were already paid.
+    challenges: raw.challenges?.progress ? rollover({ ...raw.challenges, claimed: raw.challenges.claimed ?? [...raw.challenges.done] }) : emptyChallenges(),
     card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start

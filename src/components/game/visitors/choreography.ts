@@ -15,6 +15,7 @@ import { VISITOR_META, type VisitorEvent, type VisitorId } from "@/lib/game/visi
 import * as audio from "@/lib/game/audio";
 import { cellTextureUrl, colorTextureUrl } from "../block";
 import { CHARACTER_ART } from "./characters";
+import { RIGS } from "./rig";
 import { Fx } from "./fx";
 
 export class Cancelled extends Error {}
@@ -81,8 +82,11 @@ class Actor {
   el: HTMLDivElement;
   body: HTMLDivElement;
   img: HTMLDivElement;
-  /** Horizontal bands of the character art that bend independently. */
-  private slices: HTMLDivElement[] = [];
+  /** The character's separately moving parts. */
+  private parts: Array<{ el: HTMLImageElement; name: string; kind: string }> = [];
+  private step = 0;
+  private gestureUntil = 0;
+  private gestureKind: "swing" | "cheer" = "swing";
   shadow: HTMLDivElement;
   prop: HTMLDivElement;
   bubble: HTMLDivElement;
@@ -121,31 +125,21 @@ class Actor {
     this.shadow.className = "pj-actor-shadow";
     this.body = document.createElement("div");
     this.body.className = "pj-actor-body";
-    // The art is cut into stacked bands: feet stay planted while the body,
-    // shoulders and head sway, lag behind movement and bounce on landings.
+    // The art is cut into real parts (legs, body, arms or wings, head),
+    // each turning around its own joint: arms swing, legs step, heads nod.
     this.img = document.createElement("div");
     this.img.className = "pj-actor-img pj-actor-rig";
-    const N = 8;
-    for (let i = 0; i < N; i++) {
-      const band = document.createElement("div");
-      band.className = "pj-actor-band";
-      band.style.top = `${(i / N) * 100}%`;
-      band.style.height = `calc(${100 / N}% + 1.5px)`;
-      band.style.backgroundImage = `url(${CHARACTER_ART[id]})`;
-      band.style.backgroundSize = `${this.w}px ${this.h}px`;
-      band.style.backgroundPosition = `0 ${-(i / N) * this.h}px`;
-      this.img.appendChild(band);
-      this.slices.push(band);
+    for (const part of RIGS[id]?.parts ?? []) {
+      const el = document.createElement("img");
+      el.src = part.src;
+      el.alt = "";
+      el.draggable = false;
+      el.className = `pj-actor-part is-${part.kind}`;
+      el.style.transformOrigin = `${part.pivot[0]}% ${part.pivot[1]}%`;
+      this.img.appendChild(el);
+      this.parts.push({ el, name: part.name, kind: part.kind });
     }
     this.body.appendChild(this.img);
-    // A soft highlight that sweeps across the character, masked to its
-    // silhouette, so the art reads as a rounded 3D figure, not a flat cut-out.
-    const shine = document.createElement("div");
-    shine.className = "pj-actor-shine";
-    const mask = `url(${CHARACTER_ART[id]})`;
-    shine.style.maskImage = mask;
-    shine.style.webkitMaskImage = mask;
-    this.body.appendChild(shine);
     this.prop = document.createElement("div");
     this.prop.className = "pj-actor-prop";
     this.bubble = document.createElement("div");
@@ -207,19 +201,46 @@ class Actor {
     this.shadow.style.opacity = String(0.55 * k);
   }
 
-  /** Bend the bands: an S-curve sway, trailing on moves, bounce on landings. */
+  /** Pose every part for this frame from what the character is doing. */
   private bend(t: number): void {
-    const n = this.slices.length;
-    const wiggle = performance.now() < this.wiggleUntil ? 1 : 0;
-    const dir = this.flip;
-    for (let i = 0; i < n; i++) {
-      const w = Math.pow((n - 1 - i) / (n - 1), 1.4); // 1 at the head, 0 at the feet
-      const sway = Math.sin(t * 2.6 - i * 0.55) * (this.still ? 2.2 : 1.2) * w;
-      const dance = wiggle ? Math.sin(t * 22 - i * 0.9) * 3.5 * w : 0;
-      const trail = Math.max(-14, Math.min(14, -this.vxs * 2.2)) * w * dir;
-      const bob = Math.max(-10, Math.min(10, this.vys * 1.4)) * w;
-      this.slices[i]!.style.transform = `translate3d(${(sway + dance + trail).toFixed(2)}px, ${bob.toFixed(2)}px, 0)`;
+    const now = performance.now();
+    const talking = now < this.wiggleUntil;
+    const gesturing = now < this.gestureUntil;
+    const air = this.lift > 2;
+    const moving = Math.abs(this.vxs) > 0.35 && !air;
+    // Walk cycle advances with distance covered.
+    this.step += Math.abs(this.vxs) * 0.16 + (moving ? 0.02 : 0);
+    const s = Math.sin(this.step);
+    const breathe = Math.sin(t * 2.2);
+    for (const p of this.parts) {
+      let a = 0;
+      const left = p.name.endsWith("L");
+      if (p.kind === "leg") {
+        if (air) a = left ? 14 : -14; // tuck
+        else if (moving) a = (left ? 1 : -1) * s * 22; // step
+        else a = (left ? 1 : -1) * breathe * 1.5;
+      } else if (p.kind === "arm") {
+        if (gesturing && this.gestureKind === "cheer") a = (left ? 1 : -1) * (-38 + Math.sin(t * 16) * 10);
+        else if (gesturing && !left) a = -55 + Math.sin(t * 18) * 30; // big swing (hammer, wand, compass)
+        else if (talking && !left) a = -24 + Math.sin(t * 14) * 22; // wave
+        else if (air) a = (left ? 1 : -1) * -32;
+        else if (moving) a = (left ? -1 : 1) * s * 20; // counter-swing
+        else a = (left ? 1 : -1) * breathe * 4;
+      } else if (p.kind === "wing") {
+        const speed = air || moving || gesturing ? 16 : talking ? 11 : 4;
+        const amp = air || gesturing ? 30 : moving ? 20 : talking ? 16 : 6;
+        a = (left ? 1 : -1) * (Math.sin(t * speed) * amp - (air ? 10 : 0));
+      } else if (p.kind === "head") {
+        a = Math.sin(t * 1.6) * 4 + (talking ? Math.sin(t * 10) * 6 : 0) - this.vxs * 1.2 * this.flip + (air ? -4 : 0);
+      }
+      p.el.style.transform = a ? `rotate(${a.toFixed(2)}deg)` : "";
     }
+  }
+
+  /** A quick body gesture: "swing" (one arm, for tools and spells) or "cheer" (both up). */
+  gesture(kind: "swing" | "cheer", ms = 600): void {
+    this.gestureKind = kind;
+    this.gestureUntil = performance.now() + ms;
   }
 
   pose(sx: number, sy: number, rot = this.rot): void {
@@ -239,8 +260,9 @@ class Actor {
   }
 
   say(text: string, ms = 1300): void {
-    // A happy wiggle every time they talk.
-    this.wiggleUntil = performance.now() + 650;
+    // Talking waves an arm; a celebration throws both arms up.
+    this.wiggleUntil = performance.now() + 900;
+    if (/ta-da|found|pretty|magic|time/i.test(text)) this.gesture("cheer", 900);
     window.clearTimeout(this.bubbleTimer);
     this.bubble.textContent = text;
     this.bubble.classList.add("is-on");
@@ -249,6 +271,7 @@ class Actor {
 
   /** Squash down, then spring back. */
   async squash(ctl: Ctl, amount = 0.2, ms = 140): Promise<void> {
+    this.gesture("swing", ms * 4);
     await tween(ctl, ms, (e) => this.pose(1 + amount * 0.6 * e, 1 - amount * e), easeOut);
     await tween(ctl, ms * 1.4, (e) => this.pose(lerp(1 + amount * 0.6, 1, e), lerp(1 - amount, 1, e)), easeOut);
   }

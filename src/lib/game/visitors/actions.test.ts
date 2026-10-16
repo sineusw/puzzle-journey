@@ -78,6 +78,18 @@ describe("island visitors", () => {
     assert.ok(trayFits(applied.match));
   });
 
+  it("pip's paint pops a same-color group of 3+", () => {
+    const match = matchBoard();
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) match.board[r]![c] = { t: "e" };
+    match.board[2]![2] = { t: "b", c: "pink" };
+    match.board[2]![3] = { t: "b", c: "pink" };
+    match.board[2]![4] = { t: "b", c: "lime" };
+    const action = planVisitor(match, "pip", "help", () => 0.5);
+    assert.ok(action && action.kind === "recolor");
+    const applied = applyVisitorAction(match, action);
+    assert.ok(applied?.clear?.swept && applied.clear.swept.count >= 3);
+  });
+
   it("pip recolors a plain block and skips bombs", () => {
     const match = matchBoard();
     const action = planVisitor(match, "pip", "help", () => 0.6);
@@ -89,8 +101,10 @@ describe("island visitors", () => {
     const applied = applyVisitorAction(match, action);
     assert.ok(applied);
     const after = applied.match.board[action.at[0]]![action.at[1]]!;
-    assert.ok(after.t === "b" || after.t === "s");
+    // Either the painted block shows its new color, or it popped with its
+    // same-color group.
     if (after.t === "b" || after.t === "s") assert.equal(after.c, action.to);
+    else assert.ok(applied.clear?.swept && applied.clear.swept.count >= 3);
     const bomb = applied.match.board[4][4]!;
     assert.equal(bomb.t === "b" ? bomb.sp : null, "bomb");
   });

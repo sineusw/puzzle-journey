@@ -102,10 +102,12 @@ export type ChallengeState = {
   progress: Record<string, number>;
   /** Completed challenge ids for the current day/week. */
   done: string[];
+  /** Completed challenges whose reward has been collected. */
+  claimed?: string[];
 };
 
 export function emptyChallenges(now = new Date()): ChallengeState {
-  return { day: dayKey(now), week: weekKey(now), progress: {}, done: [] };
+  return { day: dayKey(now), week: weekKey(now), progress: {}, done: [], claimed: [] };
 }
 
 /** Start fresh when the day or week rolls over (keeping the other period). */
@@ -119,6 +121,7 @@ export function rollover(state: ChallengeState, now = new Date()): ChallengeStat
     week,
     progress: Object.fromEntries(Object.entries(state.progress).filter(([id]) => keep(id))),
     done: state.done.filter(keep),
+    claimed: (state.claimed ?? []).filter(keep),
   };
 }
 

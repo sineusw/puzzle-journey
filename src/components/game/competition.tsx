@@ -67,7 +67,40 @@ const MEDAL = ["🥇", "🥈", "🥉"];
 
 /* -------------------------------------------------------------- challenges */
 
-function ChallengeCard({ c, value, done }: { c: ChallengeDef; value: number; done: boolean }) {
+/** Coins fly from the Claim button up to the coin counter. */
+function flyCoins(from: HTMLElement, n = 8): void {
+  const to = document.querySelector<HTMLElement>(".pj-hud .pj-chip-ico")?.getBoundingClientRect();
+  const a = from.getBoundingClientRect();
+  if (!to) return;
+  for (let i = 0; i < n; i++) {
+    const coin = document.createElement("img");
+    coin.src = "/icons/coin.png";
+    coin.alt = "";
+    coin.className = "pj-fly-coin";
+    coin.style.left = `${a.left + a.width / 2}px`;
+    coin.style.top = `${a.top + a.height / 2}px`;
+    document.body.appendChild(coin);
+    const dx = to.left + to.width / 2 - (a.left + a.width / 2);
+    const dy = to.top + to.height / 2 - (a.top + a.height / 2);
+    const spread = (Math.random() - 0.5) * 120;
+    coin
+      .animate(
+        [
+          { transform: "translate(-50%, -50%) scale(0.6)", opacity: 0 },
+          { transform: `translate(calc(-50% + ${spread}px), calc(-50% - 60px)) scale(1.1)`, opacity: 1, offset: 0.3 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.7)`, opacity: 1 },
+        ],
+        { duration: 700 + i * 60, easing: "cubic-bezier(.5,0,.3,1)", delay: i * 40, fill: "both" },
+      )
+      .finished.then(
+        () => coin.remove(),
+        () => coin.remove(),
+      );
+  }
+}
+
+function ChallengeCard({ c, value, done, claimed }: { c: ChallengeDef; value: number; done: boolean; claimed: boolean }) {
+  const claim = useGame((s) => s.claimChallenge);
   const pct = Math.min(100, Math.round((value / c.target) * 100));
   return (
     <div className={`pj-ch-card${done ? " is-done" : ""}${c.period === "week" ? " is-week" : ""}`} data-testid={`ch-${c.id}`}>
@@ -92,10 +125,26 @@ function ChallengeCard({ c, value, done }: { c: ChallengeDef; value: number; don
           </em>
         </div>
       </div>
-      {done ? (
-        <span className="pj-ch-stamp" aria-label="Done">
+      {done && claimed ? (
+        <span className="pj-ch-stamp" aria-label="Collected">
           ✓
         </span>
+      ) : null}
+      {done && !claimed ? (
+        <button
+          type="button"
+          className="pj-ch-claim"
+          data-testid={`claim-${c.id}`}
+          onClick={(e) => {
+            flyCoins(e.currentTarget);
+            claim(c.id);
+          }}
+        >
+          Claim
+          <span>
+            +{c.reward.coins} <GameIcon name="coin" className="pj-ch-ico" />
+          </span>
+        </button>
       ) : null}
     </div>
   );
@@ -139,7 +188,7 @@ export function ChallengeScreen() {
       </div>
       <div className="space-y-2">
         {daily.map((c) => (
-          <ChallengeCard key={c.id} c={c} value={state.progress[c.id] ?? 0} done={state.done.includes(c.id)} />
+          <ChallengeCard key={c.id} c={c} value={state.progress[c.id] ?? 0} done={state.done.includes(c.id)} claimed={(state.claimed ?? []).includes(c.id)} />
         ))}
       </div>
 
@@ -149,7 +198,7 @@ export function ChallengeScreen() {
       </div>
       <div className="space-y-2">
         {weekly.map((c) => (
-          <ChallengeCard key={c.id} c={c} value={state.progress[c.id] ?? 0} done={state.done.includes(c.id)} />
+          <ChallengeCard key={c.id} c={c} value={state.progress[c.id] ?? 0} done={state.done.includes(c.id)} claimed={(state.claimed ?? []).includes(c.id)} />
         ))}
       </div>
 
