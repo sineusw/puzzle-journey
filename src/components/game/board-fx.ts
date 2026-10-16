@@ -95,7 +95,13 @@ export class BoardFxRunner {
 
     if (e.placedCells > 0) {
       audio.feelPlace(e.placedCells);
-      if (!reduce) this.landRing(e.landed, boxOf);
+      if (!reduce) {
+        this.landRing(e.landed, boxOf);
+        for (const { r, c } of e.landed) {
+          const bx = boxOf(r, c);
+          this.fx.burst("dust", bx.left + bx.width / 2, bx.top + bx.height, { count: 1, color: "rgba(255,255,255,0.5)", speed: 60, size: bx.width * 0.2 });
+        }
+      }
     }
 
     // Clear: line flashes, then each block pops in a wave from the landing point.
@@ -133,11 +139,28 @@ export class BoardFxRunner {
         window.setTimeout(() => {
           const x = box.left + box.width / 2;
           const y = box.top + box.height / 2;
-          this.fx.burst("sparkle", x, y, { count: 2, color: ["#ffffff", color], speed: 140, size: 4 });
-          this.fx.burst("debris", x, y, { count: 2, color, speed: 220, size: box.width * 0.13 });
+          this.fx.burst("sparkle", x, y, { count: 4, color: ["#ffffff", color], speed: 200, size: 5 });
+          this.fx.burst("debris", x, y, { count: 3, color, speed: 300, size: box.width * 0.15 });
         }, delay + 110);
       }
       this.layer.appendChild(batch);
+    }
+
+    // Big moments: a flash over the board, a shockwave per cleared line,
+    // fireworks for multi-line clears, and a glow around the screen.
+    const lines = e.rows.length + e.cols.length;
+    if (e.cleared.length && !reduce) {
+      const tint = e.landed[0] ? this.colorAt(e.cleared) : "#ffffff";
+      this.flash(gridBox, lines >= 2 || e.special ? 0.75 : 0.45, e.special === "bomb" ? "#ffb04a" : e.special === "rocket" ? "#9af7ff" : "#ffffff");
+      for (const r of e.rows) this.fx.ring(gridBox.left + gridBox.width / 2, gridBox.top + (r + 0.5) * cell, { color: tint, from: cell * 0.4, to: gridBox.width * 0.7, ms: 650, width: 9 });
+      for (const c of e.cols) this.fx.ring(gridBox.left + (c + 0.5) * cell, gridBox.top + gridBox.height / 2, { color: tint, from: cell * 0.4, to: gridBox.width * 0.7, ms: 650, width: 9 });
+      if (lines >= 2 || e.perfect) {
+        const shots = Math.min(5, lines + (e.perfect ? 2 : 0));
+        for (let i = 0; i < shots; i++) {
+          window.setTimeout(() => this.firework(gridBox.left + gridBox.width * (0.15 + Math.random() * 0.7), gridBox.top + gridBox.height * (0.1 + Math.random() * 0.5)), 120 + i * 170);
+        }
+        this.screenGlow(lines >= 3 || e.perfect ? "#ffd257" : "#9af7ff");
+      }
     }
 
     if (e.cleared.length) {
@@ -149,12 +172,39 @@ export class BoardFxRunner {
     }
     // Special blocks: a bright beam along an arrow's line, a ring for a bomb.
     for (const f of e.fired ?? []) {
-      if (f.sp === "rocketV") this.beam(gridBox, "col", f.c, cell, reduce);
-      else if (f.sp === "rocketH") this.beam(gridBox, "row", f.r, cell, reduce);
-      else if (f.sp === "bomb") {
-        const b = boxOf(f.r, f.c);
-        this.fx.ring(b.left + b.width / 2, b.top + b.height / 2, { color: "#ffb04a", from: cell * 0.3, to: cell * 1.8, ms: 450, width: 5 });
-        this.fx.burst("sparkle", b.left + b.width / 2, b.top + b.height / 2, { count: 14, color: ["#ffd27a", "#ff7a3c"], speed: 260, size: 5 });
+      const b = boxOf(f.r, f.c);
+      const cx = b.left + b.width / 2;
+      const cy = b.top + b.height / 2;
+      if (f.sp === "rocketV" || f.sp === "rocketH") {
+        const vertical = f.sp === "rocketV";
+        this.beam(gridBox, vertical ? "col" : "row", vertical ? f.c : f.r, cell, reduce);
+        if (!reduce) {
+          // Sparks shoot both ways along the zap.
+          for (let i = 0; i < 8; i++) {
+            const t = (i + 0.5) / 8;
+            const x = vertical ? cx : gridBox.left + gridBox.width * t;
+            const y = vertical ? gridBox.top + gridBox.height * t : cy;
+            window.setTimeout(() => this.fx.burst("sparkle", x, y, { count: 5, color: ["#ffffff", "#9af7ff", "#4f8bff"], speed: 260, size: 5 }), Math.abs(t - (vertical ? (f.r + 0.5) / 8 : (f.c + 0.5) / 8)) * 260);
+          }
+          this.fx.ring(cx, cy, { color: "#9af7ff", from: cell * 0.3, to: cell * 2.4, ms: 500, width: 8 });
+        }
+      } else if (f.sp === "bomb") {
+        this.fx.ring(cx, cy, { color: "#ffb04a", from: cell * 0.3, to: cell * 3.4, ms: 560, width: 12 });
+        if (!reduce) {
+          window.setTimeout(() => this.fx.ring(cx, cy, { color: "#ff5d3c", from: cell * 0.2, to: cell * 2.4, ms: 480, width: 8 }), 90);
+          this.fx.burst("sparkle", cx, cy, { count: 30, color: ["#fff3c4", "#ffd27a", "#ff7a3c"], speed: 420, size: 6 });
+          this.fx.burst("debris", cx, cy, { count: 14, color: ["#3a2448", "#ff9a3c"], speed: 380, size: cell * 0.16 });
+          this.screenGlow("#ff8a3a");
+        }
+      } else if (f.sp === "blast") {
+        if (!reduce) {
+          ["#ff5f9e", "#ffc93c", "#6fe05a", "#5fd2ff", "#c26bff"].forEach((col, i) =>
+            window.setTimeout(() => this.fx.ring(cx, cy, { color: col, from: cell * 0.3, to: gridBox.width * 1.1, ms: 700, width: 10 }), i * 90),
+          );
+          for (let i = 0; i < 5; i++) window.setTimeout(() => this.firework(gridBox.left + gridBox.width * Math.random(), gridBox.top + gridBox.height * Math.random() * 0.7), 150 + i * 140);
+          this.flash(gridBox, 1, "#ffffff");
+          this.screenGlow("#ffd257");
+        }
       }
     }
     if (e.caption) this.caption(gridBox, e.caption, reduce);
@@ -169,6 +219,7 @@ export class BoardFxRunner {
     }
     if (e.combo >= 2) {
       this.comboBadge(gridBox, e.combo, reduce);
+      if (!reduce) this.screenGlow(e.combo >= 4 ? "#ff6a3c" : "#ffb04a");
       audio.feelCombo(e.combo);
       if (e.combo >= 3 && !(e.praise && (PRAISE_TIER[e.praise] ?? 1) >= 2)) cheer(`Combo ${e.combo}!`, { delayMs: 350 });
     }
@@ -190,7 +241,7 @@ export class BoardFxRunner {
       }
     }
     if (e.shake && !reduce) {
-      const k = e.perfect ? 9 : 5;
+      const k = e.perfect || e.special === "blast" ? 12 : lines >= 3 || e.special === "bomb" ? 9 : 6;
       this.frame.animate(
         [
           { translate: "0 0" },
@@ -203,6 +254,52 @@ export class BoardFxRunner {
         { duration: 320, easing: "ease-out" },
       );
     }
+  }
+
+  /** The most common color among cleared blocks, for the shockwave tint. */
+  private colorAt(cleared: BoardFx["cleared"]): string {
+    const n: Record<string, number> = {};
+    for (const { cell } of cleared) if (cell.t === "b" || cell.t === "s") n[cell.c] = (n[cell.c] ?? 0) + 1;
+    const top = Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] as ColorId | undefined;
+    return top ? BLOCK_HEX[top] : "#ffffff";
+  }
+
+  /** A bright flash over the whole board. */
+  private flash(grid: DOMRect, strength: number, color: string): void {
+    const el = document.createElement("div");
+    el.className = "pj-board-flash";
+    el.style.left = `${grid.left - grid.width * 0.1}px`;
+    el.style.top = `${grid.top - grid.height * 0.1}px`;
+    el.style.width = `${grid.width * 1.2}px`;
+    el.style.height = `${grid.height * 1.2}px`;
+    el.style.setProperty("--flash", color);
+    this.layer.appendChild(el);
+    el.animate([{ opacity: 0 }, { opacity: strength, offset: 0.15 }, { opacity: 0 }], { duration: 420, easing: "ease-out" }).finished.then(
+      () => el.remove(),
+      () => el.remove(),
+    );
+  }
+
+  /** A colored glow around the edges of the whole screen. */
+  private screenGlow(color: string): void {
+    const el = document.createElement("div");
+    el.className = "pj-screen-glow";
+    el.style.setProperty("--glow", color);
+    this.layer.appendChild(el);
+    el.animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }], { duration: 900, easing: "ease-out" }).finished.then(
+      () => el.remove(),
+      () => el.remove(),
+    );
+  }
+
+  /** One firework: a ring plus a shower of colored sparks. */
+  private firework(x: number, y: number): void {
+    const palette = [["#ff5f9e", "#ffd1e6"], ["#ffc93c", "#fff3c4"], ["#5fd2ff", "#e0f9ff"], ["#6fe05a", "#dcffd4"], ["#c26bff", "#f0deff"]];
+    const pair = palette[Math.floor(Math.random() * palette.length)]!;
+    this.fx.ring(x, y, { color: pair[0], from: 4, to: 70, ms: 520, width: 4 });
+    this.fx.burst("sparkle", x, y, { count: 26, color: [...pair, "#ffffff"], speed: 360, size: 5 });
+    this.fx.burst("confetti", x, y, { count: 10, speed: 300 });
+    audio.feelStar(Math.floor(Math.random() * 3));
   }
 
   /** A bright bar that sweeps along a cleared row or column. */
@@ -352,6 +449,21 @@ export class BoardFxRunner {
   }
 
   private praise(grid: DOMRect, text: string, perfect: boolean, reduce: boolean, mini = false): void {
+    if (!mini && !reduce) {
+      const rays = document.createElement("div");
+      rays.className = `pj-praise-rays${perfect ? " is-perfect" : ""}`;
+      rays.style.left = `${grid.left + grid.width / 2}px`;
+      rays.style.top = `${grid.top + grid.height * 0.42}px`;
+      this.layer.appendChild(rays);
+      rays.animate(
+        [
+          { transform: "translate(-50%, -50%) scale(0.2) rotate(0deg)", opacity: 0 },
+          { transform: "translate(-50%, -50%) scale(1) rotate(40deg)", opacity: 0.9, offset: 0.3 },
+          { transform: "translate(-50%, -50%) scale(1.15) rotate(110deg)", opacity: 0 },
+        ],
+        { duration: perfect ? 1600 : 1200, easing: "ease-out" },
+      ).finished.then(() => rays.remove(), () => rays.remove());
+    }
     const el = document.createElement("div");
     el.className = `pj-praise ${perfect ? "is-perfect" : ""} ${mini ? "is-mini" : ""}`;
     el.textContent = text;

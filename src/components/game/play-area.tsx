@@ -7,6 +7,7 @@ import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize }
 import { BoardFxRunner } from "./board-fx";
 import { SideRails } from "./overlays";
 import { SPECIAL_WORDS } from "./explainers";
+import { TutorialHand } from "./tutorial-coach";
 import { VisitorLayer } from "./visitors/visitor-layer";
 
 /** Tray pieces are drawn at this cell size before they're picked up. */
@@ -398,6 +399,7 @@ export function PlayArea() {
 
       <div ref={fxHostRef} className="pj-boardfx-host" aria-hidden="true" />
       <VisitorLayer grid={gridRef.current} />
+      <TutorialHand dragging={dragIndex !== null} />
     </div>
   );
 }

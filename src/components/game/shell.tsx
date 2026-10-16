@@ -9,7 +9,7 @@ import { NightIsle } from "./background";
 import { GameIcon } from "./icons";
 import { Overlays, PowerBar, TabScreens } from "./overlays";
 import { PlayArea } from "./play-area";
-import { TutorialCoach } from "./tutorial-coach";
+import { TutorialCoach, TutorialScreens, TutorialSkipBar } from "./tutorial-coach";
 import { VisitorDirector } from "./visitors/director";
 
 export function GameShell() {
@@ -17,6 +17,7 @@ export function GameShell() {
   const persist = useGame((s) => s.persist);
   const start = useGame((s) => s.start);
   const skin = useGame((s) => s.profile.skin);
+  const tutorialOn = useGame((s) => s.tutorial !== null);
   const tab = useGame((s) => s.tab);
   const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
@@ -56,7 +57,7 @@ export function GameShell() {
   }, [cancelTarget, selectPiece, setPanel]);
 
   return (
-    <div className="pj-root" data-skin={skin}>
+    <div className="pj-root" data-skin={skin} data-tutorial={tutorialOn ? "" : undefined}>
       <div className="pj-stars" />
       <NightIsle />
       <JungleAmbience />
@@ -68,7 +69,7 @@ export function GameShell() {
         {tab === "home" ? (
           <>
             <PlayArea />
-            <PowerBar />
+            {tutorialOn ? <TutorialSkipBar /> : <PowerBar />}
           </>
         ) : (
           <TabScreens />
@@ -99,6 +100,7 @@ export function GameShell() {
       </div>
 
       <Overlays />
+      <TutorialScreens />
     </div>
   );
 }

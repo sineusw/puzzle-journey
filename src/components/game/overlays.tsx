@@ -36,13 +36,16 @@ import { nameFor, useBoard } from "@/lib/game/leaderboard";
 import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
 import { SpecialFace } from "./tile-art";
 import { ShapeGallery, SPECIAL_WORDS, SpecialDemo } from "./explainers";
+import { Fireworks } from "./fireworks";
 import { lessonForUnlock } from "@/lib/game/tutorial";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
   const dailyNextAt = useGame((s) => s.profile.daily.nextAt);
   const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
-  const questReady = useGame((s) => QUESTS.some((q) => s.profile.quests[q.id].value >= q.target && !s.profile.quests[q.id].claimed));
+  const questReady = useGame((s) =>
+    QUESTS.some((q) => s.profile.quests[q.id].value >= q.target && !s.profile.quests[q.id].claimed),
+  );
 
   if (side === "l") {
     return (
@@ -116,7 +119,11 @@ export function PowerBar() {
   const targeting = useGame((s) => s.targeting);
   const armPower = useGame((s) => s.armPower);
   const setPanel = useGame((s) => s.setPanel);
-  const items: Array<{ id: "hammer" | "refresh" | "bomb" | "freeze"; label: string; icon: IconName }> = [
+  const items: Array<{
+    id: "hammer" | "refresh" | "bomb" | "freeze";
+    label: string;
+    icon: IconName;
+  }> = [
     { id: "hammer", label: "Hammer", icon: "hammer" },
     { id: "refresh", label: "Reroll", icon: "refresh" },
     { id: "bomb", label: "Bomb", icon: "bomb" },
@@ -174,7 +181,9 @@ export function Overlays() {
   return (
     <>
       {toast ? <div className="pj-toast">{toast}</div> : null}
-      {levelUpTo && panel !== "over" && panel !== "won" ? <LevelUpSheet level={levelUpTo} onClose={dismissLevelUp} /> : null}
+      {levelUpTo && panel !== "over" && panel !== "won" ? (
+        <LevelUpSheet level={levelUpTo} onClose={dismissLevelUp} />
+      ) : null}
       {panel ? (
         <div
           className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" || panel === "intro" ? "center" : ""}`}
@@ -207,7 +216,9 @@ function LevelUpSheet({ level, onClose }: { level: number; onClose: () => void }
       <div className="pj-sheet pj-result text-center">
         <p className="text-sm font-extrabold tracking-widest text-gold uppercase">Level up</p>
         <h2 className="pj-result-title mt-1 font-display text-cream">Lv. {level}</h2>
-        <p className="mt-2 text-sm text-cream/85">You're getting better every round. Here's a little coin to celebrate.</p>
+        <p className="mt-2 text-sm text-cream/85">
+          You're getting better every round. Here's a little coin to celebrate.
+        </p>
         <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={onClose}>
           Keep going
         </button>
@@ -278,7 +289,11 @@ function QuestSheet() {
                 disabled={!ready}
                 onClick={() => claimQuest(q.id)}
               >
-                {p.claimed ? "Done" : ready ? "Claim" : `${Math.min(p.value, q.target)}/${q.target}`}
+                {p.claimed
+                  ? "Done"
+                  : ready
+                    ? "Claim"
+                    : `${Math.min(p.value, q.target)}/${q.target}`}
               </button>
             </div>
             <div className="pj-meter mt-2">
@@ -384,7 +399,11 @@ function SettingsSheet() {
       <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={startSandbox}>
         New Sandbox run
       </button>
-      <button type="button" className="pj-btn pj-btn-ghost w-full text-danger" onClick={resetProgress}>
+      <button
+        type="button"
+        className="pj-btn pj-btn-ghost w-full text-danger"
+        onClick={resetProgress}
+      >
         Reset progress
       </button>
       <VisitorDebug />
@@ -433,26 +452,38 @@ function HowSheet() {
       <h3 className="pj-how-h">Not your usual blocks</h3>
       <ShapeGallery />
       <p className="pj-how-p">
-        These aren’t Tetris pieces. Some have <b>gaps</b> between their blocks, the gaps stay empty, and pieces <b>never rotate</b>. Look at all
-        three before you drop one.
+        These aren’t Tetris pieces. Some have <b>gaps</b> between their blocks, the gaps stay empty,
+        and pieces <b>never rotate</b>. Look at all three before you drop one.
       </p>
       <h3 className="pj-how-h">Special blocks (Adventure)</h3>
       <SpecialDemo kind="rocketV" />
-      <p className="pj-how-p">Special blocks go off <b>the moment you put them down</b>.</p>
+      <p className="pj-how-p">
+        Special blocks go off <b>the moment you put them down</b>.
+      </p>
       <ul className="pj-how-legend is-wide">
         {(["rocketV", "rocketH", "bomb", "blast"] as const).map((k) => (
           <li key={k}>
-            <span className="pj-how-ico"><SpecialFace kind={k} /></span>
-            <span><b>{SPECIAL_WORDS[k].name}:</b> {SPECIAL_WORDS[k].does}</span>
+            <span className="pj-how-ico">
+              <SpecialFace kind={k} />
+            </span>
+            <span>
+              <b>{SPECIAL_WORDS[k].name}:</b> {SPECIAL_WORDS[k].does}
+            </span>
           </li>
         ))}
       </ul>
       <h3 className="pj-how-h">Ways to play</h3>
       <p className="pj-how-p">
-        <b>Adventure</b> adds one new special block or Island Visitor at a time. <b>Classic</b> is plain-block levels. <b>Sandbox</b> is endless,
-        for your high score. After each run you get a Puzzle IQ and can win awards on the Ranks tab.
+        <b>Adventure</b> adds one new special block or Island Visitor at a time. <b>Classic</b> is
+        plain-block levels. <b>Sandbox</b> is endless, for your high score. After each run you get a
+        Puzzle IQ and can win awards on the Ranks tab.
       </p>
-      <button type="button" className="pj-btn pj-btn-ghost mt-5 w-full" data-testid="replay-tutorial" onClick={() => startTutorial("basics")}>
+      <button
+        type="button"
+        className="pj-btn pj-btn-ghost mt-5 w-full"
+        data-testid="replay-tutorial"
+        onClick={() => startTutorial("basics", true)}
+      >
         Play the tutorial
       </button>
       <button
@@ -471,7 +502,13 @@ function HowSheet() {
 }
 
 function modeName(mode: string): string {
-  return mode === "adventure" ? "Adventure" : mode === "classic" ? "Classic" : mode === "sandbox" ? "Sandbox" : "Challenge";
+  return mode === "adventure"
+    ? "Adventure"
+    : mode === "classic"
+      ? "Classic"
+      : mode === "sandbox"
+        ? "Sandbox"
+        : "Challenge";
 }
 
 /** Counts a number up from 0 over `ms`, ticking a rising note as it goes. */
@@ -511,11 +548,17 @@ function IqAndAwards({ delay }: { delay: number }) {
     timers.push(window.setTimeout(() => audio.feelMilestone(), delay + 950));
     awards.forEach((a, i) =>
       timers.push(
-        window.setTimeout(() => {
-          setShownAwards(i + 1);
-          audio.feelStar(Math.min(i, 2));
-          if (i === 0) cheer(a.kind === "first" ? `You won ${a.title}!` : "New personal record!", { delayMs: 150 });
-        }, delay + 1300 + i * 550),
+        window.setTimeout(
+          () => {
+            setShownAwards(i + 1);
+            audio.feelStar(Math.min(i, 2));
+            if (i === 0)
+              cheer(a.kind === "first" ? `You won ${a.title}!` : "New personal record!", {
+                delayMs: 150,
+              });
+          },
+          delay + 1300 + i * 550,
+        ),
       ),
     );
     return () => timers.forEach((t) => window.clearTimeout(t));
@@ -582,19 +625,33 @@ function OverSheet() {
   const setTab = useGame((s) => s.setTab);
   const sandbox = match.mode === "sandbox";
   const best = sandbox ? profile.sandboxBest : profile.highScore;
-  const beatBest = match.score > 0 && match.score > bestAtStart && bestAtStart > 0 && (sandbox || !match.goal);
+  const beatBest =
+    match.score > 0 && match.score > bestAtStart && bestAtStart > 0 && (sandbox || !match.goal);
   const pct = match.goal ? Math.min(1, match.goalProgress / match.goal.value) : 0;
   const left = match.goal ? Math.max(0, match.goal.value - match.goalProgress) : 0;
-  const unit = match.goal?.type === "lines" ? (left === 1 ? "line" : "lines") : match.goal?.type === "combo" ? "combo steps" : "points";
+  const unit =
+    match.goal?.type === "lines"
+      ? left === 1
+        ? "line"
+        : "lines"
+      : match.goal?.type === "combo"
+        ? "combo steps"
+        : "points";
   const [title, sub] = beatBest
-    ? ["New best!", `You beat your best by ${formatInt(match.score - bestAtStart)} points. Amazing run!`]
+    ? [
+        "New best!",
+        `You beat your best by ${formatInt(match.score - bestAtStart)} points. Amazing run!`,
+      ]
     : match.goal && pct >= 0.85
       ? ["So close!", `Only ${formatInt(left)} ${unit} to go. You've got this!`]
       : match.goal && pct >= 0.5
         ? ["Nice run!", "You made it more than halfway. One more try?"]
         : match.goal
           ? ["Good try!", "Every run makes you sharper. Go again!"]
-          : ["Nice run!", `You cleared ${match.lines} ${match.lines === 1 ? "line" : "lines"}. Can you beat ${formatInt(best)}?`];
+          : [
+              "Nice run!",
+              `You cleared ${match.lines} ${match.lines === 1 ? "line" : "lines"}. Can you beat ${formatInt(best)}?`,
+            ];
   const shown = useCountUp(match.score, 900, 350);
   useEffect(() => {
     if (beatBest) audio.feelNewBest();
@@ -605,7 +662,9 @@ function OverSheet() {
   }, []);
   return (
     <div className="pj-sheet pj-result text-center" data-testid="over-sheet">
-      <p className="text-xs font-extrabold tracking-widest text-gold uppercase">{modeName(match.mode)}</p>
+      <p className="text-xs font-extrabold tracking-widest text-gold uppercase">
+        {modeName(match.mode)}
+      </p>
       <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
       <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
       <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
@@ -624,7 +683,11 @@ function OverSheet() {
       <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={continueRun}>
         Continue · {CONTINUE_COST} gems
       </button>
-      <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={() => setTab("adventure")}>
+      <button
+        type="button"
+        className="pj-btn pj-btn-ghost mt-2 w-full"
+        onClick={() => setTab("adventure")}
+      >
         Choose a mode
       </button>
     </div>
@@ -649,25 +712,41 @@ function WonSheet() {
   const list = match.mode === "classic" ? CLASSIC : ADVENTURE;
   const unlocked = match.mode === "classic" ? profile.classic.unlocked : profile.adventure.unlocked;
   const nextOpen = nextId !== null && nextId <= unlocked && list.some((l) => l.id === nextId);
-  const nextNew = match.mode === "adventure" && nextId ? ADVENTURE.find((l) => l.id === nextId)?.introduces : undefined;
+  const nextNew =
+    match.mode === "adventure" && nextId
+      ? ADVENTURE.find((l) => l.id === nextId)?.introduces
+      : undefined;
   // Stars earned this run (not the saved best), so the reveal matches the play.
   const ratio = match.goal ? match.goalProgress / match.goal.value : 1;
   const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
-  const reward = id ? list.find((l) => l.id === id)?.reward : CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value)?.reward;
+  const reward = id
+    ? list.find((l) => l.id === id)?.reward
+    : CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value)
+        ?.reward;
   const [lit, setLit] = useState(0);
   const shown = useCountUp(match.score, 1000, 400 + stars * 450);
   const [title, sub] = WIN_LINES[stars]!;
   useEffect(() => {
     audio.feelLevelComplete();
-    cheer(stars === 3 ? "Amazing! Three stars!" : match.mode === "classic" ? "Level cleared! Great job!" : "Island cleared! Great job!", {
-      delayMs: 200,
-      priority: true,
-    });
+    cheer(
+      stars === 3
+        ? "Amazing! Three stars!"
+        : match.mode === "classic"
+          ? "Level cleared! Great job!"
+          : "Island cleared! Great job!",
+      {
+        delayMs: 200,
+        priority: true,
+      },
+    );
     const timers = Array.from({ length: stars }, (_, i) =>
-      window.setTimeout(() => {
-        setLit(i + 1);
-        audio.feelStar(i);
-      }, 650 + i * 450),
+      window.setTimeout(
+        () => {
+          setLit(i + 1);
+          audio.feelStar(i);
+        },
+        650 + i * 450,
+      ),
     );
     const coinTimer = window.setTimeout(() => audio.feelCoins(5), 1500 + stars * 450);
     return () => {
@@ -678,49 +757,63 @@ function WonSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="pj-sheet pj-result text-center" data-testid="won-sheet">
-      <div className="pj-result-stars" aria-label={`${stars} of 3 stars`}>
-        {[1, 2, 3].map((n) => (
-          <span key={n} className={`pj-result-star ${n <= lit ? "is-lit" : ""} ${n === 2 ? "is-mid" : ""}`}>
-            <Star fill="currentColor" />
-          </span>
-        ))}
-      </div>
-      <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
-      <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
-      <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
-      <p className="text-xs text-muted">{match.goal ? goalLabel(match.goal) : "Challenge complete"}</p>
-      <RunStats />
-      <IqAndAwards delay={900 + stars * 450} />
-      {reward ? (
-        <p className="pj-result-reward">
-          <GameIcon name="coin" className="inline size-5" /> +{reward.coins}
-          <GameIcon name="gem" className="ml-3 inline size-5" /> +{reward.gems}
+    <>
+      <Fireworks />
+      <div className="pj-sheet pj-result text-center" data-testid="won-sheet">
+        <div className="pj-result-stars" aria-label={`${stars} of 3 stars`}>
+          {[1, 2, 3].map((n) => (
+            <span
+              key={n}
+              className={`pj-result-star ${n <= lit ? "is-lit" : ""} ${n === 2 ? "is-mid" : ""}`}
+            >
+              <Star fill="currentColor" />
+            </span>
+          ))}
+        </div>
+        <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
+        <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
+        <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
+        <p className="text-xs text-muted">
+          {match.goal ? goalLabel(match.goal) : "Challenge complete"}
         </p>
-      ) : null}
-      {nextNew ? (
-        <p className="mt-2 text-sm font-extrabold text-gold">
-          <Sparkles className="mr-1 inline size-4" />
-          Next: {UNLOCKS[nextNew].name}
-        </p>
-      ) : null}
-      {nextOpen && nextId ? (
+        <RunStats />
+        <IqAndAwards delay={900 + stars * 450} />
+        {reward ? (
+          <p className="pj-result-reward">
+            <GameIcon name="coin" className="inline size-5" /> +{reward.coins}
+            <GameIcon name="gem" className="ml-3 inline size-5" /> +{reward.gems}
+          </p>
+        ) : null}
+        {nextNew ? (
+          <p className="mt-2 text-sm font-extrabold text-gold">
+            <Sparkles className="mr-1 inline size-4" />
+            Next: {UNLOCKS[nextNew].name}
+          </p>
+        ) : null}
+        {nextOpen && nextId ? (
+          <button
+            type="button"
+            className="pj-btn pj-btn-primary mt-4 w-full"
+            onClick={() =>
+              match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId)
+            }
+          >
+            {match.mode === "classic" ? "Next level" : "Next island"}
+          </button>
+        ) : (
+          <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
+            Play again
+          </button>
+        )}
         <button
           type="button"
-          className="pj-btn pj-btn-primary mt-4 w-full"
-          onClick={() => (match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId))}
+          className="pj-btn pj-btn-ghost mt-2 w-full"
+          onClick={() => setTab("adventure")}
         >
-          {match.mode === "classic" ? "Next level" : "Next island"}
+          Choose a mode
         </button>
-      ) : (
-        <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
-          Play again
-        </button>
-      )}
-      <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={() => setTab("adventure")}>
-        Choose a mode
-      </button>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -757,15 +850,30 @@ function IntroSheet() {
       ) : null}
       {lesson ? (
         <>
-          <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-try" onClick={() => startTutorial(lesson)}>
+          <button
+            type="button"
+            className="pj-btn pj-btn-primary mt-5 w-full"
+            data-testid="intro-try"
+            onClick={() => startTutorial(lesson)}
+          >
             Try it!
           </button>
-          <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
+          <button
+            type="button"
+            className="pj-btn pj-btn-ghost mt-2 w-full"
+            data-testid="intro-go"
+            onClick={() => setPanel(null)}
+          >
             Skip
           </button>
         </>
       ) : (
-        <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-primary mt-5 w-full"
+          data-testid="intro-go"
+          onClick={() => setPanel(null)}
+        >
           Let’s go
         </button>
       )}
@@ -777,10 +885,20 @@ type PlayMode = "adventure" | "classic" | "sandbox";
 
 function AdventureScreen() {
   const current = useGame((s) => s.match.mode);
-  const [mode, setMode] = useState<PlayMode>(current === "classic" || current === "sandbox" ? current : "adventure");
+  const [mode, setMode] = useState<PlayMode>(
+    current === "classic" || current === "sandbox" ? current : "adventure",
+  );
   const modes: Array<{ id: PlayMode; label: string; blurb: string }> = [
-    { id: "adventure", label: "Adventure", blurb: "Islands that add a new special block or visitor as you go." },
-    { id: "classic", label: "Classic", blurb: "Thirty levels with plain blocks only. No specials, no visitors." },
+    {
+      id: "adventure",
+      label: "Adventure",
+      blurb: "Islands that add a new special block or visitor as you go.",
+    },
+    {
+      id: "classic",
+      label: "Classic",
+      blurb: "Thirty levels with plain blocks only. No specials, no visitors.",
+    },
     { id: "sandbox", label: "Sandbox", blurb: "Endless plain blocks. Chase your highest score." },
   ];
   const active = modes.find((m) => m.id === mode)!;
@@ -804,7 +922,13 @@ function AdventureScreen() {
       </div>
       <p className="mt-2 text-sm text-muted">{active.blurb}</p>
       <div className="mt-3">
-        {mode === "adventure" ? <AdventureList /> : mode === "classic" ? <ClassicList /> : <SandboxCard />}
+        {mode === "adventure" ? (
+          <AdventureList />
+        ) : mode === "classic" ? (
+          <ClassicList />
+        ) : (
+          <SandboxCard />
+        )}
       </div>
     </div>
   );
@@ -831,7 +955,14 @@ function RanksScreen() {
             ["all", "All-time"],
           ] as const
         ).map(([id, label]) => (
-          <button key={id} type="button" role="tab" aria-selected={scope === id} className={`pj-mode-tab ${scope === id ? "is-on" : ""}`} onClick={() => setScope(id)}>
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={scope === id}
+            className={`pj-mode-tab ${scope === id ? "is-on" : ""}`}
+            onClick={() => setScope(id)}
+          >
             {label}
           </button>
         ))}
@@ -850,7 +981,9 @@ function RanksScreen() {
                 <ol className="pj-rank-list">
                   {top.map((r, i) => (
                     <li key={r.id} className={r.id === board.myId ? "is-me" : ""}>
-                      <span className={`pj-rank-pos is-${i + 1}`}>{i === 0 ? <Crown className="size-3.5" /> : i + 1}</span>
+                      <span className={`pj-rank-pos is-${i + 1}`}>
+                        {i === 0 ? <Crown className="size-3.5" /> : i + 1}
+                      </span>
                       <span className="pj-rank-name">{nameFor(r.id, board)}</span>
                       <span className="pj-rank-val tabular-nums">{cat.format(r.value)}</span>
                     </li>
@@ -859,7 +992,9 @@ function RanksScreen() {
                     <li className="is-me">
                       <span className="pj-rank-pos">{myIdx + 1}</span>
                       <span className="pj-rank-name">You</span>
-                      <span className="pj-rank-val tabular-nums">{cat.format(ranked[myIdx]!.value)}</span>
+                      <span className="pj-rank-val tabular-nums">
+                        {cat.format(ranked[myIdx]!.value)}
+                      </span>
                     </li>
                   ) : null}
                 </ol>
@@ -879,7 +1014,12 @@ function SandboxCard() {
     <div className="pj-card text-center">
       <div className="text-xs text-muted">Your best</div>
       <div className="mt-1 font-display text-4xl tabular-nums">{formatInt(best)}</div>
-      <button type="button" data-testid="sandbox-play" className="pj-btn pj-btn-primary mt-4 w-full" onClick={startSandbox}>
+      <button
+        type="button"
+        data-testid="sandbox-play"
+        className="pj-btn pj-btn-primary mt-4 w-full"
+        onClick={startSandbox}
+      >
         Play Sandbox
       </button>
     </div>
@@ -904,11 +1044,17 @@ function ClassicList() {
             onClick={() => startClassic(lvl.id)}
             aria-label={`Classic level ${lvl.id}. ${goalLabel(lvl.goal)}.${locked ? " Locked." : ""}`}
           >
-            <span className="font-display text-xl tabular-nums">{locked ? <Lock className="mx-auto size-4" /> : lvl.id}</span>
+            <span className="font-display text-xl tabular-nums">
+              {locked ? <Lock className="mx-auto size-4" /> : lvl.id}
+            </span>
             <span className="pj-classic-goal">{goalLabel(lvl.goal)}</span>
             <span className="flex justify-center gap-0.5" aria-hidden="true">
               {[1, 2, 3].map((n) => (
-                <Star key={n} className={`size-2.5 ${n <= stars ? "text-gold" : "text-muted/40"}`} fill={n <= stars ? "currentColor" : "none"} />
+                <Star
+                  key={n}
+                  className={`size-2.5 ${n <= stars ? "text-gold" : "text-muted/40"}`}
+                  fill={n <= stars ? "currentColor" : "none"}
+                />
               ))}
             </span>
           </button>
@@ -991,15 +1137,27 @@ function MoreScreen() {
         <Stat label="Level" value={`${profile.level} · ${profile.xp}/${xpNeed}`} />
       </div>
       <div className="mt-3 space-y-2">
-        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setPanel("how")}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-ghost w-full"
+          onClick={() => setPanel("how")}
+        >
           <Info className="mr-2 inline size-4" />
           How to play
         </button>
-        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setPanel("settings")}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-ghost w-full"
+          onClick={() => setPanel("settings")}
+        >
           <Settings className="mr-2 inline size-4" />
           Settings
         </button>
-        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => setTab("skins")}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-ghost w-full"
+          onClick={() => setTab("skins")}
+        >
           <Paintbrush className="mr-2 inline size-4" />
           Block skins
         </button>
@@ -1071,7 +1229,11 @@ function ToggleRow({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="pj-card flex w-full items-center gap-3 text-left" onClick={onClick}>
+    <button
+      type="button"
+      className="pj-card flex w-full items-center gap-3 text-left"
+      onClick={onClick}
+    >
       <Icon className="size-4" />
       <span className="flex-1 font-extrabold">{label}</span>
       <span className={`pj-switch ${on ? "is-on" : ""}`} />

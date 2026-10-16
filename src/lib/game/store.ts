@@ -144,8 +144,13 @@ type GameStore = {
   /** The Adventure unlock being introduced on the "New!" card. */
   introUnlock: UnlockId | null;
   /** The hands-on tutorial in progress (the real game waits in `saved`). */
-  tutorial: { lesson: LessonId; index: number; phase: "play" | "praise"; saved: Match } | null;
-  startTutorial: (lesson: LessonId) => void;
+  tutorial: { lesson: LessonId; index: number; phase: "intro" | "play" | "praise" | "done"; saved: Match } | null;
+  /** Open a lesson; `welcome` shows the Start / Skip screen first. */
+  startTutorial: (lesson: LessonId, welcome?: boolean) => void;
+  /** Welcome screen → first move. */
+  beginTutorial: () => void;
+  /** "Tutorial complete" screen → back to the real game. */
+  finishTutorial: () => void;
   /** Leave the tutorial now (Skip) and go back to the real game. */
   skipTutorial: () => void;
   visitorBusy: boolean;
@@ -300,7 +305,7 @@ export const useGame = create<GameStore>((set, get) => ({
       runStats: emptyRun(match.mode, match.levelId),
     });
     // New (and returning) players play through the tutorial once; Skip is always there.
-    if (!profile.tutorialDone) get().startTutorial("basics");
+    if (!profile.tutorialDone) get().startTutorial("basics", true);
   },
 
   persist: () => {
@@ -308,18 +313,32 @@ export const useGame = create<GameStore>((set, get) => ({
     saveProfile({ ...profile, match: tutorial ? tutorial.saved : match });
   },
 
-  startTutorial: (lesson) => {
+  startTutorial: (lesson, welcome = false) => {
     const steps = LESSONS[lesson];
     const { match, tutorial } = get();
     const saved = tutorial ? tutorial.saved : match;
     set({
-      tutorial: { lesson, index: 0, phase: "play", saved },
+      tutorial: { lesson, index: 0, phase: welcome ? "intro" : "play", saved },
       match: stepMatch(steps[0]!),
       panel: null,
       tab: "home",
       selected: null,
       targeting: null,
     });
+  },
+
+  beginTutorial: () => {
+    const t = get().tutorial;
+    if (!t || t.phase !== "intro") return;
+    audio.unlockAudio();
+    audio.sfxUi();
+    set({ tutorial: { ...t, phase: "play" } });
+  },
+
+  finishTutorial: () => {
+    const { tutorial, profile } = get();
+    if (!tutorial) return;
+    endTutorial(get, set, tutorial.lesson, profile);
   },
 
   skipTutorial: () => {
@@ -959,8 +978,10 @@ function tutorialPlace(get: () => GameStore, set: (partial: Partial<GameStore>) 
     if (t.index + 1 < steps.length) {
       set({ tutorial: { ...t, index: t.index + 1, phase: "play" }, match: stepMatch(steps[t.index + 1]!) });
     } else {
+      // Celebrate on a "Tutorial complete" screen; its button returns to the game.
       audio.feelLevelComplete();
-      endTutorial(get, set, t.lesson, get().profile);
+      cheer(t.lesson === "basics" ? "Tutorial complete! You're ready!" : "You got it!", { delayMs: 300, priority: true });
+      set({ tutorial: { ...t, phase: "done" } });
     }
   }, clear?.blasts || clear?.bombs || clear?.rockets ? 2100 : 1600);
   return true;
