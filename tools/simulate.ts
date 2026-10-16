@@ -168,7 +168,7 @@ function play(start: Match, strategy: Strategy, seed: number, checkDeals: boolea
       check(m);
     }
   }
-  return { won: m.won, moves: m.moves, stars: m.won ? starsFor(m.goal, m.moves) : 0, deals, badDeals, score: m.score };
+  return { won: m.won, moves: m.moves, stars: m.won ? starsFor(m.goal, m.moves, m.mode, m.levelId) : 0, deals, badDeals, score: m.score };
 }
 
 type Row = { mode: string; level: number; goal: string; par: number; strategy: Strategy; games: number; winRate: number; star3: number; star2plus: number; medianMovesWin: number | null; deals: number; badDeals: number; winMoves: number[] };
