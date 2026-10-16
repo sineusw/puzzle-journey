@@ -42,16 +42,16 @@ describe("island visitors", () => {
     assert.ok(trayFits(applied.match));
   });
 
-  it("luna enchants a plain tile into a bomb or rocket", () => {
+  it("luna's magic block goes off right away", () => {
     const match = matchBoard();
     const action = planVisitor(match, "luna", "help", () => 0.4);
     assert.ok(action && action.kind === "enchant");
     if (action.kind !== "enchant") return;
     const applied = applyVisitorAction(match, action);
     assert.ok(applied);
-    const cell = applied.match.board[action.at[0]]![action.at[1]]!;
-    assert.ok(cell.t === "b" || cell.t === "s");
-    if (cell.t === "b" || cell.t === "s") assert.ok(cell.sp === "bomb" || cell.sp === "rocketH" || cell.sp === "rocketV");
+    assert.ok(applied.clear);
+    assert.equal(applied.clear.fired[0]?.sp, action.special);
+    assert.equal(applied.match.board[action.at[0]]![action.at[1]]!.t, "e");
   });
 
   it("kai builds or breaks stone without locking the tray", () => {

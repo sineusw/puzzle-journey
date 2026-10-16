@@ -35,6 +35,8 @@ export type Profile = {
   seenSpecialTips: string[];
   /** Saw the "Not your usual blocks" intro. */
   seenShapesIntro: boolean;
+  /** Finished or skipped the hands-on tutorial. */
+  tutorialDone: boolean;
   /** This player's records (also shared on the leaderboard when possible). */
   card: PlayerCard;
   /** Levels won in a row (Classic/Adventure); a loss resets it. */
@@ -74,6 +76,7 @@ export function defaultProfile(): Profile {
     seenShapes: [],
     seenSpecialTips: [],
     seenShapesIntro: false,
+    tutorialDone: false,
     card: emptyCard(),
     levelStreak: 0,
     skin: "classic",
@@ -110,6 +113,7 @@ function migrate(raw: Profile): Profile {
     seenShapes: raw.seenShapes ?? [],
     seenSpecialTips: raw.seenSpecialTips ?? [],
     seenShapesIntro: raw.seenShapesIntro ?? false,
+    tutorialDone: raw.tutorialDone ?? false,
     card: raw.card?.best ? { ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } } : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start

@@ -2852,3 +2852,30 @@
 @keyframes pj-combo-glow { from { opacity: 0.45; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pj-frame::after { animation: none !important; } }
 [data-dragging] .pj-ambient * { animation-play-state: paused; }
+
+/* ------------------------------------------------- hands-on tutorial */
+.pj-coach {
+  width: min(100%, 360px); margin: 4px auto 0; padding: 8px 12px 10px; border-radius: 16px; text-align: center;
+  background: rgb(8 18 36 / 0.88); box-shadow: 0 0 0 2px rgb(154 247 255 / 0.6), 0 8px 20px rgb(0 0 0 / 0.4);
+}
+.pj-coach.is-praise { box-shadow: 0 0 0 2px rgb(62 207 120 / 0.85), 0 0 22px rgb(62 207 120 / 0.4); }
+.pj-coach-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pj-coach-dots { display: flex; gap: 5px; }
+.pj-coach-dots span { width: 8px; height: 8px; border-radius: 999px; background: rgb(255 255 255 / 0.2); }
+.pj-coach-dots span.is-now { background: #9af7ff; box-shadow: 0 0 6px #9af7ff; }
+.pj-coach-dots span.is-done { background: var(--color-ok); }
+.pj-coach-skip {
+  padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; color: var(--color-muted);
+  background: rgb(255 255 255 / 0.08); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15);
+}
+.pj-coach-say { margin-top: 4px; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.15; color: #fff; animation: pj-iq-in 360ms cubic-bezier(.2,1.4,.4,1) both; }
+.pj-coach.is-praise .pj-coach-say { color: #b8ffd9; font-size: 1.3rem; }
+.pj-coach-hint { margin-top: 2px; font-size: 0.8rem; line-height: 1.25; color: rgb(244 238 227 / 0.85); }
+
+.pj-well.is-guide { box-shadow: inset 0 0 0 3px rgb(154 247 255 / 0.95), 0 0 12px rgb(154 247 255 / 0.6); background-color: rgb(154 247 255 / 0.22); animation: pj-guide 0.8s ease-in-out infinite alternate; z-index: 1; }
+@keyframes pj-guide { from { background-color: rgb(154 247 255 / 0.1); } to { background-color: rgb(154 247 255 / 0.38); } }
+.pj-tray.is-tutorial .pj-slot:not(:disabled) { box-shadow: 0 0 0 3px rgb(154 247 255 / 0.9), 0 0 18px rgb(154 247 255 / 0.55); animation: pj-guide-slot 0.8s ease-in-out infinite alternate; }
+@keyframes pj-guide-slot { to { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .pj-well.is-guide, .pj-tray.is-tutorial .pj-slot, .pj-coach-say { animation: none; } }
+.pj-how-legend.is-wide { grid-template-columns: 1fr; }
+.pj-how-legend.is-wide li { align-items: flex-start; }

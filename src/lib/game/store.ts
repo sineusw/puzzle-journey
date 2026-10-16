@@ -40,6 +40,8 @@ import * as audio from "./audio";
 import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
 import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
+import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
+import { cheer } from "./voice";
 import {
   applyVisitorAction,
   nextVisitAt,
@@ -105,10 +107,10 @@ export type BoardFx = {
 
 /** What each special block did, in plain words. */
 export const SPECIAL_CAPTION: Record<"bomb" | "rocketH" | "rocketV" | "blast", string> = {
-  rocketV: "Arrow fired! ↕ It wiped its whole column.",
-  rocketH: "Arrow fired! ↔ It wiped its whole row.",
-  bomb: "Bomb! It cleared every block around it.",
-  blast: "Golden block! It cleared the whole board.",
+  rocketV: "ZAP! ↕ The arrow cleared its whole up-and-down line.",
+  rocketH: "ZAP! ↔ The arrow cleared its whole side-to-side line.",
+  bomb: "BOOM! The bomb cleared the blocks all around it.",
+  blast: "WOW! The golden block cleared the whole board.",
 };
 
 /** What the results screen shows about the run that just ended. */
@@ -141,6 +143,11 @@ type GameStore = {
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
   introUnlock: UnlockId | null;
+  /** The hands-on tutorial in progress (the real game waits in `saved`). */
+  tutorial: { lesson: LessonId; index: number; phase: "play" | "praise"; saved: Match } | null;
+  startTutorial: (lesson: LessonId) => void;
+  /** Leave the tutorial now (Skip) and go back to the real game. */
+  skipTutorial: () => void;
   visitorBusy: boolean;
   visitorEvent: VisitorEvent | null;
   visitorApplied: boolean;
@@ -265,6 +272,7 @@ export const useGame = create<GameStore>((set, get) => ({
   toast: null,
   levelUpTo: null,
   introUnlock: null,
+  tutorial: null,
   visitorBusy: false,
   visitorEvent: null,
   visitorApplied: false,
@@ -287,17 +295,39 @@ export const useGame = create<GameStore>((set, get) => ({
       profile,
       match,
       started: false,
-      // Returning players see the updated How to play once (new shapes + specials).
-      panel: profile.seenHowTo && profile.seenShapesIntro ? null : "how",
+      panel: null,
       run: runFlagsFor(match, profile, true),
       runStats: emptyRun(match.mode, match.levelId),
     });
+    // New (and returning) players play through the tutorial once; Skip is always there.
+    if (!profile.tutorialDone) get().startTutorial("basics");
   },
 
   persist: () => {
-    const { profile, match } = get();
-    saveProfile({ ...profile, match });
+    const { profile, match, tutorial } = get();
+    saveProfile({ ...profile, match: tutorial ? tutorial.saved : match });
   },
+
+  startTutorial: (lesson) => {
+    const steps = LESSONS[lesson];
+    const { match, tutorial } = get();
+    const saved = tutorial ? tutorial.saved : match;
+    set({
+      tutorial: { lesson, index: 0, phase: "play", saved },
+      match: stepMatch(steps[0]!),
+      panel: null,
+      tab: "home",
+      selected: null,
+      targeting: null,
+    });
+  },
+
+  skipTutorial: () => {
+    const { tutorial, profile } = get();
+    if (!tutorial) return;
+    endTutorial(get, set, tutorial.lesson, profile);
+  },
+
 
   start: () => {
     audio.unlockAudio();
@@ -326,8 +356,9 @@ export const useGame = create<GameStore>((set, get) => ({
   selectPiece: (index) => set({ selected: index, targeting: null }),
 
   tryPlace: (trayIndex, row, col) => {
-    const { match, profile, visitorBusy } = get();
+    const { match, profile, visitorBusy, tutorial } = get();
     if (visitorBusy) return false;
+    if (tutorial) return tutorialPlace(get, set, trayIndex, row, col);
     const placedPiece = match.tray[trayIndex];
     const result = placePiece(match, trayIndex, row, col);
     if (!result.ok) {
@@ -479,7 +510,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   armPower: (id) => {
     const { profile, match, targeting, visitorBusy } = get();
-    if (visitorBusy) return;
+    if (visitorBusy || get().tutorial) return;
     if (profile.powerups[id] <= 0) {
       set({ panel: "shop", toast: "Buy more in the shop." });
       return;
@@ -871,6 +902,90 @@ function finishRun(rs: RunStats, match: Match, profile: Profile): { profile: Pro
   const awards = awardsFor(board.myId, cards, Object.keys(cards).length > 1 ? null : before);
   void postCard(card);
   return { profile: { ...profile, card, levelStreak }, result: { iq, pct, versus, awards, run } };
+}
+
+/** One move in the tutorial: it must go on the glowing spot. */
+function tutorialPlace(get: () => GameStore, set: (partial: Partial<GameStore>) => void, trayIndex: number, row: number, col: number): boolean {
+  const { tutorial, match, profile } = get();
+  if (!tutorial || tutorial.phase !== "play") return false;
+  const step = LESSONS[tutorial.lesson][tutorial.index]!;
+  // Be forgiving: anywhere close to the glowing spot counts.
+  if (Math.abs(row - step.at.r) > 2 || Math.abs(col - step.at.c) > 2) {
+    audio.feelNope();
+    set({ toast: "Try the glowing squares!" });
+    window.setTimeout(() => get().toast === "Try the glowing squares!" && set({ toast: null }), 1400);
+    return false;
+  }
+  row = step.at.r;
+  col = step.at.c;
+  const placedPiece = match.tray[trayIndex];
+  const result = placePiece(match, trayIndex, row, col);
+  if (!result.ok) {
+    audio.feelNope();
+    return false;
+  }
+  // Only this step's piece: no refills, no game over.
+  const next = { ...result.match, tray: [null, null, null], over: false, won: false };
+  const clear = result.clear;
+  const landed = placedPiece ? placedPiece.cells.map(([dr, dc]) => ({ r: row + dr, c: col + dc })) : [];
+  const fx: BoardFx = {
+    id: fxSeq++,
+    landed,
+    cleared: clear?.cells ?? [],
+    rows: clear?.rows ?? [],
+    cols: clear?.cols ?? [],
+    origin: centerOf(landed, { r: row, c: col }),
+    gained: result.gained,
+    combo: 0,
+    praise: null,
+    perfect: false,
+    shake: Boolean(clear && profile.settings.shake && (clear.bombs || clear.blasts)),
+    placedCells: placedPiece?.cells.length ?? 1,
+    special: clear?.blasts ? "blast" : clear?.bombs ? "bomb" : clear?.rockets ? "rocket" : null,
+    milestone: null,
+    newBest: false,
+    comboWarning: false,
+    fired: clear?.fired ?? [],
+    caption: null,
+  };
+  set({ match: next, fx, selected: null, tutorial: { ...tutorial, phase: "praise" } });
+  cheer(step.praise, { delayMs: 350 });
+  const lessonAt = tutorial.lesson;
+  const indexAt = tutorial.index;
+  window.setTimeout(() => {
+    const t = get().tutorial;
+    if (!t || t.lesson !== lessonAt || t.index !== indexAt) return;
+    const steps = LESSONS[t.lesson];
+    if (t.index + 1 < steps.length) {
+      set({ tutorial: { ...t, index: t.index + 1, phase: "play" }, match: stepMatch(steps[t.index + 1]!) });
+    } else {
+      audio.feelLevelComplete();
+      endTutorial(get, set, t.lesson, get().profile);
+    }
+  }, clear?.blasts || clear?.bombs || clear?.rockets ? 2100 : 1600);
+  return true;
+}
+
+function endTutorial(get: () => GameStore, set: (partial: Partial<GameStore>) => void, lesson: LessonId, profile: Profile): void {
+  const t = get().tutorial;
+  if (!t) return;
+  const tips = lesson === "arrows" ? ["rocketH", "rocketV"] : lesson === "bombs" ? ["bomb"] : lesson === "blast" ? ["blast"] : [];
+  const nextProfile: Profile = {
+    ...profile,
+    tutorialDone: true,
+    seenHowTo: true,
+    seenShapesIntro: true,
+    seenSpecialTips: [...new Set([...profile.seenSpecialTips, ...tips, `lesson:${lesson}`])],
+  };
+  set({
+    tutorial: null,
+    match: t.saved,
+    profile: nextProfile,
+    selected: null,
+    toast: lesson === "basics" ? "You’re ready! Have fun." : "Now you know! Back to your game.",
+  });
+  window.setTimeout(() => set({ toast: null }), 1800);
+  persistSoon(get);
 }
 
 /** Fresh milestone flags; `resume` keeps flags already earned in a saved run. */

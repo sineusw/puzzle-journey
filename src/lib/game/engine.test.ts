@@ -222,6 +222,53 @@ describe("puzzle journey engine", () => {
     assert.equal(result.match.board[6][7].t, "e");
   });
 
+  it("an arrow goes off as soon as it's placed, no full line needed", () => {
+    const board = emptyBoard();
+    board[0][2] = block("cyan");
+    board[5][2] = block("lime");
+    board[3][6] = block("pink");
+    const rocket = piece([[0, 0], [0, 1]], "amber");
+    rocket.special = "rocketV";
+    rocket.specialAt = 0;
+    const result = placePiece(matchWith(board, [rocket, null, null]), 0, 3, 2);
+    assert.equal(result.ok, true);
+    assert.ok(result.clear);
+    assert.equal(result.clear.rockets, 1);
+    for (let r = 0; r < SIZE; r++) assert.equal(result.match.board[r][2].t, "e");
+    assert.equal(result.match.board[3][3].t, "b"); // the rest of the piece stays
+    assert.equal(result.match.board[3][6].t, "b"); // other columns untouched
+    assert.ok(result.gained > 20);
+  });
+
+  it("a bomb placed in open space clears the 3x3 around it", () => {
+    const board = emptyBoard();
+    board[2][2] = block("cyan");
+    board[4][4] = block("lime");
+    board[5][5] = block("pink");
+    const bomb = piece([[0, 0]], "violet");
+    bomb.special = "bomb";
+    bomb.specialAt = 0;
+    const result = placePiece(matchWith(board, [bomb, null, null]), 0, 3, 3);
+    assert.equal(result.match.board[2][2].t, "e");
+    assert.equal(result.match.board[4][4].t, "e");
+    assert.equal(result.match.board[5][5].t, "b");
+  });
+
+  it("an arrow that completes a line still clears that line", () => {
+    const board = emptyBoard();
+    board[7] = filledRow("amber");
+    board[7][4] = { t: "e" };
+    board[2][4] = block("cyan");
+    const rocket = piece([[0, 0]], "amber");
+    rocket.special = "rocketV";
+    rocket.specialAt = 0;
+    const result = placePiece(matchWith(board, [rocket, null, null]), 0, 7, 4);
+    assert.equal(result.clear?.lines, 1);
+    assert.equal(result.clear?.rockets, 1);
+    assert.ok(result.match.board[7].every((c) => c.t === "e"));
+    assert.equal(result.match.board[2][4].t, "e");
+  });
+
   it("a vertical rocket clears its column", () => {
     const board = emptyBoard();
     board[7] = filledRow("amber");

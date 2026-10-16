@@ -4,6 +4,8 @@ import {
   checkOver,
   cloneBoard,
   cloneMatch,
+  detonateAt,
+  mergeClears,
   isEmpty,
   resolveClears,
   trayFits,
@@ -95,6 +97,7 @@ export function applyVisitorAction(
 ): { match: Match; clear: ClearInfo | null } | null {
   if (match.over || match.won) return null;
   const board = cloneBoard(match.board);
+  let boom: ClearInfo | null = null;
 
   if (action.kind === "move") {
     const [fr, fc] = action.from;
@@ -110,6 +113,8 @@ export function applyVisitorAction(
     const cell = board[r][c]!;
     if (cell.t !== "b" && cell.t !== "s") return null;
     board[r][c] = { ...cell, sp: action.special };
+    // Luna's magic block goes off right away, like any special block.
+    boom = detonateAt(board, r, c);
   } else if (action.kind === "build") {
     const [r, c] = action.at;
     if (!inBounds(r, c) || !isEmpty(board[r][c]!)) return null;
@@ -155,6 +160,7 @@ export function applyVisitorAction(
 
   const settled = settle(match, board);
   if (!settled) return null;
+  if (boom) settled.clear = mergeClears(boom, settled.clear);
   const next = cloneMatch(match);
   next.board = settled.board;
   if (settled.clear) {

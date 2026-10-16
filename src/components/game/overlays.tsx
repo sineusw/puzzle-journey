@@ -35,7 +35,8 @@ import { cheer } from "@/lib/game/voice";
 import { nameFor, useBoard } from "@/lib/game/leaderboard";
 import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
 import { SpecialFace } from "./tile-art";
-import { ShapeGallery, SpecialDemo } from "./explainers";
+import { ShapeGallery, SPECIAL_WORDS, SpecialDemo } from "./explainers";
+import { lessonForUnlock } from "@/lib/game/tutorial";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
@@ -419,6 +420,7 @@ function VisitorDebug() {
 
 function HowSheet() {
   const setPanel = useGame((s) => s.setPanel);
+  const startTutorial = useGame((s) => s.startTutorial);
   const start = useGame((s) => s.start);
   return (
     <div className="pj-sheet text-left">
@@ -436,21 +438,26 @@ function HowSheet() {
       </p>
       <h3 className="pj-how-h">Special blocks (Adventure)</h3>
       <SpecialDemo kind="rocketV" />
-      <ul className="pj-how-legend">
-        <li><span className="pj-how-ico"><SpecialFace kind="rocketV" /></span><span><b>↕ arrow:</b> wipes its whole column</span></li>
-        <li><span className="pj-how-ico"><SpecialFace kind="rocketH" /></span><span><b>↔ arrow:</b> wipes its whole row</span></li>
-        <li><span className="pj-how-ico"><SpecialFace kind="bomb" /></span><span><b>Bomb:</b> clears the blocks around it</span></li>
-        <li><span className="pj-how-ico"><SpecialFace kind="blast" /></span><span><b>Golden:</b> clears the whole board</span></li>
+      <p className="pj-how-p">Special blocks go off <b>the moment you put them down</b>.</p>
+      <ul className="pj-how-legend is-wide">
+        {(["rocketV", "rocketH", "bomb", "blast"] as const).map((k) => (
+          <li key={k}>
+            <span className="pj-how-ico"><SpecialFace kind={k} /></span>
+            <span><b>{SPECIAL_WORDS[k].name}:</b> {SPECIAL_WORDS[k].does}</span>
+          </li>
+        ))}
       </ul>
-      <p className="pj-how-p">Specials go off only when a row or column they’re in clears. Placing them does nothing on its own.</p>
       <h3 className="pj-how-h">Ways to play</h3>
       <p className="pj-how-p">
         <b>Adventure</b> adds one new special block or Island Visitor at a time. <b>Classic</b> is plain-block levels. <b>Sandbox</b> is endless,
         for your high score. After each run you get a Puzzle IQ and can win awards on the Ranks tab.
       </p>
+      <button type="button" className="pj-btn pj-btn-ghost mt-5 w-full" data-testid="replay-tutorial" onClick={() => startTutorial("basics")}>
+        Play the tutorial
+      </button>
       <button
         type="button"
-        className="pj-btn pj-btn-primary mt-5 w-full"
+        className="pj-btn pj-btn-primary mt-2 w-full"
         data-testid="play-start"
         onClick={() => {
           start();
@@ -720,6 +727,8 @@ function WonSheet() {
 function IntroSheet() {
   const unlock = useGame((s) => s.introUnlock);
   const setPanel = useGame((s) => s.setPanel);
+  const startTutorial = useGame((s) => s.startTutorial);
+  const lesson = lessonForUnlock(unlock);
   if (!unlock) return null;
   const info = UNLOCKS[unlock];
   return (
@@ -743,12 +752,23 @@ function IntroSheet() {
       <p className="mx-auto mt-2 max-w-[30ch] text-sm text-cream/85">{info.blurb}</p>
       {unlock === "arrows" ? (
         <p className="mx-auto mt-2 max-w-[30ch] text-sm text-cream/85">
-          Look at the arrow: <b>↕</b> wipes the column, <b>↔</b> wipes the row. It only fires when a line through it clears.
+          <b>↕</b> zaps up and down. <b>↔</b> zaps side to side.
         </p>
       ) : null}
-      <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
-        Let’s go
-      </button>
+      {lesson ? (
+        <>
+          <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-try" onClick={() => startTutorial(lesson)}>
+            Try it!
+          </button>
+          <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
+            Skip
+          </button>
+        </>
+      ) : (
+        <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" data-testid="intro-go" onClick={() => setPanel(null)}>
+          Let’s go
+        </button>
+      )}
     </div>
   );
 }

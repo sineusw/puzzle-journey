@@ -363,13 +363,13 @@ function pickColor(rng: () => number): ColorId {
 function rollSpecial(rng: () => number, features: Features): SpecialId | null {
   const roll = rng();
   const has = (sp: BlockSpecial) => features.specials.includes(sp);
-  if (roll > 0.94 && has("blast")) return "blast";
-  if (roll > 0.8 && has("bomb")) return "bomb";
-  if (roll > 0.66 && (has("rocketH") || has("rocketV"))) {
+  if (roll > 0.985 && has("blast")) return "blast";
+  if (roll > 0.93 && has("bomb")) return "bomb";
+  if (roll > 0.85 && (has("rocketH") || has("rocketV"))) {
     const dirs = (["rocketH", "rocketV"] as const).filter(has);
     return dirs[Math.floor(rng() * dirs.length)]!;
   }
-  if (roll > 0.56 && features.stones) return "stone";
+  if (roll > 0.75 && features.stones) return "stone";
   return null;
 }
 
@@ -606,6 +606,86 @@ function fireSpecial(board: Cell[][], r: number, c: number, sp: Exclude<SpecialI
   }
 }
 
+/**
+ * A special block goes off the moment it's placed: an arrow zaps its whole
+ * row or column, a bomb clears the 3×3 around it, a golden block clears the
+ * board. Any specials it hits go off too.
+ */
+function detonatePlaced(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  const sp = piece.special;
+  if (!sp || sp === "stone" || piece.specialAt === null) return null;
+  const at = piece.cells[piece.specialAt];
+  if (!at) return null;
+  const r = row + at[0];
+  const c = col + at[1];
+  const here = board[r]?.[c];
+  if (!here || (here.t !== "b" && here.t !== "s") || here.sp !== sp) return null;
+  const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], fired: [], extra: [] };
+  const done = new Set<string>([`${r},${c},${sp}`]);
+  fireSpecial(board, r, c, sp, acc);
+  while (acc.queued.length) {
+    const next = acc.queued.shift()!;
+    const key = `${next.r},${next.c},${next.sp}`;
+    if (done.has(key)) continue;
+    done.add(key);
+    fireSpecial(board, next.r, next.c, next.sp, acc);
+  }
+  const seen = new Set<string>();
+  const cells = acc.extra.filter(({ r: rr, c: cc }) => (seen.has(`${rr},${cc}`) ? false : (seen.add(`${rr},${cc}`), true)));
+  return {
+    rows: [],
+    cols: [],
+    cells,
+    lines: 0,
+    intersections: 0,
+    stars: 0,
+    golds: 0,
+    waves: 1,
+    bombs: acc.bombs,
+    rockets: acc.rockets,
+    blasts: acc.blasts,
+    fired: acc.fired,
+  };
+}
+
+/** Set off the special block sitting at (r, c), e.g. after Luna's magic. */
+export function detonateAt(board: Cell[][], r: number, c: number): ClearInfo | null {
+  const cell = board[r]?.[c];
+  if (!cell || (cell.t !== "b" && cell.t !== "s") || !cell.sp) return null;
+  return detonatePlaced(board, { id: "x", shape: "o1", cells: [[0, 0]], color: cell.c, starAt: null, gold: false, special: cell.sp, specialAt: 0 }, r, c);
+}
+
+export function mergeClears(a: ClearInfo | null, b: ClearInfo | null): ClearInfo | null {
+  if (!a) return b;
+  if (!b) return a;
+  const seen = new Set(a.cells.map(({ r, c }) => `${r},${c}`));
+  return {
+    rows: [...b.rows],
+    cols: [...b.cols],
+    cells: [...a.cells, ...b.cells.filter(({ r, c }) => !seen.has(`${r},${c}`))],
+    lines: a.lines + b.lines,
+    intersections: a.intersections + b.intersections,
+    stars: a.stars + b.stars,
+    golds: a.golds + b.golds,
+    waves: a.waves + b.waves,
+    bombs: a.bombs + b.bombs,
+    rockets: a.rockets + b.rockets,
+    blasts: a.blasts + b.blasts,
+    fired: [...a.fired, ...b.fired],
+  };
+}
+
+/** Put a piece down: its special goes off, then full lines clear. */
+function settlePiece(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  stampPiece(board, piece, row, col);
+  // Full lines first (a special inside one goes off with it)…
+  const lines = resolveClears(board);
+  const at = piece.specialAt !== null ? piece.cells[piece.specialAt] : undefined;
+  const alreadyFired = Boolean(at && lines?.fired.some((f) => f.r === row + at[0] && f.c === col + at[1]));
+  // …then a special that's still sitting there goes off right away.
+  return alreadyFired ? lines : mergeClears(lines, detonatePlaced(board, piece, row, col));
+}
+
 export function resolveClears(board: Cell[][]): ClearInfo | null {
   const merged: ClearInfo = {
     rows: [],
@@ -678,8 +758,7 @@ export function previewClear(
 ): ClearInfo | null {
   if (!canPlace(board, piece.cells, row, col)) return null;
   const next = cloneBoard(board);
-  stampPiece(next, piece, row, col);
-  return resolveClears(next);
+  return settlePiece(next, piece, row, col);
 }
 
 function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): void {
@@ -820,9 +899,9 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   // When specials are unlocked, make sure they actually show up now and then:
   // half the sets without one get one of the allowed kinds.
   const anySpecial = f.specials.length > 0 || f.stones;
-  if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.5) {
+  if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
     const i = Math.floor(rng() * pieces.length);
-    const special = rollSpecial(() => 0.57 + rng() * 0.43, f);
+    const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
     if (special) pieces[i] = { ...pieces[i]!, special, specialAt: 0 };
   }
   match.tray = pieces;
@@ -925,8 +1004,7 @@ export function placePiece(
   }
 
   const next = cloneMatch(match);
-  stampPiece(next.board, piece, row, col);
-  const clear = resolveClears(next.board);
+  const clear = settlePiece(next.board, piece, row, col);
   next.tray[trayIndex] = null;
   next.moves += 1;
 
@@ -950,7 +1028,8 @@ export function placePiece(
   }
   next.bestCombo = Math.max(next.bestCombo, next.combo);
 
-  const perfect = Boolean(clear) && boardIsEmpty(next.board);
+  // A golden block empties the board by itself; that isn't a "perfect" clear.
+  const perfect = Boolean(clear) && !clear?.blasts && boardIsEmpty(next.board);
   if (perfect) next.perfects += 1;
   const comboForScore = Math.max(1, next.combo);
   const gained = scoreFor(piece, clear, comboForScore, perfect);

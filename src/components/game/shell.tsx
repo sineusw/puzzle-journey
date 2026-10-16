@@ -9,6 +9,7 @@ import { NightIsle } from "./background";
 import { GameIcon } from "./icons";
 import { Overlays, PowerBar, TabScreens } from "./overlays";
 import { PlayArea } from "./play-area";
+import { TutorialCoach } from "./tutorial-coach";
 import { VisitorDirector } from "./visitors/director";
 
 export function GameShell() {
@@ -173,10 +174,15 @@ function TitleBar() {
   const combo = useGame((s) => s.match.combo);
   const shield = useGame((s) => s.match.shield);
   const sandboxBest = useGame((s) => s.profile.sandboxBest);
+  const tutorial = useGame((s) => s.tutorial !== null);
   const goalPct = goal ? Math.min(100, Math.round((goalProgress / goal.value) * 100)) : 0;
   return (
     <div className="pj-title">
       <Logo />
+      {tutorial ? (
+        <TutorialCoach />
+      ) : (
+        <>
       <div className="pj-mode-label" data-testid="mode-label">{modeLabel({ mode, levelId })}</div>
       {goal ? (
         <div className="pj-objective" aria-label={`${goalLabel(goal)}. ${goalPct}% complete.`}>
@@ -197,6 +203,8 @@ function TitleBar() {
           {combo > 1 ? `  ·  combo ${combo}` : ""}
           {shield > 0 ? `  ·  frost ${shield}` : ""}
         </div>
+      )}
+        </>
       )}
     </div>
   );

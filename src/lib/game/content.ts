@@ -43,14 +43,14 @@ export type UnlockInfo = {
 };
 
 export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
-  stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Clear a row or column with a star gem in it for bonus points.", art: "/art/tiles/star-blue.webp" },
-  arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Fill a row or column that has an arrow block in it. When that line clears, the arrow fires and wipes the line it points along too.", art: "/art/tiles/cyan.webp", special: "rocketV" },
-  bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Fill a row or column that has a bomb block in it. When that line clears, the bomb also clears every block around it.", art: "/art/tiles/violet.webp", special: "bomb" },
+  stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Clear a line that has a star in it and you get extra points!", art: "/art/tiles/star-blue.webp" },
+  arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Put an arrow block down and ZAP! Every block in the line it points along disappears.", art: "/art/tiles/cyan.webp", special: "rocketV" },
+  bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Put a bomb block down and BOOM! The blocks all around it disappear.", art: "/art/tiles/violet.webp", special: "bomb" },
   milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.png" },
-  stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones fill a gap but take two clears to break.", art: "/art/tiles/stone.webp" },
+  stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones are tough. Clear a line through a stone two times to break it.", art: "/art/tiles/stone.webp" },
   kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.png" },
-  luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Enchants a block into an arrow or a bomb.", art: "/characters/luna-3d.png" },
-  blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "The rare golden block. Clear it and the whole board goes.", art: "/art/tiles/amber.webp", special: "blast" },
+  luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Waves her wand and turns a block into an arrow or a bomb that goes off right away!", art: "/characters/luna-3d.png" },
+  blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "Super rare! Put the golden block down and every block on the board disappears.", art: "/art/tiles/amber.webp", special: "blast" },
   nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.png" },
   pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb that changes a block's color.", art: "/characters/pip-3d.png" },
 };

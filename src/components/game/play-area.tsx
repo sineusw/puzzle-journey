@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as PE } from "react";
 import { bounds, canPlaceAnywhere, COMBO_WINDOW, placeFromCell, previewClear, SIZE, snapPlace, UNUSUAL_SHAPES, type Cell, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
+import { LESSONS, targetCells } from "@/lib/game/tutorial";
 import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize } from "./block";
 import { BoardFxRunner } from "./board-fx";
 import { SideRails } from "./overlays";
+import { SPECIAL_WORDS } from "./explainers";
 import { VisitorLayer } from "./visitors/visitor-layer";
 
 /** Tray pieces are drawn at this cell size before they're picked up. */
@@ -55,6 +57,12 @@ export function PlayArea() {
   const board = useGame((s) => s.match.board);
   const tray = useGame((s) => s.match.tray);
   const seenShapes = useGame((s) => s.profile.seenShapes);
+  const tutorial = useGame((s) => s.tutorial);
+  const guide = useMemo(() => {
+    if (!tutorial || tutorial.phase !== "play") return null;
+    const step = LESSONS[tutorial.lesson][tutorial.index];
+    return step ? new Set(targetCells(step).map(({ r, c }) => `${r}-${c}`)) : null;
+  }, [tutorial]);
   const comboHeat = useGame((s) => (s.match.combo >= 5 ? "hot" : s.match.combo >= 2 ? "warm" : undefined));
   const over = useGame((s) => s.match.over);
   const selected = useGame((s) => s.selected);
@@ -238,6 +246,8 @@ export function PlayArea() {
       let placed = false;
       if (d.moved && target && e.type !== "pointercancel") {
         skipClick.current = true;
+        // Only swallow the click that follows this drag; touch drags often send none.
+        window.setTimeout(() => (skipClick.current = false), 350);
         placed = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
       } else if (d.moved) {
         audio.feelNope();
@@ -315,6 +325,16 @@ export function PlayArea() {
       return;
     }
     const store = useGame.getState();
+    // Tutorial: tapping a glowing square drops the block right there.
+    const tut = store.tutorial;
+    if (tut && tut.phase === "play") {
+      const step = LESSONS[tut.lesson][tut.index];
+      if (step && targetCells(step).some((t) => t.r === r && t.c === c)) {
+        const slot = s.tray.findIndex((p) => p);
+        if (slot >= 0) store.tryPlace(slot, step.at.r, step.at.c);
+      }
+      return;
+    }
     if (s.targeting) {
       store.usePowerOnCell(r, c);
       return;
@@ -342,6 +362,7 @@ export function PlayArea() {
             preview={preview}
             targeting={Boolean(targeting)}
             hidden={visitorHide}
+            guide={guide}
             onClick={onGridClick}
           />
         </div>
@@ -349,8 +370,8 @@ export function PlayArea() {
       </div>
 
       <div className="pj-tray-wrap">
-        <TrayTip tray={tray} />
-        <div className="pj-tray" data-testid="tray">
+        {tutorial ? null : <TrayTip tray={tray} />}
+        <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}`} data-testid="tray">
           {tray.map((piece, i) => (
             <TraySlot
               key={piece?.id ?? `empty-${i}`}
@@ -385,7 +406,8 @@ export function PlayArea() {
 const ComboMeter = memo(function ComboMeter() {
   const combo = useGame((s) => s.match.combo);
   const since = useGame((s) => s.match.sinceClear);
-  if (combo < 1) return null;
+  const tutorial = useGame((s) => s.tutorial !== null);
+  if (combo < 1 || tutorial) return null;
   const left = Math.max(0, COMBO_WINDOW - since);
   return (
     <div className={`pj-combo-meter ${left <= 1 ? "is-last" : ""}`} data-testid="combo-meter" aria-label={`Combo ${combo}. ${left} moves left to keep it.`}>
@@ -430,8 +452,10 @@ const BoardGrid = memo(function BoardGrid({
   preview,
   targeting,
   hidden,
+  guide,
   onClick,
 }: {
+  guide: Set<string> | null;
   gridRef: React.RefObject<HTMLDivElement | null>;
   board: Cell[][];
   preview: Preview | null;
@@ -455,6 +479,7 @@ const BoardGrid = memo(function BoardGrid({
               shadow={preview?.shadow.has(key) ? preview.color : null}
               tint={preview?.tint.has(key) && cell.t !== "e" ? tintUrl : null}
               target={targeting}
+              guide={Boolean(guide?.has(key))}
               hidden={hide.has(key)}
             />
           );
@@ -471,11 +496,12 @@ type CellProps = {
   shadow: Piece["color"] | null;
   tint: string | null;
   target: boolean;
+  guide: boolean;
   hidden: boolean;
 };
 
 const BoardCell = memo(
-  function BoardCell({ k, cell, shadow, tint, target, hidden }: CellProps) {
+  function BoardCell({ k, cell, shadow, tint, target, guide, hidden }: CellProps) {
     const [r, c] = k.split("-").map(Number) as [number, number];
     const col = colorOf(cell);
     const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
@@ -486,7 +512,7 @@ const BoardCell = memo(
         type="button"
         data-cell={k}
         data-testid={`cell-${k}`}
-        className={`pj-well${target ? " is-target" : ""}${tint ? " is-clear" : ""}`}
+        className={`pj-well${target ? " is-target" : ""}${tint ? " is-clear" : ""}${guide ? " is-guide" : ""}`}
         aria-label={`Row ${r + 1} column ${c + 1}`}
       >
         {col && !hidden ? (
@@ -506,17 +532,14 @@ const BoardCell = memo(
       </button>
     );
   },
-  (a, b) => a.face === b.face && a.shadow === b.shadow && a.tint === b.tint && a.target === b.target && a.hidden === b.hidden && a.k === b.k,
+  (a, b) => a.face === b.face && a.shadow === b.shadow && a.tint === b.tint && a.target === b.target && a.guide === b.guide && a.hidden === b.hidden && a.k === b.k,
 );
 
 /* ------------------------------------------------------------------- tray */
 
-const TIP_TEXT: Record<string, { title: string; body: string }> = {
-  rocketV: { title: "Arrow block ↕", body: "When a row or column through it clears, the arrow also wipes its whole column." },
-  rocketH: { title: "Arrow block ↔", body: "When a row or column through it clears, the arrow also wipes its whole row." },
-  bomb: { title: "Bomb block", body: "When a line through it clears, it also clears every block around it." },
-  blast: { title: "Golden block", body: "When a line through it clears, the whole board clears." },
-};
+const TIP_TEXT: Record<string, { title: string; body: string }> = Object.fromEntries(
+  Object.entries(SPECIAL_WORDS).map(([k, w]) => [k, { title: w.name, body: w.does }]),
+);
 
 /** First time a special block shows up in the tray, say what it does. */
 const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
