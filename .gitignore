@@ -4,3 +4,6 @@ node_modules/
 .env
 .env.*
 __pycache__/
+
+# Vercel build output
+.vercel
