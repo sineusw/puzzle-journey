@@ -82,35 +82,39 @@ const BASICS: TutorialStep[] = [
 
 const ARROWS: TutorialStep[] = [
   {
-    say: "This arrow block goes ZAP!",
-    hint: "Put it down and every block in its up-and-down line disappears.",
-    praise: "ZAP! The whole line is gone.",
+    say: "Arrow blocks go ZAP! Drop it anywhere.",
+    hint: "No full row needed. It clears every block in its up-and-down line.",
+    praise: "ZAP! Its whole line is gone.",
     board: board((put) => {
-      for (const r of [0, 1, 2, 5, 6, 7]) put(r, 4);
-      put(2, 1, "lime");
-      put(6, 6, "pink");
+      put(0, 3, "pink");
+      put(2, 3, "lime");
+      put(6, 3, "violet");
+      put(1, 6, "amber");
+      put(5, 0, "cyan");
     }),
     piece: piece("o1", [[0, 0]], "azure", "rocketV"),
-    at: { r: 4, c: 4 },
+    at: { r: 4, c: 3 },
   },
   {
     say: "This arrow points side to side.",
-    hint: "Put it down and every block in its side-to-side line disappears.",
+    hint: "Drop it anywhere. It clears every block in its side-to-side line.",
     praise: "ZAP! Side to side!",
     board: board((put) => {
-      for (const c of [0, 1, 2, 5, 6, 7]) put(3, c);
-      put(0, 2, "violet");
-      put(6, 5, "lime");
+      put(5, 0, "orange");
+      put(5, 6, "pink");
+      put(5, 7, "lime");
+      put(1, 2, "violet");
+      put(7, 4, "cyan");
     }),
     piece: piece("o1", [[0, 0]], "azure", "rocketH"),
-    at: { r: 3, c: 3 },
+    at: { r: 5, c: 3 },
   },
 ];
 
 const BOMBS: TutorialStep[] = [
   {
-    say: "This bomb block goes BOOM!",
-    hint: "Put it down and the blocks all around it disappear.",
+    say: "Bomb blocks go BOOM! Drop it anywhere.",
+    hint: "No full row needed. The blocks all around it disappear.",
     praise: "BOOM! All cleared around it.",
     board: board((put) => {
       for (const [r, c] of [[2, 2], [2, 3], [2, 4], [3, 2], [3, 4], [4, 2], [4, 3], [4, 4], [7, 7], [0, 0]] as const) put(r, c);

@@ -18,10 +18,11 @@ const GAP = { r: 2, c: 2 };
 function startCells(kind: DemoKind): Set<string> {
   const on = new Set<string>();
   const add = (r: number, c: number) => on.add(`${r}-${c}`);
-  if (kind === "rocketV") for (const [r, c] of [[0, 2], [1, 2], [3, 2], [4, 2], [0, 0], [4, 4], [3, 0], [1, 4]]) add(r!, c!);
-  if (kind === "rocketH") for (const [r, c] of [[2, 0], [2, 1], [2, 3], [2, 4], [0, 0], [4, 4], [0, 3], [4, 1]]) add(r!, c!);
-  if (kind === "bomb") for (const [r, c] of [[1, 1], [1, 2], [1, 3], [2, 1], [3, 2], [3, 3], [0, 4], [4, 0], [4, 4]]) add(r!, c!);
-  if (kind === "blast") for (const [r, c] of [[0, 0], [0, 3], [1, 1], [1, 4], [3, 0], [3, 2], [4, 1], [4, 3], [2, 4]]) add(r!, c!);
+  // A few loose blocks, nowhere near a full line: specials don't need one.
+  if (kind === "rocketV") for (const [r, c] of [[0, 2], [4, 2], [1, 4], [3, 0]]) add(r!, c!);
+  if (kind === "rocketH") for (const [r, c] of [[2, 0], [2, 4], [0, 1], [4, 3]]) add(r!, c!);
+  if (kind === "bomb") for (const [r, c] of [[1, 1], [1, 3], [3, 2], [0, 4], [4, 0]]) add(r!, c!);
+  if (kind === "blast") for (const [r, c] of [[0, 0], [1, 3], [3, 1], [4, 4], [2, 4]]) add(r!, c!);
   return on;
 }
 
@@ -41,18 +42,18 @@ function effectCells(kind: DemoKind): Set<string> {
 export const SPECIAL_WORDS: Record<DemoKind, { name: string; does: string; steps: [string, string, string] }> = {
   rocketV: {
     name: "Up-and-down arrow",
-    does: "Put it down and ZAP! Every block in its line, top to bottom, disappears.",
-    steps: ["Put the arrow block down…", "ZAP! ↕", "The whole up-and-down line is gone!"],
+    does: "Drop it anywhere, no full row needed. ZAP! Every block in its line, top to bottom, disappears.",
+    steps: ["Drop it anywhere…", "ZAP! ↕", "Its whole up-and-down line is gone!"],
   },
   rocketH: {
     name: "Side-to-side arrow",
-    does: "Put it down and ZAP! Every block in its line, left to right, disappears.",
-    steps: ["Put the arrow block down…", "ZAP! ↔", "The whole side-to-side line is gone!"],
+    does: "Drop it anywhere, no full row needed. ZAP! Every block in its line, left to right, disappears.",
+    steps: ["Drop it anywhere…", "ZAP! ↔", "Its whole side-to-side line is gone!"],
   },
   bomb: {
     name: "Bomb",
-    does: "Put it down and BOOM! The blocks all around it disappear.",
-    steps: ["Put the bomb block down…", "BOOM!", "Everything around it is gone!"],
+    does: "Drop it anywhere, no full row needed. BOOM! The blocks all around it disappear.",
+    steps: ["Drop it anywhere…", "BOOM!", "Everything around it is gone!"],
   },
   blast: {
     name: "Golden block",

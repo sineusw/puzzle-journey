@@ -269,6 +269,26 @@ describe("puzzle journey engine", () => {
     assert.equal(result.match.board[2][4].t, "e");
   });
 
+  it("an arrow left on the board goes off on the next move, no full line needed", () => {
+    const board = emptyBoard();
+    board[2][5] = { t: "b", c: "cyan", sp: "rocketH" };
+    board[2][0] = block("lime");
+    board[6][6] = block("pink");
+    const plain = piece([[0, 0]], "amber");
+    const result = placePiece(matchWith(board, [plain, null, null]), 0, 7, 0);
+    assert.equal(result.clear?.rockets, 1);
+    assert.ok(result.match.board[2].every((c) => c.t === "e"));
+    assert.equal(result.match.board[6][6].t, "b");
+  });
+
+  it("an old save's waiting specials load as plain blocks", () => {
+    const m = newEndlessMatch();
+    m.board[3][3] = { t: "b", c: "cyan", sp: "rocketV" };
+    const clean = sanitizeMatch(m);
+    const cell = clean.board[3][3];
+    assert.ok(cell.t === "b" && !cell.sp);
+  });
+
   it("a vertical rocket clears its column", () => {
     const board = emptyBoard();
     board[7] = filledRow("amber");

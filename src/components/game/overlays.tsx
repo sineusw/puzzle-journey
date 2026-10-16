@@ -486,6 +486,14 @@ function HowSheet() {
       >
         Play the tutorial
       </button>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" className="pj-btn pj-btn-ghost w-full" data-testid="practice-arrows" onClick={() => startTutorial("arrows")}>
+          Try arrows
+        </button>
+        <button type="button" className="pj-btn pj-btn-ghost w-full" data-testid="practice-bombs" onClick={() => startTutorial("bombs")}>
+          Try bombs
+        </button>
+      </div>
       <button
         type="button"
         className="pj-btn pj-btn-primary mt-2 w-full"

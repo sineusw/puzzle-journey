@@ -239,7 +239,8 @@ export function sanitizeMatch(match: Match): Match {
     sinceClear: match.sinceClear ?? 0,
     perfects: match.perfects ?? 0,
     features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
-    board: cloneBoard(match.board ?? emptyBoard()),
+    // Special blocks never wait on the board: an old save's leftovers turn plain.
+    board: cloneBoard(match.board ?? emptyBoard()).map((row) => row.map((cell) => ((cell.t === "b" || cell.t === "s") && cell.sp ? { ...cell, sp: undefined } : cell))),
     tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
     goal: match.goal ? { ...match.goal } : null,
   };
@@ -460,10 +461,10 @@ export function openingBoard(): Cell[][] {
   put(2, 3, blk("lime"));
   put(2, 5, star("azure"));
   put(2, 7, blk("violet"));
-  put(3, 5, { t: "b", c: "amber", sp: "rocketV" });
+  put(3, 5, blk("amber"));
   put(3, 6, blk("amber"));
   put(3, 7, blk("violet"));
-  put(4, 3, { t: "b", c: "pink", sp: "bomb" });
+  put(4, 3, blk("pink"));
   put(4, 4, blk("pink"));
   put(4, 6, blk("amber"));
   put(4, 7, blk("amber"));
@@ -683,7 +684,36 @@ function settlePiece(board: Cell[][], piece: Piece, row: number, col: number): C
   const at = piece.specialAt !== null ? piece.cells[piece.specialAt] : undefined;
   const alreadyFired = Boolean(at && lines?.fired.some((f) => f.r === row + at[0] && f.c === col + at[1]));
   // …then a special that's still sitting there goes off right away.
-  return alreadyFired ? lines : mergeClears(lines, detonatePlaced(board, piece, row, col));
+  let clear = alreadyFired ? lines : mergeClears(lines, detonatePlaced(board, piece, row, col));
+  // Nothing ever waits for a full line: any other special left on the board goes off too.
+  clear = mergeClears(clear, fireDormant(board));
+  return clear;
+}
+
+/** Set off every special block still sitting on the board. */
+function fireDormant(board: Cell[][]): ClearInfo | null {
+  let out: ClearInfo | null = null;
+  for (let guard = 0; guard < SIZE * SIZE; guard++) {
+    let found: { r: number; c: number } | null = null;
+    for (let r = 0; r < SIZE && !found; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = board[r]![c]!;
+        if ((cell.t === "b" || cell.t === "s") && cell.sp) {
+          found = { r, c };
+          break;
+        }
+      }
+    }
+    if (!found) break;
+    const boom = detonateAt(board, found.r, found.c);
+    if (!boom) {
+      const cell = board[found.r]![found.c]!;
+      if (cell.t === "b" || cell.t === "s") board[found.r]![found.c] = { ...cell, sp: undefined };
+      continue;
+    }
+    out = mergeClears(out, boom);
+  }
+  return out;
 }
 
 export function resolveClears(board: Cell[][]): ClearInfo | null {
