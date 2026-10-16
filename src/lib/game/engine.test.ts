@@ -17,6 +17,7 @@ import {
   SNAP_RADIUS,
   COMBO_WINDOW,
   PERFECT_BONUS,
+  STAR_BONUS,
   praiseFor,
   setIsPlayable,
   refillIfNeeded,
@@ -287,6 +288,27 @@ describe("puzzle journey engine", () => {
     const clean = sanitizeMatch(m);
     const cell = clean.board[3][3];
     assert.ok(cell.t === "b" && !cell.sp);
+  });
+
+  it("a star block pays its bonus as soon as it's dropped", () => {
+    const board = emptyBoard();
+    const star = piece([[0, 0], [0, 1]], "amber");
+    star.starAt = 0;
+    const result = placePiece(matchWith(board, [star, null, null]), 0, 3, 3);
+    assert.equal(result.gained, 20 + STAR_BONUS);
+    assert.equal(result.star?.bonus, STAR_BONUS);
+    assert.equal(result.match.board[3][3].t, "b"); // now a plain block
+  });
+
+  it("a stone cracks when blocks next to it clear, no line through it needed", () => {
+    const board = emptyBoard();
+    board[7] = filledRow("pink");
+    board[7][0] = { t: "e" };
+    board[6][3] = { t: "k", hp: 2 };
+    const one = piece([[0, 0]], "amber");
+    const result = placePiece(matchWith(board, [one, null, null]), 0, 7, 0);
+    const stone = result.match.board[6][3];
+    assert.ok(stone.t === "k" && stone.hp === 1);
   });
 
   it("a vertical rocket clears its column", () => {

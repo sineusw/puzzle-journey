@@ -43,11 +43,11 @@ export type UnlockInfo = {
 };
 
 export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
-  stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Clear a line that has a star in it and you get extra points!", art: "/art/tiles/star-blue.webp" },
+  stars: { id: "stars", kind: "block", name: "Star gems", blurb: "Drop a star block anywhere and get bonus points right away. No full row needed!", art: "/art/tiles/star-blue.webp" },
   arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Drop an arrow block anywhere, no full row needed. ZAP! Every block in the line it points along disappears.", art: "/art/tiles/cyan.webp", special: "rocketV" },
   bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Drop a bomb block anywhere, no full row needed. BOOM! The blocks all around it disappear.", art: "/art/tiles/violet.webp", special: "bomb" },
   milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.png" },
-  stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones are tough. Clear a line through a stone two times to break it.", art: "/art/tiles/stone.webp" },
+  stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones are tough. Clear blocks right next to a stone two times and it breaks. No full row needed!", art: "/art/tiles/stone.webp" },
   kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.png" },
   luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Waves her wand and turns a block into an arrow or a bomb that goes off right away!", art: "/characters/luna-3d.png" },
   blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "Super rare! Put the golden block down and every block on the board disappears.", art: "/art/tiles/amber.webp", special: "blast" },

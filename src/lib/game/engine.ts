@@ -130,6 +130,8 @@ export type PlaceResult = {
   coins: number;
   /** The clear emptied the whole board. */
   perfect: boolean;
+  /** A star block that paid its bonus on this drop. */
+  star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
 
 /**
@@ -140,6 +142,9 @@ export const COMBO_WINDOW = 3;
 
 /** Bonus for emptying the whole board, before the combo multiplier. */
 export const PERFECT_BONUS = 300;
+/** Points for dropping a star block (gold stars are worth more). */
+export const STAR_BONUS = 50;
+export const STAR_BONUS_GOLD = 200;
 
 type Shape = {
   id: string;
@@ -687,7 +692,33 @@ function settlePiece(board: Cell[][], piece: Piece, row: number, col: number): C
   let clear = alreadyFired ? lines : mergeClears(lines, detonatePlaced(board, piece, row, col));
   // Nothing ever waits for a full line: any other special left on the board goes off too.
   clear = mergeClears(clear, fireDormant(board));
+  // Stones crack when anything right next to them clears (two cracks break one).
+  clear = mergeClears(clear, crackStonesNear(board, clear));
   return clear;
+}
+
+/** Each stone touching a cleared cell takes one hit (once per move). */
+function crackStonesNear(board: Cell[][], clear: ClearInfo | null): ClearInfo | null {
+  if (!clear || !clear.cells.length) return null;
+  const gone = new Set(clear.cells.map(({ r, c }) => `${r},${c}`));
+  const hit = new Set<string>();
+  const cells: ClearInfo["cells"] = [];
+  for (const { r, c } of clear.cells) {
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const rr = r + dr;
+      const cc = c + dc;
+      const key = `${rr},${cc}`;
+      if (rr < 0 || cc < 0 || rr >= SIZE || cc >= SIZE || hit.has(key) || gone.has(key)) continue;
+      const cell = board[rr]![cc]!;
+      if (cell.t !== "k" || isUnbreakable(cell)) continue;
+      hit.add(key);
+      const before = { ...cell };
+      peelCell(board, rr, cc);
+      if (board[rr]![cc]!.t === "e") cells.push({ r: rr, c: cc, cell: before });
+    }
+  }
+  if (!cells.length) return null;
+  return { rows: [], cols: [], cells, lines: 0, intersections: 0, stars: 0, golds: 0, waves: 0, bombs: 0, rockets: 0, blasts: 0, fired: [] };
 }
 
 /** Set off every special block still sitting on the board. */
@@ -1034,7 +1065,10 @@ export function placePiece(
   }
 
   const next = cloneMatch(match);
-  const clear = settlePiece(next.board, piece, row, col);
+  // A star block pays its bonus the moment it's dropped, then is a plain block.
+  const starBonus = piece.starAt !== null ? (piece.gold ? STAR_BONUS_GOLD : STAR_BONUS) : 0;
+  const placed = starBonus ? { ...piece, starAt: null, gold: false } : piece;
+  const clear = settlePiece(next.board, placed, row, col);
   next.tray[trayIndex] = null;
   next.moves += 1;
 
@@ -1062,7 +1096,7 @@ export function placePiece(
   const perfect = Boolean(clear) && !clear?.blasts && boardIsEmpty(next.board);
   if (perfect) next.perfects += 1;
   const comboForScore = Math.max(1, next.combo);
-  const gained = scoreFor(piece, clear, comboForScore, perfect);
+  const gained = scoreFor(piece, clear, comboForScore, perfect) + starBonus;
   next.score += gained;
   updateGoal(next);
   refillIfNeeded(next);
@@ -1076,6 +1110,10 @@ export function placePiece(
     combo: next.combo,
     coins: coinsFor(clear, gained) + (perfect ? 20 : 0),
     perfect,
+    star:
+      starBonus && piece.starAt !== null && piece.cells[piece.starAt]
+        ? { r: row + piece.cells[piece.starAt]![0], c: col + piece.cells[piece.starAt]![1], gold: piece.gold, bonus: starBonus }
+        : null,
   };
 }
 

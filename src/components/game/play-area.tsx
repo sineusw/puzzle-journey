@@ -539,15 +539,18 @@ const BoardCell = memo(
 
 /* ------------------------------------------------------------------- tray */
 
-const TIP_TEXT: Record<string, { title: string; body: string }> = Object.fromEntries(
-  Object.entries(SPECIAL_WORDS).map(([k, w]) => [k, { title: w.name, body: w.does }]),
-);
+const TIP_TEXT: Record<string, { title: string; body: string }> = {
+  ...Object.fromEntries(Object.entries(SPECIAL_WORDS).map(([k, w]) => [k, { title: w.name, body: w.does }])),
+  star: { title: "Star block", body: "Drop it anywhere and get bonus points right away. No full row needed!" },
+  stone: { title: "Stone block", body: "Stones are tough. Clear blocks right next to a stone two times and it breaks." },
+};
 
 /** First time a special block shows up in the tray, say what it does. */
 const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
   const seen = useGame((s) => s.profile.seenSpecialTips);
   const dismissTip = useGame((s) => s.dismissTip);
-  const sp = tray.find((p) => p?.special && p.special !== "stone" && !seen.includes(p.special))?.special;
+  const kinds = tray.flatMap((p) => (p ? [p.special ?? "", p.starAt !== null ? "star" : ""] : [])).filter(Boolean);
+  const sp = kinds.find((k) => TIP_TEXT[k] && !seen.includes(k));
   if (!sp || !TIP_TEXT[sp]) return null;
   const tip = TIP_TEXT[sp]!;
   return (

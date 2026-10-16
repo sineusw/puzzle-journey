@@ -207,6 +207,16 @@ export class BoardFxRunner {
         }
       }
     }
+    if (e.star) {
+      // Star blocks pay out the moment they land.
+      const b = boxOf(e.star.r, e.star.c);
+      const sx = b.left + b.width / 2;
+      const sy = b.top + b.height / 2;
+      this.fx.ring(sx, sy, { color: e.star.gold ? "#ffd257" : "#9af7ff", from: cell * 0.2, to: cell * 1.8, ms: 500, width: 7 });
+      this.fx.burst("sparkle", sx, sy, { count: e.star.gold ? 30 : 18, color: ["#ffffff", "#fff3a0", e.star.gold ? "#ffc93c" : "#9af7ff"], speed: 280, size: 6 });
+      this.scorePop(sx, sy - cell * 0.4, e.star.bonus, reduce, "★ ");
+      audio.feelStar(e.star.gold ? 2 : 1);
+    }
     if (e.caption) this.caption(gridBox, e.caption, reduce);
     if (e.gained > 0 && e.cleared.length) this.scorePop(originX, originY, e.gained, reduce);
     const word = e.praise ?? (e.cleared.length && e.placedCells > 0 ? MINI_PRAISE[miniIdx++ % MINI_PRAISE.length]! : null);
@@ -329,10 +339,10 @@ export class BoardFxRunner {
     ).finished.then(() => bar.remove(), () => bar.remove());
   }
 
-  private scorePop(x: number, y: number, gained: number, reduce: boolean): void {
+  private scorePop(x: number, y: number, gained: number, reduce: boolean, prefix = ""): void {
     const el = document.createElement("div");
-    el.className = "pj-score-pop";
-    el.textContent = `+${gained.toLocaleString("en-US")}`;
+    el.className = `pj-score-pop${prefix ? " is-star" : ""}`;
+    el.textContent = `${prefix}+${gained.toLocaleString("en-US")}`;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     this.layer.appendChild(el);

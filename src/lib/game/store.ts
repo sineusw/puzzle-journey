@@ -103,6 +103,8 @@ export type BoardFx = {
   fired?: Array<{ r: number; c: number; sp: "bomb" | "rocketH" | "rocketV" | "blast" }>;
   /** A one-line explanation, shown the first time each special fires in a run. */
   caption?: string | null;
+  /** A star block that paid out on drop (sparkle + "+50 ★"). */
+  star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
 
 /** What each special block did, in plain words. */
@@ -511,6 +513,7 @@ export const useGame = create<GameStore>((set, get) => ({
       comboWarning: !clear && m.combo > 0 && m.sinceClear === COMBO_WINDOW - 1,
       fired: clear?.fired ?? [],
       caption,
+      star: result.star ?? null,
     };
     set({
       match: result.match,
