@@ -1,3 +1,4 @@
+import { STAR_TABLE } from "./star-table.ts";
 import { PLAIN_FEATURES, cloneFeatures, type Features, type Goal } from "./engine.ts";
 
 export type PowerId = "hammer" | "refresh" | "bomb" | "freeze";
@@ -188,22 +189,33 @@ export function xpForLevel(level: number): number {
   return 700 + level * 220;
 }
 
+/** Most moves allowed for 3 and for 2 stars; any win earns 1 star. */
+export type StarMoves = { three: number; two: number };
+
 /**
- * Moves for 3 stars on a level goal ("par"), calibrated from simulated
- * play: about what an average-to-good player needs. 2 stars allow 60%
- * more moves; any win earns 1 star.
+ * Star move limits for a level. Campaign levels use limits calibrated from
+ * thousands of seeded bot games (tools/simulate.ts), so a score level and a
+ * lines level are about equally hard to 3-star. Anything else falls back to
+ * a formula.
  */
-export function starPar(goal: Goal): number {
-  if (goal.type === "score") return Math.ceil(5 + goal.value / 140);
-  if (goal.type === "lines") return Math.ceil(6 + goal.value * 2.6);
-  return Math.ceil(6 + goal.value * 3.2);
+export function starMoves(goal: Goal, mode?: string | null, levelId?: number | null): StarMoves {
+  const fixed = (mode === "adventure" || mode === "classic") && levelId ? STAR_TABLE[mode][levelId] : undefined;
+  if (fixed) return fixed;
+  const three =
+    goal.type === "score" ? Math.ceil(5 + goal.value / 140) : goal.type === "lines" ? Math.ceil(6 + goal.value * 2.6) : Math.ceil(6 + goal.value * 3.2);
+  return { three, two: Math.round(three * 1.6) };
+}
+
+/** Moves for 3 stars ("par"). */
+export function starPar(goal: Goal, mode?: string | null, levelId?: number | null): number {
+  return starMoves(goal, mode, levelId).three;
 }
 
 /** Stars for winning a level in `moves` placements. */
-export function starsFor(goal: Goal | null, moves: number): 1 | 2 | 3 {
+export function starsFor(goal: Goal | null, moves: number, mode?: string | null, levelId?: number | null): 1 | 2 | 3 {
   if (!goal) return 3;
-  const par = starPar(goal);
-  return moves <= par ? 3 : moves <= Math.round(par * 1.6) ? 2 : 1;
+  const { three, two } = starMoves(goal, mode, levelId);
+  return moves <= three ? 3 : moves <= two ? 2 : 1;
 }
 
 export function goalLabel(goal: Goal): string {

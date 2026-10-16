@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ADVENTURE, CLASSIC, adventureFeatures, unlockedAt } from "./content.ts";
+import { ADVENTURE, CLASSIC, adventureFeatures, starMoves, starsFor, unlockedAt } from "./content.ts";
 import { PLAIN_FEATURES } from "./engine.ts";
 
 describe("Adventure unlock ladder", () => {
@@ -40,6 +40,21 @@ describe("Classic levels", () => {
       const prev = last[lvl.goal.type] ?? 0;
       assert.ok(lvl.goal.value >= prev, `${lvl.name} ${lvl.goal.type} dropped`);
       last[lvl.goal.type] = lvl.goal.value;
+    }
+  });
+});
+
+describe("star limits", () => {
+  it("every campaign level has calibrated limits with room between 3 and 2 stars", () => {
+    for (const [mode, list] of [["adventure", ADVENTURE], ["classic", CLASSIC]] as const) {
+      for (const lvl of list) {
+        const { three, two } = starMoves(lvl.goal, mode, lvl.id);
+        assert.ok(three >= 6, `${mode} ${lvl.id}`);
+        assert.ok(two >= three + 3, `${mode} ${lvl.id}`);
+        assert.equal(starsFor(lvl.goal, three, mode, lvl.id), 3);
+        assert.equal(starsFor(lvl.goal, three + 1, mode, lvl.id), 2);
+        assert.equal(starsFor(lvl.goal, two + 1, mode, lvl.id), 1);
+      }
     }
   });
 });

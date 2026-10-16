@@ -373,7 +373,11 @@ export function PlayArea() {
         <SideRails side="r" />
       </div>
 
-      <div className="pj-tray-wrap">
+      <div
+        className="pj-tray-wrap"
+        // Reaching for a piece during a visit fast-forwards it; it never picks one up.
+        onPointerDown={visitorBusy ? () => useGame.getState().skipVisitor() : undefined}
+      >
         {tutorial ? null : <TrayTip tray={tray} />}
         <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}`} data-testid="tray">
           {tray.map((piece, i) => (

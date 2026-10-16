@@ -125,6 +125,58 @@ export function rollover(state: ChallengeState, now = new Date()): ChallengeStat
   };
 }
 
+/**
+ * Roll over, and pay out anything finished but never claimed in the period
+ * that just ended, so a player never loses a reward by not tapping Claim
+ * before midnight.
+ */
+export function settleRollover(
+  state: ChallengeState,
+  now = new Date(),
+): { state: ChallengeState; owed: { coins: number; gems: number; count: number } } {
+  const next = rollover(state, now);
+  const owed = { coins: 0, gems: 0, count: 0 };
+  if (next === state) return { state, owed };
+  const claimed = new Set(state.claimed ?? []);
+  for (const id of state.done) {
+    if (claimed.has(id) || next.done.includes(id)) continue;
+    const def = ALL_CHALLENGES.find((c) => c.id === id);
+    if (!def) continue;
+    owed.coins += def.reward.coins;
+    owed.gems += def.reward.gems;
+    owed.count += 1;
+  }
+  return { state: next, owed };
+}
+
+/** Collect one finished challenge. Null if it isn't finished, is already claimed, or is unknown. */
+export function claimReward(
+  state: ChallengeState,
+  id: string,
+): { state: ChallengeState; reward: { coins: number; gems: number } } | null {
+  const claimed = state.claimed ?? [];
+  if (!state.done.includes(id) || claimed.includes(id)) return null;
+  const def = ALL_CHALLENGES.find((c) => c.id === id);
+  if (!def) return null;
+  return { state: { ...state, claimed: [...claimed, id] }, reward: { ...def.reward } };
+}
+
+/** Rebuild challenge state from a save, tolerating missing or damaged fields. */
+export function normalizeChallenges(raw: unknown, now = new Date()): ChallengeState {
+  if (!raw || typeof raw !== "object") return emptyChallenges(now);
+  const r = raw as Partial<ChallengeState>;
+  const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const progress: Record<string, number> = {};
+  if (r.progress && typeof r.progress === "object") {
+    for (const [k, v] of Object.entries(r.progress)) if (typeof v === "number" && Number.isFinite(v) && v >= 0) progress[k] = v;
+  }
+  const done = ids(r.done);
+  // Saves from before rewards became claimable were already paid.
+  const claimed = Array.isArray(r.claimed) ? ids(r.claimed) : [...done];
+  if (typeof r.day !== "string" || typeof r.week !== "string") return emptyChallenges(now);
+  return { day: r.day, week: r.week, progress, done, claimed: claimed.filter((id) => done.includes(id)) };
+}
+
 /** What one move (or other moment) contributed. */
 export type ChallengeEvent = Partial<Record<Exclude<Metric, "color">, number>> & { colors?: Partial<Record<ColorId, number>> };
 

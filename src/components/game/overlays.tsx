@@ -734,8 +734,8 @@ function WonSheet() {
       ? ADVENTURE.find((l) => l.id === nextId)?.introduces
       : undefined;
   // Stars earned this run (not the saved best), so the reveal matches the play.
-  const stars = starsFor(match.goal, match.moves);
-  const par = match.goal ? starPar(match.goal) : 0;
+  const stars = starsFor(match.goal, match.moves, match.mode, match.levelId);
+  const par = match.goal ? starPar(match.goal, match.mode, match.levelId) : 0;
   const reward = id
     ? list.find((l) => l.id === id)?.reward
     : CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value)

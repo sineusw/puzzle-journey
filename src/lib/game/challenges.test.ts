@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyChallengeEvent, dailySet, emptyChallenges, rollover, weeklySet } from "./challenges.ts";
+import { applyChallengeEvent, claimReward, dailySet, emptyChallenges, normalizeChallenges, rollover, settleRollover, weeklySet } from "./challenges.ts";
 
 const day = new Date(2026, 9, 16, 12);
 
@@ -40,5 +40,34 @@ describe("challenge board", () => {
     assert.equal(next.progress["d-lines"], undefined);
     assert.equal(next.progress["w-lines"], 40);
     assert.deepEqual(next.done, ["w-y"]);
+  });
+
+  it("a reward can be claimed once, and only when finished", () => {
+    const st = { ...emptyChallenges(day), done: ["d-lines"], claimed: [] };
+    assert.equal(claimReward(st, "d-pieces"), null, "not finished");
+    assert.equal(claimReward(st, "made-up"), null, "unknown id");
+    const first = claimReward(st, "d-lines");
+    assert.ok(first);
+    assert.equal(first.reward.coins, 50);
+    assert.equal(claimReward(first.state, "d-lines"), null, "second tap pays nothing");
+  });
+
+  it("unclaimed rewards are paid when the day ends, claimed ones are not", () => {
+    const st = { ...emptyChallenges(day), done: ["d-lines", "d-combo", "w-lines"], claimed: ["d-combo"] };
+    const { state, owed } = settleRollover(st, new Date(2026, 9, 17, 9));
+    assert.equal(owed.count, 1);
+    assert.equal(owed.coins, 50);
+    assert.deepEqual(state.done, ["w-lines"], "this week's stays claimable");
+    const again = settleRollover(state, new Date(2026, 9, 17, 10));
+    assert.equal(again.owed.count, 0, "no double payout");
+  });
+
+  it("damaged challenge saves load safely", () => {
+    assert.deepEqual(normalizeChallenges(null, day).done, []);
+    assert.deepEqual(normalizeChallenges({ day: "x", week: "y", progress: { a: "9", b: -1, c: 3 }, done: "oops" }, day), {
+      day: "x", week: "y", progress: { c: 3 }, done: [], claimed: [],
+    });
+    // Old saves (before Claim existed) count finished ones as already paid.
+    assert.deepEqual(normalizeChallenges({ day: "x", week: "y", progress: {}, done: ["d-lines"] }, day).claimed, ["d-lines"]);
   });
 });

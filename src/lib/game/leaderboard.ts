@@ -9,7 +9,7 @@
  */
 
 import { create } from "zustand";
-import type { PlayerCard } from "./stats.ts";
+import { cardProblem, type PlayerCard } from "./stats.ts";
 import { notify } from "./notices.ts";
 
 type Profile = { id: string; name: string; avatarUrl: string; color: string; isMe: boolean };
@@ -52,9 +52,9 @@ let db: DbApi | null = null;
 let user: UserApi | null = null;
 let started = false;
 
+/** Cards that fail the plausibility screen never reach anyone's boards. */
 function isCard(x: unknown): x is PlayerCard {
-  const c = x as PlayerCard;
-  return Boolean(c && typeof c === "object" && c.best && typeof c.best === "object" && c.days && typeof c.days === "object");
+  return cardProblem(x) === null;
 }
 
 async function refreshNames(ids: string[]): Promise<void> {

@@ -788,14 +788,15 @@ const SCENES: Record<VisitorId, (s: Scene) => Promise<void>> = {
 
 /**
  * Play one visitor event. Resolves when the scene ends; `stop()` cancels it
- * (new game, leaving the screen) and cleans up every node it created.
+ * (new game, leaving the screen) and cleans up every node it created;
+ * `skip()` applies the visitor's change at once and ends the scene.
  */
 export function playVisitor(
   host: HTMLElement,
   grid: HTMLElement,
   event: VisitorEvent,
   hooks: SceneHooks,
-): { done: Promise<void>; stop: () => void } {
+): { done: Promise<void>; stop: () => void; skip: () => void } {
   const ctl: Ctl = { cancelled: false, reduce: hooks.reduce };
   const fx = new Fx(host);
   fx.scale = hooks.reduce ? 0.3 : 1;
@@ -850,6 +851,13 @@ export function playVisitor(
   return {
     done,
     stop: () => {
+      ctl.cancelled = true;
+      fx.clear();
+    },
+    // Fast-forward: the visitor's change still lands, the show ends now.
+    skip: () => {
+      if (ctl.cancelled) return;
+      scene.hooks.commit();
       ctl.cancelled = true;
       fx.clear();
     },

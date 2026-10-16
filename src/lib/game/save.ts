@@ -1,7 +1,7 @@
-import { emptyChallenges, rollover, type ChallengeState } from "./challenges.ts";
-import { newLevelMatch, sanitizeMatch, type Match } from "./engine";
+import { emptyChallenges, normalizeChallenges, type ChallengeState } from "./challenges.ts";
+import { newLevelMatch, sanitizeMatch, type Match } from "./engine.ts";
 import { emptyCard, type PlayerCard } from "./stats.ts";
-import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content";
+import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content.ts";
 
 export const SAVE_VERSION = 3;
 export const SAVE_KEY = "puzzle-journey-v1";
@@ -119,7 +119,9 @@ function migrate(raw: Profile): Profile {
     seenShapesIntro: raw.seenShapesIntro ?? false,
     tutorialDone: raw.tutorialDone ?? false,
     // Challenges finished before rewards became claimable were already paid.
-    challenges: raw.challenges?.progress ? rollover({ ...raw.challenges, claimed: raw.challenges.claimed ?? [...raw.challenges.done] }) : emptyChallenges(),
+    // Left un-rolled here: the store pays out any unclaimed rewards from an
+    // ended day/week when it settles the rollover.
+    challenges: normalizeChallenges(raw.challenges),
     card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start
@@ -134,12 +136,35 @@ function migrate(raw: Profile): Profile {
   return next;
 }
 
+/** Counters that must be whole, non-negative numbers. */
+const COUNTERS = ["coins", "gems", "xp", "highScore", "bestCombo", "games", "sandboxBest", "levelStreak"] as const;
+
+/** Read a save blob; null if it is missing or not a usable save. */
+export function parseSave(blob: string | null): Profile | null {
+  if (!blob) return null;
+  try {
+    const raw: unknown = JSON.parse(blob);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const p = migrate(raw as Profile);
+    for (const k of COUNTERS) {
+      const v = p[k];
+      p[k] = typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : defaultProfile()[k];
+    }
+    if (typeof p.level !== "number" || !Number.isFinite(p.level) || p.level < 1) p.level = 1;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
 export function loadProfile(): Profile {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return defaultProfile();
-    const parsed = JSON.parse(raw) as Profile;
-    return migrate(parsed);
+    const main = localStorage.getItem(SAVE_KEY);
+    const p = parseSave(main);
+    if (p) return p;
+    // A damaged save: keep a copy to look at, then use the last good backup.
+    if (main) localStorage.setItem(`${SAVE_KEY}__broken`, main);
+    return parseSave(localStorage.getItem(`${SAVE_KEY}__bak`)) ?? defaultProfile();
   } catch {
     return defaultProfile();
   }
@@ -148,7 +173,9 @@ export function loadProfile(): Profile {
 export function saveProfile(profile: Profile): void {
   try {
     const blob = JSON.stringify(profile);
-    localStorage.setItem(`${SAVE_KEY}__bak`, localStorage.getItem(SAVE_KEY) ?? "");
+    // Only a save that still reads back becomes the backup.
+    const prev = localStorage.getItem(SAVE_KEY);
+    if (prev && parseSave(prev)) localStorage.setItem(`${SAVE_KEY}__bak`, prev);
     localStorage.setItem(SAVE_KEY, blob);
   } catch {
     /* private mode / quota */

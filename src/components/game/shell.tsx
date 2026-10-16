@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
 import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
-import { ADVENTURE, goalLabel, starPar, xpForLevel } from "@/lib/game/content";
+import { ADVENTURE, goalLabel, starMoves, xpForLevel, type StarMoves } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
 import { formatInt } from "@/lib/utils";
@@ -191,18 +191,24 @@ function Counter({ value }: { value: number }) {
 }
 
 /** Live star pace under the goal: how many stars you're on track for. */
-function StarPace({ moves, par }: { moves: number; par: number }) {
-  const two = Math.round(par * 1.6);
+function StarPace({ moves, limits }: { moves: number; limits: StarMoves }) {
+  const { three: par, two } = limits;
   const stars = moves <= par ? 3 : moves <= two ? 2 : 1;
   const left = stars === 3 ? par - moves : stars === 2 ? two - moves : 0;
   return (
-    <div className={`pj-pace is-${stars}`} data-testid="star-pace" aria-label={`On track for ${stars} stars. Move ${moves}.`}>
+    <div className={`pj-pace is-${stars}`} data-testid="star-pace" aria-label={`On track for ${stars} stars. Move ${moves}. Three stars in ${par} moves or fewer, two stars in ${two}.`}>
       <span className="pj-pace-stars" aria-hidden="true">
         {[1, 2, 3].map((n) => (
           <i key={n} className={n <= stars ? "is-on" : ""}>★</i>
         ))}
       </span>
-      <span>{stars > 1 ? `${left} move${left === 1 ? "" : "s"} left for ${stars}★` : "Finish for 1★"}</span>
+      <span>
+        {moves === 0
+          ? `3★ in ${par} moves · 2★ in ${two}`
+          : stars > 1
+            ? `${left} move${left === 1 ? "" : "s"} left for ${stars}★`
+            : "Finish for 1★"}
+      </span>
     </div>
   );
 }
@@ -220,7 +226,7 @@ function TitleBar() {
   const sandboxBest = useGame((s) => s.profile.sandboxBest);
   const tutorial = useGame((s) => s.tutorial !== null);
   const moves = useGame((s) => s.match.moves);
-  const levelPar = goal && levelId ? starPar(goal) : 0;
+  const limits = goal && levelId ? starMoves(goal, mode, levelId) : null;
   const goalPct = goal ? Math.min(100, Math.round((goalProgress / goal.value) * 100)) : 0;
   return (
     <div className="pj-title">
@@ -238,7 +244,7 @@ function TitleBar() {
               {Math.min(goalProgress, goal.value)}/{goal.value}
             </strong>
           </div>
-          {levelPar ? <StarPace moves={moves} par={levelPar} /> : null}
+          {limits ? <StarPace moves={moves} limits={limits} /> : null}
           <div className="pj-objective-track" aria-hidden="true">
             <span style={{ width: `${goalPct}%` }} />
             {goalProgress > 0 ? <i key={`g${goalProgress}`} className="pj-objective-shine" style={{ width: `${goalPct}%` }} /> : null}

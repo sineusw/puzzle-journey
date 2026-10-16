@@ -155,6 +155,11 @@ export function ChallengeScreen() {
   const board = useBoard();
   const now = useNow();
   const state = useMemo(() => rollover(raw, new Date(now)), [raw, now]);
+  const settle = useGame((s) => s.settleChallenges);
+  // A new day started while the game was open: pay out anything left unclaimed.
+  useEffect(() => {
+    if (state !== raw) settle();
+  }, [state, raw, settle]);
   const daily = dailySet(state.day);
   const weekly = weeklySet(state.week);
   const doneDay = daily.filter((c) => state.done.includes(c.id)).length;

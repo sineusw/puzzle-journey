@@ -44,7 +44,7 @@ import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
 import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
-import { ALL_CHALLENGES, applyChallengeEvent, type ChallengeEvent } from "./challenges.ts";
+import { applyChallengeEvent, claimReward, settleRollover, type ChallengeEvent } from "./challenges.ts";
 import { notify } from "./notices.ts";
 import { cheer } from "./voice";
 import {
@@ -156,6 +156,8 @@ type GameStore = {
   introUnlock: UnlockId | null;
   /** Collect a finished challenge's coins and gems. */
   claimChallenge: (id: string) => void;
+  /** Start a new day/week and pay out rewards left unclaimed from the old one. */
+  settleChallenges: () => void;
   /** Banner shown when a run starts ("Island 5 · Lanterns"). */
   runBanner: { id: number; title: string; sub: string } | null;
   /** The hands-on tutorial in progress (the real game waits in `saved`). */
@@ -210,6 +212,9 @@ type GameStore = {
   maybeVisitor: () => void;
   summonVisitor: (id: VisitorId) => boolean;
   commitVisitor: () => void;
+  /** Bumped to fast-forward the current visit (its change still lands). */
+  visitorSkip: number;
+  skipVisitor: () => void;
   endVisitor: () => void;
   setVisitorHide: (cells: string[]) => void;
 };
@@ -255,7 +260,23 @@ function removedCells(before: Cell[][], after: Cell[][]): FlashCell[] {
  * Feed one moment into the challenge board. Completed challenges pay out
  * right away, pop a quick notice, and are shared on the leaderboard card.
  */
+/** Roll the challenge board over, paying any unclaimed rewards from the ended period. */
+function settleProfileChallenges(profile: Profile): Profile {
+  const { state, owed } = settleRollover(profile.challenges);
+  if (state === profile.challenges) return profile;
+  if (owed.count) {
+    notify({
+      icon: "🎁",
+      title: owed.count === 1 ? "Unclaimed reward added" : `${owed.count} unclaimed rewards added`,
+      sub: `+${owed.coins} coins, +${owed.gems} gems from last time`,
+      tone: "win",
+    });
+  }
+  return { ...profile, coins: profile.coins + owed.coins, gems: profile.gems + owed.gems, challenges: state };
+}
+
 function trackChallenges(profile: Profile, ev: ChallengeEvent): Profile {
+  profile = settleProfileChallenges(profile);
   const { state, completed } = applyChallengeEvent(profile.challenges, ev);
   let p: Profile = { ...profile, challenges: state };
   if (!completed.length) return p;
@@ -327,7 +348,8 @@ export const useGame = create<GameStore>((set, get) => ({
   visitorFeatured: null,
 
   hydrate: () => {
-    const profile = ensureMatch(loadProfile());
+    const loaded = ensureMatch(loadProfile());
+    const profile = settleProfileChallenges(loaded);
     audio.setMuted(profile.settings.sfx, profile.settings.music);
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
@@ -342,6 +364,8 @@ export const useGame = create<GameStore>((set, get) => ({
       run: runFlagsFor(match, profile, true),
       runStats: { ...emptyRun(match.mode, match.levelId), resumed: match.moves > 0 },
     });
+    // Rewards paid for an ended day are saved at once, so a reload can't lose them.
+    if (profile.challenges !== loaded.challenges) get().persist();
     // New (and returning) players play through the tutorial once; Skip is always there.
     if (!profile.tutorialDone) get().startTutorial("basics", true);
   },
@@ -463,7 +487,7 @@ export const useGame = create<GameStore>((set, get) => ({
         multi: lines >= 2 ? 1 : 0,
         pieces: 1,
         levels: levelWin ? 1 : 0,
-        stars: levelWin ? starsFor(result.match.goal, result.match.moves) : 0,
+        stars: levelWin ? starsFor(result.match.goal, result.match.moves, result.match.mode, result.match.levelId) : 0,
         colors,
       });
     }
@@ -474,7 +498,7 @@ export const useGame = create<GameStore>((set, get) => ({
       lastResult = finished.result;
     }
     if (result.match.won) {
-      const stars = starsFor(result.match.goal, result.match.moves);
+      const stars = starsFor(result.match.goal, result.match.moves, result.match.mode, result.match.levelId);
       const id = result.match.levelId;
       if (result.match.mode === "adventure" && id) {
         const lvl = ADVENTURE.find((l) => l.id === id);
@@ -859,21 +883,29 @@ export const useGame = create<GameStore>((set, get) => ({
 
   claimChallenge: (id) => {
     const { profile } = get();
-    const st = profile.challenges;
-    if (!st.done.includes(id) || (st.claimed ?? []).includes(id)) return;
-    const def = ALL_CHALLENGES.find((c) => c.id === id);
-    if (!def) return;
+    const got = claimReward(profile.challenges, id);
+    if (!got) return;
     audio.feelCoins(6);
     audio.feelMilestone();
     set({
       profile: {
         ...profile,
-        coins: profile.coins + def.reward.coins,
-        gems: profile.gems + def.reward.gems,
-        challenges: { ...st, claimed: [...(st.claimed ?? []), id] },
+        coins: profile.coins + got.reward.coins,
+        gems: profile.gems + got.reward.gems,
+        challenges: got.state,
       },
     });
-    persistSoon(get);
+    // Save right away: a claimed reward must survive a refresh or a closed tab.
+    get().persist();
+  },
+
+  settleChallenges: () => {
+    const { profile } = get();
+    const next = settleProfileChallenges(profile);
+    if (next !== profile) {
+      set({ profile: next });
+      get().persist();
+    }
   },
   dismissTip: (key) => {
     const { profile } = get();
@@ -903,6 +935,11 @@ export const useGame = create<GameStore>((set, get) => ({
   setToast: (msg) => set({ toast: msg }),
 
   setPointerBusy: (busy) => set({ pointerBusy: busy }),
+
+  visitorSkip: 0,
+  skipVisitor: () => {
+    if (get().visitorEvent) set({ visitorSkip: get().visitorSkip + 1 });
+  },
 
   maybeVisitor: () => {
     const s = get();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { addRun, awardsFor, bestBurst, emptyCard, emptyRun, percentileOf, puzzleIq, rank, categories, dayKey, type RunStats } from "./stats.ts";
+import { addRun, awardsFor, cardProblem, bestBurst, emptyCard, emptyRun, percentileOf, puzzleIq, rank, categories, dayKey, type RunStats } from "./stats.ts";
 
 const run = (over: Partial<RunStats> = {}): RunStats => ({ ...emptyRun("sandbox", null, 0), endedAt: 60_000, ...over });
 
@@ -87,4 +87,26 @@ describe("player cards and awards", () => {
     const card = addRun(emptyCard(), { ...run({ won: true, levelId: 3 }), resumed: true }, 100, 1, now);
     assert.equal(card.best.fastest, 0);
   });
+
+  it("real cards pass the leaderboard screen; hand-edited ones don't", () => {
+    const t0 = Date.now();
+    const run = { ...emptyRun("sandbox", null, t0), endedAt: t0 + 240_000, score: 4200, lines: 38, bestCombo: 6, perfects: 1, pieces: 120, lineTimes: Array.from({ length: 38 }, (_, i) => t0 + i * 6000) };
+    const card = addRun(emptyCard(), run, puzzleIq(run), 2);
+    assert.equal(cardProblem(card), null);
+    assert.equal(cardProblem(emptyCard()), null);
+    const hack = (f: (c: typeof card) => void) => {
+      const c = JSON.parse(JSON.stringify(card)) as typeof card;
+      f(c);
+      return cardProblem(c);
+    };
+    assert.ok(hack((c) => (c.best.score = 99_999_999)));
+    assert.ok(hack((c) => (c.best.iq = 400)));
+    assert.ok(hack((c) => (c.best.fastest = 2)));
+    assert.ok(hack((c) => (c.best.lines = 5000)));
+    assert.ok(hack((c) => (c.best.combo = -1)));
+    assert.ok(hack((c) => (c.ch = { day: "x", n: 50, week: "y", w: 1 })));
+    assert.ok(hack((c) => (c.updatedAt = Date.now() + 9e9)));
+    assert.ok(cardProblem(null));
+  });
 });
+

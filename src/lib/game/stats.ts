@@ -180,6 +180,49 @@ export function emptyCard(): PlayerCard {
   };
 }
 
+/**
+ * Why a shared card can't be trusted, or null if it looks like real play.
+ * Every player's device runs this on every card it reads, so a card edited
+ * by hand (impossible scores, times, counts) is left off everyone's boards.
+ * This is a plausibility screen, not proof: see the launch report for the
+ * server-side replay check planned before a public launch.
+ */
+export function cardProblem(x: unknown, now = Date.now()): string | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return "not a card";
+  const c = x as PlayerCard;
+  const b = c.best as PlayerCard["best"] | undefined;
+  if (!b || typeof b !== "object" || !c.days || typeof c.days !== "object") return "missing parts";
+  const nums = ["sandbox", "score", "iq", "combo", "perfects", "lines", "burst", "streak", "fastest", "pieces", "tidiest"] as const;
+  for (const k of nums) {
+    const v = b[k];
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || Math.floor(v) !== v) return `bad ${k}`;
+  }
+  const pieces = b.pieces;
+  if (b.score > 5000 + pieces * 600 * Math.max(1, b.combo)) return "score too high for the blocks placed";
+  if (b.sandbox > b.score) return "sandbox above best score";
+  if (b.lines > pieces * 3) return "too many lines for the blocks placed";
+  if (b.combo > Math.max(1, pieces)) return "combo longer than the run";
+  if (b.perfects > Math.ceil(pieces / 2)) return "too many perfect clears";
+  if (b.burst > 60) return "impossible 30-second burst";
+  if (b.iq !== 0 && (b.iq < 70 || b.iq > 160)) return "Puzzle IQ out of range";
+  if (b.fastest !== 0 && b.fastest < 8) return "level won impossibly fast";
+  if (b.tidiest > 64) return "bad tidiest";
+  if (b.streak > 10000) return "bad streak";
+  if (!Array.isArray(c.iqs) || c.iqs.length > 60 || c.iqs.some((v) => typeof v !== "number" || v < 70 || v > 160)) return "bad IQ history";
+  if (typeof c.updatedAt !== "number" || c.updatedAt > now + 86400000) return "dated in the future";
+  const days = Object.values(c.days);
+  if (days.length > 10) return "too many days";
+  for (const d of days) {
+    if (!d || typeof d !== "object") return "bad day";
+    if (![d.lines, d.score, d.burst, d.games].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0)) return "bad day totals";
+    if (d.score > b.score || d.burst > 60 || d.games > 2000) return "day totals don't add up";
+  }
+  if (c.ch && (typeof c.ch.n !== "number" || c.ch.n > 5 || c.ch.n < 0 || typeof c.ch.w !== "number" || c.ch.w > 3 || c.ch.w < 0)) return "bad challenge count";
+  if (c.recent && (!Array.isArray(c.recent) || c.recent.length > 6 || c.recent.some((r) => !r || typeof r.t !== "string" || r.t.length > 40 || typeof r.icon !== "string" || r.icon.length > 8))) return "bad recent list";
+  if (c.nick !== undefined && (typeof c.nick !== "string" || c.nick.length > 24)) return "bad name";
+  return null;
+}
+
 /** Fold one finished run into a card. Returns a new card (inputs untouched). */
 export function addRun(card: PlayerCard, run: RunStats, iq: number, streak: number, now = new Date()): PlayerCard {
   const next: PlayerCard = JSON.parse(JSON.stringify(card));
