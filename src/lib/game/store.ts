@@ -12,6 +12,7 @@ import {
   refreshTray,
   sanitizeMatch,
   PLAIN_FEATURES,
+  COMBO_WINDOW,
   type Cell,
   type Match,
 } from "./engine";
@@ -36,6 +37,7 @@ import {
   type Profile,
 } from "./save";
 import * as audio from "./audio";
+import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import {
   applyVisitorAction,
   nextVisitAt,
@@ -83,7 +85,20 @@ export type BoardFx = {
   praise: string | null;
   perfect: boolean;
   shake: boolean;
+  /** Cells in the placed piece (for the landing sound). */
+  placedCells: number;
+  /** Special-block blasts in this clear (for their own sounds). */
+  special: "bomb" | "rocket" | "blast" | null;
+  /** Goal milestone reached by this move. */
+  milestone: "half" | "almost" | null;
+  /** This move beat the player's previous best score. */
+  newBest: boolean;
+  /** The next move is the last chance to keep the combo alive. */
+  comboWarning: boolean;
 };
+
+/** Per-run flags so each milestone is celebrated once. */
+type RunFlags = { half: boolean; almost: boolean; newBest: boolean; bestAtStart: number };
 
 type GameStore = {
   ready: boolean;
@@ -95,6 +110,7 @@ type GameStore = {
   selected: number | null;
   targeting: PowerId | null;
   fx: BoardFx | null;
+  run: RunFlags;
   toast: string | null;
   levelUpTo: number | null;
   /** The Adventure unlock being introduced on the "New!" card. */
@@ -131,7 +147,7 @@ type GameStore = {
   claimQuest: (id: (typeof QUESTS)[number]["id"]) => void;
   buy: (itemId: string) => void;
   setSkin: (skin: SkinId) => void;
-  toggleSetting: (key: "sfx" | "music" | "shake") => void;
+  toggleSetting: (key: "sfx" | "music" | "shake" | "voice") => void;
   resetProgress: () => void;
   dismissLevelUp: () => void;
   setToast: (msg: string | null) => void;
@@ -159,16 +175,6 @@ function persistSoon(get: () => GameStore): void {
     if (w.requestIdleCallback) w.requestIdleCallback(() => get().persist(), { timeout: 2000 });
     else get().persist();
   }, 700);
-}
-
-/**
- * Run `fn` right after the next frame is painted. Sounds are scheduled here so
- * building audio nodes never delays the frame that shows the move (~16 ms of
- * extra latency, below what anyone can hear).
- */
-function afterPaint(fn: () => void): void {
-  if (typeof requestAnimationFrame === "undefined") return fn();
-  requestAnimationFrame(() => setTimeout(fn, 0));
 }
 
 function centerOf(cells: Array<{ r: number; c: number }>, fallback: { r: number; c: number }): { r: number; c: number } {
@@ -225,6 +231,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selected: 0,
   targeting: null,
   fx: null,
+  run: { half: false, almost: false, newBest: false, bestAtStart: 0 },
   toast: null,
   levelUpTo: null,
   introUnlock: null,
@@ -241,6 +248,8 @@ export const useGame = create<GameStore>((set, get) => ({
   hydrate: () => {
     const profile = ensureMatch(loadProfile());
     audio.setMuted(profile.settings.sfx, profile.settings.music);
+    setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
+    warmVoices();
     const match = sanitizeMatch(profile.match ?? firstMatch());
     set({
       ready: true,
@@ -248,6 +257,7 @@ export const useGame = create<GameStore>((set, get) => ({
       match,
       started: false,
       panel: profile.seenHowTo ? null : "how",
+      run: runFlagsFor(match, profile, true),
     });
   },
 
@@ -258,6 +268,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   start: () => {
     audio.unlockAudio();
+    primeVoice();
     const { profile } = get();
     audio.setMuted(profile.settings.sfx, profile.settings.music);
     set({ started: true });
@@ -287,7 +298,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const placedPiece = match.tray[trayIndex];
     const result = placePiece(match, trayIndex, row, col);
     if (!result.ok) {
-      audio.sfxBad();
+      audio.feelNope();
       return false;
     }
     let nextProfile: Profile = {
@@ -299,19 +310,6 @@ export const useGame = create<GameStore>((set, get) => ({
     const xpGain = Math.max(4, Math.floor(result.gained / 12));
     const leveled = grantXp(nextProfile, xpGain);
     nextProfile = applyQuestScore(leveled.profile, result.match);
-    const sound = result.clear;
-    afterPaint(() => {
-      audio.sfxPlace();
-      if (sound) {
-        if (sound.blasts) audio.sfxBlast();
-        else if (sound.bombs) audio.sfxBomb();
-        else if (sound.rockets) audio.sfxRocket();
-        else audio.sfxClear(result.combo);
-        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(18);
-      }
-      if (result.perfect || result.match.won) audio.sfxWin();
-      else if (result.match.over) audio.sfxOver();
-    });
     if (result.match.mode === "sandbox") {
       nextProfile = { ...nextProfile, sandboxBest: Math.max(nextProfile.sandboxBest, result.match.score) };
     }
@@ -358,6 +356,26 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const landed = placedPiece ? placedPiece.cells.map(([dr, dc]) => ({ r: row + dr, c: col + dc })) : [];
     const clear = result.clear;
+    // Milestones: celebrate each once per run.
+    const run = { ...get().run };
+    let milestone: BoardFx["milestone"] = null;
+    const m = result.match;
+    if (m.goal && !m.won) {
+      const pct = m.goalProgress / m.goal.value;
+      if (pct >= 0.85 && !run.almost) {
+        run.almost = true;
+        run.half = true;
+        milestone = "almost";
+      } else if (pct >= 0.5 && !run.half) {
+        run.half = true;
+        milestone = "half";
+      }
+    }
+    let newBest = false;
+    if (!run.newBest && run.bestAtStart > 0 && m.score > run.bestAtStart && (m.mode === "sandbox" || !m.goal)) {
+      run.newBest = true;
+      newBest = true;
+    }
     const fx: BoardFx = {
       id: fxSeq++,
       landed,
@@ -370,12 +388,18 @@ export const useGame = create<GameStore>((set, get) => ({
       praise: clear ? praiseFor(clear.lines, result.perfect) : null,
       perfect: result.perfect,
       shake: Boolean(clear && profile.settings.shake && (clear.lines >= 2 || clear.bombs || clear.blasts || result.perfect)),
+      placedCells: placedPiece?.cells.length ?? 1,
+      special: clear?.blasts ? "blast" : clear?.bombs ? "bomb" : clear?.rockets ? "rocket" : null,
+      milestone,
+      newBest,
+      comboWarning: !clear && m.combo > 0 && m.sinceClear === COMBO_WINDOW - 1,
     };
     set({
       match: result.match,
       profile: nextProfile,
       selected: result.match.tray.findIndex((p) => p),
       fx,
+      run,
       levelUpTo: leveled.leveled,
       panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,
     });
@@ -460,6 +484,11 @@ export const useGame = create<GameStore>((set, get) => ({
         praise: null,
         perfect: false,
         shake: targeting === "bomb" && profile.settings.shake,
+        placedCells: 0,
+        special: null,
+        milestone: null,
+        newBest: false,
+        comboWarning: false,
       },
     });
     persistSoon(get);
@@ -657,6 +686,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const settings = { ...profile.settings, [key]: !profile.settings[key] };
     audio.unlockAudio();
     audio.setMuted(settings.sfx, settings.music);
+    setVoiceEnabled(settings.voice !== false && settings.sfx);
     set({ profile: { ...profile, settings } });
     persistSoon(get);
   },
@@ -711,6 +741,11 @@ export const useGame = create<GameStore>((set, get) => ({
             praise: praiseFor(clear.lines, false),
             perfect: false,
             shake: false,
+            placedCells: 0,
+            special: null,
+            milestone: null,
+            newBest: false,
+            comboWarning: false,
           }
         : get().fx,
     });
@@ -731,6 +766,18 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 }));
 
+/** Fresh milestone flags; `resume` keeps flags already earned in a saved run. */
+function runFlagsFor(match: Match, profile: Profile, resume: boolean): RunFlags {
+  const pct = match.goal ? match.goalProgress / match.goal.value : 0;
+  const best = match.mode === "sandbox" ? profile.sandboxBest : profile.highScore;
+  return {
+    half: resume && pct >= 0.5,
+    almost: resume && pct >= 0.85,
+    newBest: resume && match.score >= best && best > 0,
+    bestAtStart: best,
+  };
+}
+
 /** Shared reset for starting any run. */
 function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => void, match: Match): void {
   const { profile } = get();
@@ -749,6 +796,7 @@ function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => vo
     visitorNextAt: 8,
     visitorSeen: {},
     visitorFeatured: null,
+    run: runFlagsFor(match, profile, false),
     profile: { ...profile, games: profile.games + 1, seenHowTo: true },
   });
   persistSoon(get);

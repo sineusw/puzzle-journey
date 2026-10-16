@@ -10,6 +10,8 @@
 
 import type { BoardFx } from "@/lib/game/store";
 import type { ColorId } from "@/lib/game/engine";
+import * as audio from "@/lib/game/audio";
+import { cheer } from "@/lib/game/voice";
 import { cellTextureUrl } from "./block";
 import { Fx } from "./visitors/fx";
 
@@ -23,6 +25,13 @@ const BLOCK_HEX: Record<ColorId | "stone", string> = {
   violet: "#c26bff",
   stone: "#cfc7b8",
 };
+
+/** Small praise for a single-line clear, so every match is acknowledged. */
+const MINI_PRAISE = ["Nice!", "Sweet!", "Neat!", "Good one!", "Clean!"];
+let miniIdx = 0;
+
+/** Tier of a praise word, for its jingle (1 = Good … 5 = Unbelievable). */
+const PRAISE_TIER: Record<string, number> = { "Good!": 1, "Great!": 2, "Excellent!": 3, "Amazing!": 4, "Unbelievable!": 5, "Perfect!": 5 };
 
 function reducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -84,7 +93,10 @@ export class BoardFxRunner {
       );
     }
 
+    if (e.placedCells > 0) audio.feelPlace(e.placedCells);
+
     // Clear: line flashes, then each block pops in a wave from the landing point.
+    const delays: number[] = [];
     if (e.cleared.length) {
       for (const r of e.rows) this.sweep(gridBox, "row", r, cell, reduce);
       for (const c of e.cols) this.sweep(gridBox, "col", c, cell, reduce);
@@ -94,6 +106,7 @@ export class BoardFxRunner {
         const box = boxOf(item.r, item.c);
         const dist = Math.hypot(item.r - e.origin.r, item.c - e.origin.c);
         const delay = dist * step;
+        delays.push(delay);
         const tile = document.createElement("div");
         tile.className = "pj-burst-tile";
         const url = cellTextureUrl(item.cell);
@@ -124,9 +137,39 @@ export class BoardFxRunner {
       this.layer.appendChild(batch);
     }
 
+    if (e.cleared.length) {
+      // The match moment: one rising note per block, in step with the pops.
+      if (e.special === "blast") audio.sfxBlast();
+      else if (e.special === "bomb") audio.sfxBomb();
+      else if (e.special === "rocket") audio.sfxRocket();
+      audio.feelClear(delays, Math.max(1, e.rows.length + e.cols.length), e.combo);
+    }
     if (e.gained > 0 && e.cleared.length) this.scorePop(originX, originY, e.gained, reduce);
-    if (e.praise) this.praise(gridBox, e.praise, e.perfect, reduce);
-    if (e.combo >= 2) this.comboBadge(gridBox, e.combo, reduce);
+    const word = e.praise ?? (e.cleared.length && e.placedCells > 0 ? MINI_PRAISE[miniIdx++ % MINI_PRAISE.length]! : null);
+    if (word) this.praise(gridBox, word, e.perfect, reduce, !e.praise);
+    if (e.praise) {
+      const tier = PRAISE_TIER[e.praise] ?? 1;
+      if (e.perfect) audio.feelPerfect();
+      else audio.feelPraise(tier);
+      if (e.perfect || tier >= 2) cheer(e.praise, { delayMs: 250, priority: e.perfect });
+    }
+    if (e.combo >= 2) {
+      this.comboBadge(gridBox, e.combo, reduce);
+      audio.feelCombo(e.combo);
+      if (e.combo >= 3 && !(e.praise && (PRAISE_TIER[e.praise] ?? 1) >= 2)) cheer(`Combo ${e.combo}!`, { delayMs: 350 });
+    }
+    if (e.comboWarning) audio.feelComboWarning();
+    if (e.milestone) {
+      const text = e.milestone === "almost" ? "Almost there!" : "Halfway there!";
+      this.banner(gridBox, text, "is-milestone", reduce);
+      audio.feelMilestone();
+      if (e.milestone === "almost") cheer(text, { delayMs: 500 });
+    }
+    if (e.newBest) {
+      this.banner(gridBox, "New best score!", "is-best", reduce);
+      audio.feelNewBest();
+      cheer("New best score!", { delayMs: 400, priority: true });
+    }
     if (e.perfect) {
       for (let i = 0; i < 3; i++) {
         window.setTimeout(() => this.fx.burst("confetti", gridBox.left + gridBox.width * (0.2 + 0.3 * i), gridBox.top + gridBox.height * 0.4, { count: 22, speed: 380 }), i * 120);
@@ -192,9 +235,29 @@ export class BoardFxRunner {
     ).finished.then(() => el.remove(), () => el.remove());
   }
 
-  private praise(grid: DOMRect, text: string, perfect: boolean, reduce: boolean): void {
+  /** A ribbon across the top of the board (milestones, new best). */
+  private banner(grid: DOMRect, text: string, kind: string, reduce: boolean): void {
     const el = document.createElement("div");
-    el.className = `pj-praise ${perfect ? "is-perfect" : ""}`;
+    el.className = `pj-banner ${kind}`;
+    el.textContent = text;
+    el.style.left = `${grid.left + grid.width / 2}px`;
+    el.style.top = `${grid.top + grid.height * 0.16}px`;
+    this.layer.appendChild(el);
+    el.animate(
+      [
+        { transform: "translate(-50%, -50%) scaleX(0.2)", opacity: 0 },
+        { transform: "translate(-50%, -50%) scaleX(1.06)", opacity: 1, offset: 0.15 },
+        { transform: "translate(-50%, -50%) scaleX(1)", opacity: 1, offset: 0.25 },
+        { transform: "translate(-50%, -50%) scaleX(1)", opacity: 1, offset: 0.85 },
+        { transform: "translate(-50%, -80%) scaleX(1)", opacity: 0 },
+      ],
+      { duration: reduce ? 1000 : 1800, delay: 350, easing: "ease-out", fill: "both" },
+    ).finished.then(() => el.remove(), () => el.remove());
+  }
+
+  private praise(grid: DOMRect, text: string, perfect: boolean, reduce: boolean, mini = false): void {
+    const el = document.createElement("div");
+    el.className = `pj-praise ${perfect ? "is-perfect" : ""} ${mini ? "is-mini" : ""}`;
     el.textContent = text;
     el.style.left = `${grid.left + grid.width / 2}px`;
     el.style.top = `${grid.top + grid.height * 0.42}px`;

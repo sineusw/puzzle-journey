@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as PE } from "react";
-import { bounds, canPlaceAnywhere, placeFromCell, previewClear, SIZE, snapPlace, type Cell, type Piece } from "@/lib/game/engine";
+import { bounds, canPlaceAnywhere, COMBO_WINDOW, placeFromCell, previewClear, SIZE, snapPlace, type Cell, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize } from "./block";
@@ -74,6 +74,7 @@ export function PlayArea() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const previewKey = useRef("");
+  const previewLines = useRef(0);
 
   // Latest values for stable callbacks.
   const live = useRef({ board, tray, over, selected, targeting, visitorBusy });
@@ -157,9 +158,15 @@ export function PlayArea() {
           for (const cell of clear.cells) tint.add(`${cell.r}-${cell.c}`);
         }
         next = { r: snap.r, c: snap.c, shadow, tint, color: piece.color };
+        // Feedback while aiming: a tick per new spot, a shimmer when it would clear.
+        const lines = clear ? clear.rows.length + clear.cols.length : 0;
+        if (lines > 0 && previewLines.current === 0) audio.feelWouldClear(lines);
+        else audio.feelSnap(snap.r);
+        previewLines.current = lines;
       }
     }
     if (!next) {
+      previewLines.current = 0;
       if (previewKey.current === "") return;
       previewKey.current = "";
     }
@@ -224,7 +231,7 @@ export function PlayArea() {
         skipClick.current = true;
         placed = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
       } else if (d.moved) {
-        audio.sfxBad();
+        audio.feelNope();
       }
       endDrag(d, placed);
     };
@@ -247,7 +254,8 @@ export function PlayArea() {
     if (!m) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    audio.sfxClick();
+    audio.feelPickup();
+    previewLines.current = 0;
     dragRef.current = {
       index,
       pointerId: e.pointerId,
@@ -318,6 +326,7 @@ export function PlayArea() {
       <div ref={rowRef} className="pj-board-row">
         <SideRails side="l" />
         <div ref={frameRef} className="pj-frame">
+          <ComboMeter />
           <BoardGrid
             gridRef={gridRef}
             board={board}
@@ -360,6 +369,25 @@ export function PlayArea() {
     </div>
   );
 }
+
+/** Streak pill on the frame's top edge: combo level plus moves left to keep it. */
+const ComboMeter = memo(function ComboMeter() {
+  const combo = useGame((s) => s.match.combo);
+  const since = useGame((s) => s.match.sinceClear);
+  if (combo < 1) return null;
+  const left = Math.max(0, COMBO_WINDOW - since);
+  return (
+    <div className={`pj-combo-meter ${left <= 1 ? "is-last" : ""}`} data-testid="combo-meter" aria-label={`Combo ${combo}. ${left} moves left to keep it.`}>
+      <span className="pj-combo-meter-label">Combo</span>
+      <strong className="tabular-nums">×{combo}</strong>
+      <span className="pj-combo-pips" aria-hidden="true">
+        {Array.from({ length: COMBO_WINDOW }, (_, i) => (
+          <i key={i} className={i < left ? "is-on" : ""} />
+        ))}
+      </span>
+    </div>
+  );
+});
 
 function canFit(board: Cell[][], piece: Piece): boolean {
   return canPlaceAnywhere(board, piece.cells);

@@ -93,6 +93,8 @@ export type Match = {
   shield: number;
   /** Placements since the last clear. The combo survives while this stays under COMBO_WINDOW. */
   sinceClear: number;
+  /** Perfect (empty-board) clears this run. */
+  perfects: number;
   over: boolean;
   won: boolean;
   mode: GameMode;
@@ -225,6 +227,7 @@ export function sanitizeMatch(match: Match): Match {
     ...match,
     mode: legacyMode ? "sandbox" : match.mode,
     sinceClear: match.sinceClear ?? 0,
+    perfects: match.perfects ?? 0,
     features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
     board: cloneBoard(match.board ?? emptyBoard()),
     tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
@@ -827,6 +830,7 @@ function blankMatch(features: Features = PLAIN_FEATURES): Match {
     moves: 0,
     shield: 0,
     sinceClear: 0,
+    perfects: 0,
     over: false,
     won: false,
     mode: "sandbox",
@@ -932,6 +936,7 @@ export function placePiece(
   next.bestCombo = Math.max(next.bestCombo, next.combo);
 
   const perfect = Boolean(clear) && boardIsEmpty(next.board);
+  if (perfect) next.perfects += 1;
   const comboForScore = Math.max(1, next.combo);
   const gained = scoreFor(piece, clear, comboForScore, perfect);
   next.score += gained;

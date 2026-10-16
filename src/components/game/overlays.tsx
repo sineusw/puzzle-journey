@@ -28,6 +28,8 @@ import { useGame } from "@/lib/game/store";
 import { VISITOR_IDS, VISITOR_META } from "@/lib/game/visitors";
 import { formatInt } from "@/lib/utils";
 import { GameIcon, type IconName } from "./icons";
+import * as audio from "@/lib/game/audio";
+import { cheer } from "@/lib/game/voice";
 import { SpecialFace } from "./tile-art";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
@@ -160,24 +162,12 @@ export function Overlays() {
   const panel = useGame((s) => s.panel);
   const toast = useGame((s) => s.toast);
   const levelUpTo = useGame((s) => s.levelUpTo);
-  const setPanel = useGame((s) => s.setPanel);
   const dismissLevelUp = useGame((s) => s.dismissLevelUp);
 
   return (
     <>
       {toast ? <div className="pj-toast">{toast}</div> : null}
-      {levelUpTo && panel !== "over" && panel !== "won" ? (
-        <div className="pj-modal center" role="dialog" aria-label="Level up">
-          <div className="pj-sheet text-center">
-            <p className="text-sm font-extrabold tracking-widest text-gold uppercase">Level up</p>
-            <h2 className="mt-1 font-display text-4xl text-cream">Lv. {levelUpTo}</h2>
-            <p className="mt-2 text-sm text-muted">A little more coin, a little more sparkle.</p>
-            <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={dismissLevelUp}>
-              Keep going
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {levelUpTo && panel !== "over" && panel !== "won" ? <LevelUpSheet level={levelUpTo} onClose={dismissLevelUp} /> : null}
       {panel ? (
         <div
           className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" || panel === "intro" ? "center" : ""}`}
@@ -197,6 +187,25 @@ export function Overlays() {
         </div>
       ) : null}
     </>
+  );
+}
+
+function LevelUpSheet({ level, onClose }: { level: number; onClose: () => void }) {
+  useEffect(() => {
+    audio.feelLevelComplete();
+    cheer("Level up!", { delayMs: 200, priority: true });
+  }, [level]);
+  return (
+    <div className="pj-modal center" role="dialog" aria-label="Level up">
+      <div className="pj-sheet pj-result text-center">
+        <p className="text-sm font-extrabold tracking-widest text-gold uppercase">Level up</p>
+        <h2 className="pj-result-title mt-1 font-display text-cream">Lv. {level}</h2>
+        <p className="mt-2 text-sm text-cream/85">You're getting better every round. Here's a little coin to celebrate.</p>
+        <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={onClose}>
+          Keep going
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -350,6 +359,12 @@ function SettingsSheet() {
         onClick={() => toggleSetting("music")}
       />
       <ToggleRow
+        label="Voice cheers"
+        icon={profile.settings.voice !== false ? Volume2 : VolumeX}
+        on={profile.settings.voice !== false}
+        onClick={() => toggleSetting("voice")}
+      />
+      <ToggleRow
         label="Screen shake"
         icon={Vibrate}
         on={profile.settings.shake}
@@ -430,24 +445,97 @@ function modeName(mode: string): string {
   return mode === "adventure" ? "Adventure" : mode === "classic" ? "Classic" : mode === "sandbox" ? "Sandbox" : "Challenge";
 }
 
+/** Counts a number up from 0 over `ms`, ticking a rising note as it goes. */
+function useCountUp(target: number, ms: number, startDelay: number): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let lastTick = 0;
+    const t0 = performance.now() + startDelay;
+    const step = (now: number) => {
+      const t = Math.max(0, Math.min(1, (now - t0) / ms));
+      const eased = 1 - Math.pow(1 - t, 3);
+      setValue(Math.round(target * eased));
+      if (t > 0 && now - lastTick > 70 && t < 1) {
+        lastTick = now;
+        audio.feelTick(t);
+      }
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms, startDelay]);
+  return value;
+}
+
+function RunStats() {
+  const lines = useGame((s) => s.match.lines);
+  const bestCombo = useGame((s) => s.match.bestCombo);
+  const perfects = useGame((s) => s.match.perfects);
+  return (
+    <div className="pj-run-stats">
+      <div>
+        <strong className="tabular-nums">{lines}</strong>
+        <span>Lines</span>
+      </div>
+      <div>
+        <strong className="tabular-nums">×{bestCombo}</strong>
+        <span>Best combo</span>
+      </div>
+      <div>
+        <strong className="tabular-nums">{perfects}</strong>
+        <span>Perfects</span>
+      </div>
+    </div>
+  );
+}
+
 function OverSheet() {
   const profile = useGame((s) => s.profile);
   const match = useGame((s) => s.match);
+  const bestAtStart = useGame((s) => s.run.bestAtStart);
   const newGame = useGame((s) => s.newGame);
   const continueRun = useGame((s) => s.continueRun);
   const setTab = useGame((s) => s.setTab);
   const sandbox = match.mode === "sandbox";
   const best = sandbox ? profile.sandboxBest : profile.highScore;
-  const newBest = sandbox && match.score > 0 && match.score >= profile.sandboxBest;
+  const beatBest = match.score > 0 && match.score > bestAtStart && bestAtStart > 0 && (sandbox || !match.goal);
+  const pct = match.goal ? Math.min(1, match.goalProgress / match.goal.value) : 0;
+  const left = match.goal ? Math.max(0, match.goal.value - match.goalProgress) : 0;
+  const unit = match.goal?.type === "lines" ? (left === 1 ? "line" : "lines") : match.goal?.type === "combo" ? "combo steps" : "points";
+  const [title, sub] = beatBest
+    ? ["New best!", `You beat your best by ${formatInt(match.score - bestAtStart)} points. Amazing run!`]
+    : match.goal && pct >= 0.85
+      ? ["So close!", `Only ${formatInt(left)} ${unit} to go. You've got this!`]
+      : match.goal && pct >= 0.5
+        ? ["Nice run!", "You made it more than halfway. One more try?"]
+        : match.goal
+          ? ["Good try!", "Every run makes you sharper. Go again!"]
+          : ["Nice run!", `You cleared ${match.lines} ${match.lines === 1 ? "line" : "lines"}. Can you beat ${formatInt(best)}?`];
+  const shown = useCountUp(match.score, 900, 350);
+  useEffect(() => {
+    if (beatBest) audio.feelNewBest();
+    else audio.feelRoundOver();
+    cheer(title, { delayMs: 300, priority: true });
+    // Play once when the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <div className="pj-sheet text-center">
+    <div className="pj-sheet pj-result text-center" data-testid="over-sheet">
       <p className="text-xs font-extrabold tracking-widest text-gold uppercase">{modeName(match.mode)}</p>
-      <h2 className="mt-1 font-display text-3xl text-cream">{newBest ? "New best!" : "No more moves"}</h2>
-      <p className="mt-2 text-sm text-muted">
-        Score {formatInt(match.score)} · best {formatInt(best)}
-      </p>
-      <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={newGame}>
-        {match.levelId ? "Try level again" : "Play again"}
+      <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
+      <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
+      <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
+      {match.goal ? (
+        <div className="pj-result-progress" aria-label={`${Math.round(pct * 100)}% of the goal`}>
+          <span style={{ width: `${Math.round(pct * 100)}%` }} />
+        </div>
+      ) : (
+        <p className="text-xs text-muted">Best {formatInt(Math.max(best, match.score))}</p>
+      )}
+      <RunStats />
+      <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
+        {match.levelId ? "Try again" : "Play again"}
       </button>
       <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={continueRun}>
         Continue · {CONTINUE_COST} gems
@@ -458,6 +546,12 @@ function OverSheet() {
     </div>
   );
 }
+
+const WIN_LINES: Record<number, [string, string]> = {
+  3: ["Flawless!", "Three stars. You're a natural!"],
+  2: ["Great job!", "Smooth moves. One more star is within reach!"],
+  1: ["You did it!", "Island cleared. On to the next adventure!"],
+};
 
 function WonSheet() {
   const match = useGame((s) => s.match);
@@ -472,18 +566,53 @@ function WonSheet() {
   const unlocked = match.mode === "classic" ? profile.classic.unlocked : profile.adventure.unlocked;
   const nextOpen = nextId !== null && nextId <= unlocked && list.some((l) => l.id === nextId);
   const nextNew = match.mode === "adventure" && nextId ? ADVENTURE.find((l) => l.id === nextId)?.introduces : undefined;
-  const stars = id ? ((match.mode === "classic" ? profile.classic.stars : profile.adventure.stars)[String(id)] ?? 1) : 0;
+  // Stars earned this run (not the saved best), so the reveal matches the play.
+  const ratio = match.goal ? match.goalProgress / match.goal.value : 1;
+  const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
+  const reward = id ? list.find((l) => l.id === id)?.reward : CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value)?.reward;
+  const [lit, setLit] = useState(0);
+  const shown = useCountUp(match.score, 1000, 400 + stars * 450);
+  const [title, sub] = WIN_LINES[stars]!;
+  useEffect(() => {
+    audio.feelLevelComplete();
+    cheer(stars === 3 ? "Amazing! Three stars!" : match.mode === "classic" ? "Level cleared! Great job!" : "Island cleared! Great job!", {
+      delayMs: 200,
+      priority: true,
+    });
+    const timers = Array.from({ length: stars }, (_, i) =>
+      window.setTimeout(() => {
+        setLit(i + 1);
+        audio.feelStar(i);
+      }, 650 + i * 450),
+    );
+    const coinTimer = window.setTimeout(() => audio.feelCoins(5), 1500 + stars * 450);
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      window.clearTimeout(coinTimer);
+    };
+    // Play once when the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <div className="pj-sheet text-center">
-      <div className="flex justify-center gap-1">
+    <div className="pj-sheet pj-result text-center" data-testid="won-sheet">
+      <div className="pj-result-stars" aria-label={`${stars} of 3 stars`}>
         {[1, 2, 3].map((n) => (
-          <Star key={n} className={`size-8 ${n <= stars ? "text-gold" : "text-muted/40"}`} fill={n <= stars ? "currentColor" : "none"} />
+          <span key={n} className={`pj-result-star ${n <= lit ? "is-lit" : ""} ${n === 2 ? "is-mid" : ""}`}>
+            <Star fill="currentColor" />
+          </span>
         ))}
       </div>
-      <h2 className="mt-2 font-display text-3xl text-cream">{match.mode === "classic" ? "Level cleared" : "Island cleared"}</h2>
-      <p className="mt-2 text-sm text-muted">
-        {match.goal ? goalLabel(match.goal) : "Challenge complete"} · {formatInt(match.score)} pts
-      </p>
+      <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
+      <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
+      <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
+      <p className="text-xs text-muted">{match.goal ? goalLabel(match.goal) : "Challenge complete"}</p>
+      <RunStats />
+      {reward ? (
+        <p className="pj-result-reward">
+          <GameIcon name="coin" className="inline size-5" /> +{reward.coins}
+          <GameIcon name="gem" className="ml-3 inline size-5" /> +{reward.gems}
+        </p>
+      ) : null}
       {nextNew ? (
         <p className="mt-2 text-sm font-extrabold text-gold">
           <Sparkles className="mr-1 inline size-4" />
@@ -493,13 +622,13 @@ function WonSheet() {
       {nextOpen && nextId ? (
         <button
           type="button"
-          className="pj-btn pj-btn-primary mt-5 w-full"
+          className="pj-btn pj-btn-primary mt-4 w-full"
           onClick={() => (match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId))}
         >
           {match.mode === "classic" ? "Next level" : "Next island"}
         </button>
       ) : (
-        <button type="button" className="pj-btn pj-btn-primary mt-5 w-full" onClick={newGame}>
+        <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
           Play again
         </button>
       )}

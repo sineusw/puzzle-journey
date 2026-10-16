@@ -18,7 +18,7 @@ export type Profile = {
   bestCombo: number;
   games: number;
   powerups: PowerCounts;
-  settings: { sfx: boolean; music: boolean; shake: boolean };
+  settings: { sfx: boolean; music: boolean; shake: boolean; voice: boolean };
   daily: { lastClaim: number; streak: number; nextAt: number };
   quests: QuestProgress;
   questDay: string;
@@ -52,7 +52,7 @@ export function defaultProfile(): Profile {
     bestCombo: 0,
     games: 0,
     powerups: { hammer: 3, refresh: 3, bomb: 3, freeze: 3 },
-    settings: { sfx: true, music: true, shake: true },
+    settings: { sfx: true, music: true, shake: true, voice: true },
     daily: { lastClaim: 0, streak: 0, nextAt: now },
     quests: EMPTY_QUESTS(),
     questDay: todayKey(),

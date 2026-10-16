@@ -1,4 +1,4 @@
-type Bus = { ctx: AudioContext; master: GainNode; sfx: GainNode; music: GainNode };
+type Bus = { ctx: AudioContext; master: GainNode; sfx: GainNode; music: GainNode; room: GainNode };
 
 let bus: Bus | null = null;
 let musicTimer: number | null = null;
@@ -6,22 +6,46 @@ let track: HTMLAudioElement | null = null;
 let unlocked = false;
 let wantMusic = true;
 
+/**
+ * Audio graph: sfx → master → limiter → speakers, plus a soft reverb "room"
+ * send so chimes and mallets ring out instead of sounding dry and cheap.
+ */
 function ensure(): Bus | null {
   if (typeof window === "undefined") return null;
   if (bus) return bus;
   const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) return null;
-  const ctx = new AudioContext({ latencyHint: "interactive" });
+  const ctx = new AudioCtx({ latencyHint: "interactive" });
   const master = ctx.createGain();
   const sfx = ctx.createGain();
   const music = ctx.createGain();
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.knee.value = 8;
+  limiter.ratio.value = 6;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.18;
   sfx.gain.value = 0.78;
   music.gain.value = 0.22;
   master.gain.value = 0.9;
+  // Reverb: a generated 1.4 s stereo tail.
+  const room = ctx.createGain();
+  room.gain.value = 0.28;
+  const verb = ctx.createConvolver();
+  const len = Math.floor(ctx.sampleRate * 1.4);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+  }
+  verb.buffer = ir;
+  room.connect(verb);
+  verb.connect(master);
   sfx.connect(master);
   music.connect(master);
-  master.connect(ctx.destination);
-  bus = { ctx, master, sfx, music };
+  master.connect(limiter);
+  limiter.connect(ctx.destination);
+  bus = { ctx, master, sfx, music, room };
   return bus;
 }
 
@@ -328,4 +352,297 @@ export function bindAudioLifecycle(): () => void {
   };
   document.addEventListener("visibilitychange", onVis);
   return () => document.removeEventListener("visibilitychange", onVis);
+}
+
+/* ------------------------------------------------------------------------
+   "Feel" sounds: the reward layer. Everything positive is tuned to one
+   major-pentatonic scale, so any notes that overlap still sound good
+   together, and climbing that scale is what makes streaks feel like they
+   are building.
+   ------------------------------------------------------------------------ */
+
+/** C major pentatonic from C5 upward, three octaves. */
+const SCALE = (() => {
+  const steps = [0, 2, 4, 7, 9];
+  const out: number[] = [];
+  for (let o = 0; o < 3; o++) for (const s of steps) out.push(523.25 * Math.pow(2, (s + 12 * o) / 12));
+  return out;
+})();
+
+function note(i: number): number {
+  return SCALE[Math.max(0, Math.min(SCALE.length - 1, i))]!;
+}
+
+/** Marimba-like mallet: warm fundamental, bright 4th harmonic, soft knock. */
+function mallet(freq: number, when: number, gain = 0.16, dur = 0.5): void {
+  const b = bus;
+  if (!b || !unlocked) return;
+  const t0 = b.ctx.currentTime + when;
+  const out = b.ctx.createGain();
+  out.gain.value = 1;
+  out.connect(b.sfx);
+  const send = b.ctx.createGain();
+  send.gain.value = 0.5;
+  out.connect(send);
+  send.connect(b.room);
+  const partial = (mult: number, g: number, d: number) => {
+    const o = b.ctx.createOscillator();
+    const e = b.ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = freq * mult;
+    e.gain.setValueAtTime(0.0001, t0);
+    e.gain.exponentialRampToValueAtTime(g, t0 + 0.006);
+    e.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    o.connect(e);
+    e.connect(out);
+    o.start(t0);
+    o.stop(t0 + d + 0.02);
+    o.onended = () => {
+      o.disconnect();
+      e.disconnect();
+    };
+  };
+  partial(1, gain, dur);
+  partial(4, gain * 0.32, dur * 0.28);
+  window.setTimeout(() => {
+    out.disconnect();
+    send.disconnect();
+  }, (when + dur + 0.2) * 1000);
+}
+
+/** FM bell: a sparkly ring for rewards. */
+function bell(freq: number, when: number, gain = 0.09, dur = 1.1): void {
+  const b = bus;
+  if (!b || !unlocked) return;
+  const t0 = b.ctx.currentTime + when;
+  const car = b.ctx.createOscillator();
+  const mod = b.ctx.createOscillator();
+  const modGain = b.ctx.createGain();
+  const amp = b.ctx.createGain();
+  const send = b.ctx.createGain();
+  car.frequency.value = freq;
+  mod.frequency.value = freq * 3.5;
+  modGain.gain.setValueAtTime(freq * 2.2, t0);
+  modGain.gain.exponentialRampToValueAtTime(freq * 0.05, t0 + dur);
+  amp.gain.setValueAtTime(0.0001, t0);
+  amp.gain.exponentialRampToValueAtTime(gain, t0 + 0.004);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  send.gain.value = 0.8;
+  mod.connect(modGain);
+  modGain.connect(car.frequency);
+  car.connect(amp);
+  amp.connect(b.sfx);
+  amp.connect(send);
+  send.connect(b.room);
+  car.start(t0);
+  mod.start(t0);
+  car.stop(t0 + dur + 0.05);
+  mod.stop(t0 + dur + 0.05);
+  car.onended = () => {
+    car.disconnect();
+    mod.disconnect();
+    modGain.disconnect();
+    amp.disconnect();
+    send.disconnect();
+  };
+}
+
+/** Wooden "thock": the tactile sound of a block landing. */
+function thock(pitch: number, when: number, gain = 0.22): void {
+  const b = bus;
+  if (!b || !unlocked) return;
+  const t0 = b.ctx.currentTime + when;
+  const src = b.ctx.createBufferSource();
+  src.buffer = noiseBuffer(b.ctx, 0.05);
+  const bp = b.ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = pitch * 6;
+  bp.Q.value = 3;
+  const ng = b.ctx.createGain();
+  ng.gain.setValueAtTime(gain * 0.9, t0);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+  src.connect(bp);
+  bp.connect(ng);
+  ng.connect(b.sfx);
+  src.start(t0);
+  src.stop(t0 + 0.06);
+  const o = b.ctx.createOscillator();
+  const og = b.ctx.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(pitch * 1.6, t0);
+  o.frequency.exponentialRampToValueAtTime(pitch, t0 + 0.05);
+  og.gain.setValueAtTime(0.0001, t0);
+  og.gain.exponentialRampToValueAtTime(gain, t0 + 0.004);
+  og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.13);
+  o.connect(og);
+  og.connect(b.sfx);
+  o.start(t0);
+  o.stop(t0 + 0.15);
+  o.onended = () => {
+    o.disconnect();
+    og.disconnect();
+    src.disconnect();
+    bp.disconnect();
+    ng.disconnect();
+  };
+}
+
+function vibrate(pattern: number | number[]): void {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(pattern);
+  } catch {
+    /* not supported */
+  }
+}
+
+/** Picking up a piece: a soft pop. */
+export function feelPickup(): void {
+  if (!ensure()) return;
+  mallet(note(4), 0, 0.09, 0.18);
+  vibrate(6);
+}
+
+/** The dragged piece snapped to a new cell: a tiny tactile tick. */
+export function feelSnap(row: number): void {
+  if (!ensure()) return;
+  mallet(note(10 + (7 - Math.max(0, Math.min(7, row))) % 5), 0, 0.022, 0.05);
+}
+
+/** The piece is over a spot that would clear lines: an inviting shimmer. */
+export function feelWouldClear(lines: number): void {
+  if (!ensure()) return;
+  bell(note(7 + Math.min(lines, 4)), 0, 0.03, 0.5);
+}
+
+/** A piece lands. Bigger pieces land a little deeper. */
+export function feelPlace(cells: number): void {
+  if (!ensure()) return;
+  thock(cells >= 5 ? 150 : cells >= 3 ? 175 : 205, 0, 0.2);
+  mallet(note(0), 0.01, 0.06, 0.25);
+  vibrate(10);
+}
+
+/** Drop that didn't fit: a gentle, muted bump (not a harsh buzzer). */
+export function feelNope(): void {
+  if (!ensure()) return;
+  thock(120, 0, 0.12);
+  mallet(note(0) / 2, 0.02, 0.05, 0.16);
+}
+
+/**
+ * The match moment. One mallet note per cleared block, in the order the
+ * blocks pop, climbing the scale; each combo level starts the run higher.
+ * `delays` are the per-block pop delays in ms from the effects layer.
+ */
+export function feelClear(delays: number[], lines: number, combo: number): void {
+  if (!ensure()) return;
+  const sorted = [...delays].sort((a, b) => a - b);
+  const start = Math.min(6, Math.max(0, combo - 1));
+  const step = Math.max(1, Math.ceil(sorted.length / 9));
+  let k = 0;
+  for (let i = 0; i < sorted.length; i += step) {
+    mallet(note(start + k), 0.06 + sorted[i]! / 1000, 0.1, 0.45);
+    k++;
+  }
+  const end = 0.08 + (sorted.at(-1) ?? 0) / 1000;
+  // Resolve on a chord; more lines = fuller chord.
+  const top = start + k;
+  bell(note(top), end, 0.08);
+  if (lines >= 2) bell(note(top + 2), end + 0.03, 0.06);
+  if (lines >= 3) bell(note(top + 4), end + 0.06, 0.05);
+  vibrate(lines >= 2 ? [14, 30, 18] : 16);
+}
+
+/** Combo stinger: a quick rising run that gets longer with the streak. */
+export function feelCombo(combo: number): void {
+  if (!ensure()) return;
+  const n = Math.min(2 + combo, 7);
+  const base = Math.min(combo + 2, 8);
+  for (let i = 0; i < n; i++) bell(note(base + i), 0.45 + i * 0.055, 0.05, 0.6);
+}
+
+/** Praise jingle, escalating with the size of the clear. */
+export function feelPraise(tier: number): void {
+  if (!ensure()) return;
+  const runs = [
+    [5, 7],
+    [5, 7, 9],
+    [5, 7, 9, 10],
+    [5, 7, 9, 10, 12],
+    [5, 7, 9, 10, 12, 14],
+  ];
+  const run = runs[Math.max(0, Math.min(runs.length - 1, tier - 1))]!;
+  run.forEach((n, i) => bell(note(n), 0.32 + i * 0.07, 0.07, 0.9));
+}
+
+/** Perfect clear: a full fanfare with sparkle on top. */
+export function feelPerfect(): void {
+  if (!ensure()) return;
+  [0, 2, 4, 5, 7, 9].forEach((n, i) => mallet(note(n), 0.3 + i * 0.07, 0.12, 0.6));
+  [10, 12, 14].forEach((n, i) => bell(note(n), 0.75 + i * 0.09, 0.08, 1.4));
+  vibrate([20, 40, 20, 40, 40]);
+}
+
+/** "Last move to keep your combo" — a quiet heartbeat tick. */
+export function feelComboWarning(): void {
+  if (!ensure()) return;
+  mallet(note(2) / 2, 0, 0.05, 0.12);
+  mallet(note(2) / 2, 0.16, 0.035, 0.12);
+}
+
+/** Goal milestone (halfway / almost there). */
+export function feelMilestone(): void {
+  if (!ensure()) return;
+  [3, 5, 8].forEach((n, i) => bell(note(n), i * 0.08, 0.05, 0.8));
+}
+
+/** Beat your best score mid-run. */
+export function feelNewBest(): void {
+  if (!ensure()) return;
+  [0, 4, 7, 12].forEach((n, i) => mallet(note(n + 2), i * 0.09, 0.12, 0.5));
+  bell(note(14), 0.42, 0.08, 1.4);
+}
+
+/** One star landing on the results screen (i = 0, 1, 2). */
+export function feelStar(i: number): void {
+  if (!ensure()) return;
+  bell(note(5 + i * 2), 0, 0.1, 1.2);
+  mallet(note(5 + i * 2), 0, 0.08, 0.3);
+  vibrate(12);
+}
+
+/** Score count-up tick, rising as the number climbs. */
+export function feelTick(progress: number): void {
+  if (!ensure()) return;
+  mallet(note(5 + Math.round(progress * 8)), 0, 0.03, 0.06);
+}
+
+/** Level complete fanfare. */
+export function feelLevelComplete(): void {
+  if (!ensure()) return;
+  const melody: Array<[number, number]> = [
+    [0, 0],
+    [2, 0.12],
+    [4, 0.24],
+    [7, 0.36],
+    [5, 0.56],
+    [7, 0.68],
+    [10, 0.86],
+  ];
+  melody.forEach(([n, t]) => mallet(note(n), t, 0.13, 0.55));
+  [10, 12, 14].forEach((n, i) => bell(note(n), 0.86 + i * 0.02, 0.06, 1.6));
+  vibrate([20, 60, 20, 60, 50]);
+}
+
+/** Out of moves: warm and encouraging, not a failure buzzer. */
+export function feelRoundOver(): void {
+  if (!ensure()) return;
+  [[7, 0], [5, 0.16], [4, 0.32], [5, 0.56]].forEach(([n, t]) => mallet(note(n!), t!, 0.1, 0.6));
+  bell(note(7), 0.6, 0.05, 1.4);
+}
+
+/** Coins landing in the purse. */
+export function feelCoins(n: number): void {
+  if (!ensure()) return;
+  for (let i = 0; i < Math.min(n, 6); i++) bell(note(10 + (i % 3)), i * 0.07, 0.035, 0.4);
 }
