@@ -188,6 +188,24 @@ export function xpForLevel(level: number): number {
   return 700 + level * 220;
 }
 
+/**
+ * Moves for 3 stars on a level goal ("par"), calibrated from simulated
+ * play: about what an average-to-good player needs. 2 stars allow 60%
+ * more moves; any win earns 1 star.
+ */
+export function starPar(goal: Goal): number {
+  if (goal.type === "score") return Math.ceil(5 + goal.value / 140);
+  if (goal.type === "lines") return Math.ceil(6 + goal.value * 2.6);
+  return Math.ceil(6 + goal.value * 3.2);
+}
+
+/** Stars for winning a level in `moves` placements. */
+export function starsFor(goal: Goal | null, moves: number): 1 | 2 | 3 {
+  if (!goal) return 3;
+  const par = starPar(goal);
+  return moves <= par ? 3 : moves <= Math.round(par * 1.6) ? 2 : 1;
+}
+
 export function goalLabel(goal: Goal): string {
   if (goal.type === "score") return `Score ${goal.value.toLocaleString("en-US")}`;
   if (goal.type === "lines") return `Clear ${goal.value} lines`;

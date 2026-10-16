@@ -1,3 +1,4 @@
+import { emptyChallenges, rollover, type ChallengeState } from "./challenges.ts";
 import { newLevelMatch, sanitizeMatch, type Match } from "./engine";
 import { emptyCard, type PlayerCard } from "./stats.ts";
 import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content";
@@ -37,6 +38,8 @@ export type Profile = {
   seenShapesIntro: boolean;
   /** Finished or skipped the hands-on tutorial. */
   tutorialDone: boolean;
+  /** Daily and weekly challenge progress. */
+  challenges: ChallengeState;
   /** This player's records (also shared on the leaderboard when possible). */
   card: PlayerCard;
   /** Levels won in a row (Classic/Adventure); a loss resets it. */
@@ -77,6 +80,7 @@ export function defaultProfile(): Profile {
     seenSpecialTips: [],
     seenShapesIntro: false,
     tutorialDone: false,
+    challenges: emptyChallenges(),
     card: emptyCard(),
     levelStreak: 0,
     skin: "classic",
@@ -114,6 +118,7 @@ function migrate(raw: Profile): Profile {
     seenSpecialTips: raw.seenSpecialTips ?? [],
     seenShapesIntro: raw.seenShapesIntro ?? false,
     tutorialDone: raw.tutorialDone ?? false,
+    challenges: raw.challenges?.progress ? rollover(raw.challenges) : emptyChallenges(),
     card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
     // Version 3 introduced game modes. Keep currency and progress, but start

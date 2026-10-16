@@ -141,6 +141,10 @@ export type PlayerCard = {
   days: Record<string, DayTotals>;
   /** Recent Puzzle IQ results, newest last, for percentiles. */
   iqs: number[];
+  /** Challenges completed: count today and this week. */
+  ch?: { day: string; n: number; week: string; w: number };
+  /** Latest challenge wins, newest last (shown to other players). */
+  recent?: Array<{ t: string; icon: string; at: number }>;
 };
 
 export type DayTotals = {
@@ -155,6 +159,16 @@ export function dayKey(d = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Monday-based week key, e.g. "2026-W42". */
+export function weekKey(d = new Date()): string {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7);
+  return `${t.getUTCFullYear()}-W${String(wk).padStart(2, "0")}`;
 }
 
 export function emptyCard(): PlayerCard {
@@ -237,6 +251,8 @@ export function categories(now = new Date()): Category[] {
     { id: "score-today", title: "Top score today", value: (c, t) => c.days[t]?.score ?? 0, format: int, scope: "today" },
     { id: "burst-today", title: "Most lines in 30 seconds today", value: (c, t) => c.days[t]?.burst ?? 0, format: int, scope: "today" },
     { id: "games-today", title: "Most games played today", value: (c, t) => c.days[t]?.games ?? 0, format: int, scope: "today" },
+    { id: "ch-today", title: "Most challenges done today", value: (c, t) => (c.ch?.day === t ? c.ch.n : 0), format: int, scope: "today" },
+    { id: "ch-week", title: "Most challenges this week", value: (c) => (c.ch?.week === weekKey(now) ? c.ch.w : 0), format: int, scope: "all" },
   ];
   for (const color of BLOCK_COLORS) {
     cats.push({

@@ -533,7 +533,7 @@ export class BoardFxRunner {
         { transform: "translate(-50%, -50%)", opacity: 1, offset: 0.88 },
         { transform: "translate(-50%, -50%)", opacity: 0 },
       ],
-      { duration: reduce ? 2600 : 3200, delay: 250, easing: "ease-out", fill: "both" },
+      { duration: reduce ? 1700 : 2000, delay: 200, easing: "ease-out", fill: "both" },
     ).finished.then(() => el.remove(), () => el.remove());
   }
 
@@ -553,7 +553,7 @@ export class BoardFxRunner {
         { transform: "translate(-50%, -50%) scaleX(1)", opacity: 1, offset: 0.85 },
         { transform: "translate(-50%, -80%) scaleX(1)", opacity: 0 },
       ],
-      { duration: reduce ? 1000 : 1800, delay: 350, easing: "ease-out", fill: "both" },
+      { duration: reduce ? 900 : 1300, delay: 250, easing: "ease-out", fill: "both" },
     ).finished.then(() => el.remove(), () => el.remove());
   }
 

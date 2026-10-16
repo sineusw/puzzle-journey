@@ -10,6 +10,7 @@
 
 import { create } from "zustand";
 import type { PlayerCard } from "./stats.ts";
+import { notify } from "./notices.ts";
 
 type Profile = { id: string; name: string; avatarUrl: string; color: string; isMe: boolean };
 
@@ -107,10 +108,28 @@ export async function connectBoard(local: PlayerCard): Promise<void> {
       const mine = useBoard.getState().cards[id];
       if (mine && (!cards[id] || (cards[id]!.updatedAt ?? 0) < mine.updatedAt)) cards[id] = mine;
       useBoard.setState({ cards });
-      void refreshNames(Object.keys(cards));
+      void refreshNames(Object.keys(cards)).then(() => announceFriends(cards, id));
     },
     () => useBoard.setState({ mode: "local" }),
   );
+}
+
+/** Only news from after this session started is announced. */
+const sessionStart = Date.now();
+const announced = new Set<string>();
+
+/** "Luke finished Combo King": other players' fresh challenge wins. */
+function announceFriends(cards: Record<string, PlayerCard>, me: string): void {
+  const s = useBoard.getState();
+  for (const [pid, card] of Object.entries(cards)) {
+    if (pid === me) continue;
+    for (const r of card.recent ?? []) {
+      const key = `${pid}:${r.t}:${r.at}`;
+      if (r.at <= sessionStart || announced.has(key)) continue;
+      announced.add(key);
+      notify({ icon: r.icon, title: `${nameFor(pid, s)} finished ${r.t}`, sub: "Can you match it?", tone: "friend" });
+    }
+  }
 }
 
 /** Save this player's card locally and, when possible, to the shared board. */

@@ -24,6 +24,7 @@ import {
   QUESTS,
   adventureFeatures,
   goalLabel,
+  starsFor,
   xpForLevel,
   type PowerId,
   type SkinId,
@@ -42,6 +43,8 @@ import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
 import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
+import { applyChallengeEvent, type ChallengeEvent } from "./challenges.ts";
+import { notify } from "./notices.ts";
 import { cheer } from "./voice";
 import {
   applyVisitorAction,
@@ -243,6 +246,32 @@ function removedCells(before: Cell[][], after: Cell[][]): FlashCell[] {
   return out;
 }
 
+/**
+ * Feed one moment into the challenge board. Completed challenges pay out
+ * right away, pop a quick notice, and are shared on the leaderboard card.
+ */
+function trackChallenges(profile: Profile, ev: ChallengeEvent): Profile {
+  const { state, completed } = applyChallengeEvent(profile.challenges, ev);
+  let p: Profile = { ...profile, challenges: state };
+  if (!completed.length) return p;
+  let coins = 0;
+  let gems = 0;
+  for (const c of completed) {
+    coins += c.reward.coins;
+    gems += c.reward.gems;
+    notify({ icon: c.icon, title: `${c.title} complete!`, sub: `+${c.reward.coins} coins · +${c.reward.gems} gems`, tone: "win" });
+  }
+  audio.feelMilestone();
+  audio.feelCoins(3);
+  const n = state.done.filter((id) => id.startsWith("d-")).length;
+  const w = state.done.filter((id) => id.startsWith("w-")).length;
+  const recent = [...(p.card.recent ?? []), ...completed.map((c) => ({ t: c.title, icon: c.icon, at: Date.now() }))].slice(-6);
+  const card = { ...p.card, ch: { day: state.day, n, week: state.week, w }, recent, updatedAt: Date.now() };
+  p = { ...p, coins: p.coins + coins, gems: p.gems + gems, card };
+  void postCard(card);
+  return p;
+}
+
 function applyQuestScore(profile: Profile, match: Match, powersUsed = 0): Profile {
   const q = { ...profile.quests };
   q.lines = { ...q.lines, value: Math.max(q.lines.value, match.lines) };
@@ -418,6 +447,25 @@ export const useGame = create<GameStore>((set, get) => ({
         if (cell.t === "b" || cell.t === "s") rs.colors[cell.c] = (rs.colors[cell.c] ?? 0) + 1;
       }
     }
+    // Challenges fill up from every move, in any mode.
+    {
+      const colors: ChallengeEvent["colors"] = {};
+      for (const { cell } of result.clear?.cells ?? []) if (cell.t === "b" || cell.t === "s") colors[cell.c] = (colors[cell.c] ?? 0) + 1;
+      const lines = result.clear?.lines ?? 0;
+      const levelWin = result.match.won && (result.match.mode === "adventure" || result.match.mode === "classic");
+      nextProfile = trackChallenges(nextProfile, {
+        lines,
+        score_run: result.match.score,
+        combo: result.match.combo,
+        specials: result.clear?.fired.length ?? 0,
+        perfects: result.perfect ? 1 : 0,
+        multi: lines >= 2 ? 1 : 0,
+        pieces: 1,
+        levels: levelWin ? 1 : 0,
+        stars: levelWin ? starsFor(result.match.goal, result.match.moves) : 0,
+        colors,
+      });
+    }
     let lastResult = get().lastResult;
     if (result.match.won || result.match.over) {
       const finished = finishRun(rs, result.match, nextProfile);
@@ -425,8 +473,7 @@ export const useGame = create<GameStore>((set, get) => ({
       lastResult = finished.result;
     }
     if (result.match.won) {
-      const ratio = result.match.goal ? result.match.goalProgress / result.match.goal.value : 1;
-      const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
+      const stars = starsFor(result.match.goal, result.match.moves);
       const id = result.match.levelId;
       if (result.match.mode === "adventure" && id) {
         const lvl = ADVENTURE.find((l) => l.id === id);
@@ -545,10 +592,9 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     if (id === "refresh") {
       const next = refreshTray(match);
-      const nextProfile = applyQuestScore(
-        { ...profile, powerups: { ...profile.powerups, refresh: profile.powerups.refresh - 1 } },
-        next,
-        1,
+      const nextProfile = trackChallenges(
+        applyQuestScore({ ...profile, powerups: { ...profile.powerups, refresh: profile.powerups.refresh - 1 } }, next, 1),
+        { powers: 1 },
       );
       audio.sfxUi();
       set({ match: next, profile: nextProfile, targeting: null, selected: next.tray.findIndex((p) => p), fx: powerFx("refresh") });
@@ -557,10 +603,9 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     if (id === "freeze") {
       const next = applyFreeze(match);
-      const nextProfile = applyQuestScore(
-        { ...profile, powerups: { ...profile.powerups, freeze: profile.powerups.freeze - 1 } },
-        next,
-        1,
+      const nextProfile = trackChallenges(
+        applyQuestScore({ ...profile, powerups: { ...profile.powerups, freeze: profile.powerups.freeze - 1 } }, next, 1),
+        { powers: 1 },
       );
       audio.sfxUi();
       set({
@@ -571,7 +616,7 @@ export const useGame = create<GameStore>((set, get) => ({
         fx: powerFx("freeze"),
       });
       persistSoon(get);
-      window.setTimeout(() => set({ toast: null }), 1600);
+      window.setTimeout(() => set({ toast: null }), 1300);
       return;
     }
     set({ targeting: targeting === id ? null : id, selected: null });
@@ -588,13 +633,9 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     if (targeting === "bomb") audio.sfxBomb();
     else audio.sfxPlace();
-    const nextProfile = applyQuestScore(
-      {
-        ...profile,
-        powerups: { ...profile.powerups, [targeting]: profile.powerups[targeting] - 1 },
-      },
-      used,
-      1,
+    const nextProfile = trackChallenges(
+      applyQuestScore({ ...profile, powerups: { ...profile.powerups, [targeting]: profile.powerups[targeting] - 1 } }, used, 1),
+      { powers: 1 },
     );
     const cleared = removedCells(match.board, used.board);
     set({
@@ -726,7 +767,7 @@ export const useGame = create<GameStore>((set, get) => ({
       toast: `Daily gift: +${coins} coins, +${gems} gems`,
     });
     persistSoon(get);
-    window.setTimeout(() => set({ toast: null }), 1800);
+    window.setTimeout(() => set({ toast: null }), 1400);
   },
 
   claimQuest: (id) => {
@@ -867,6 +908,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({
       match: result.match,
       visitorApplied: true,
+      profile: trackChallenges(get().profile, { visitors: 1, specials: clear?.fired.length ?? 0 }),
       fx: clear
         ? {
             id: fxSeq++,
@@ -1039,7 +1081,7 @@ function endTutorial(get: () => GameStore, set: (partial: Partial<GameStore>) =>
     selected: null,
     toast: lesson === "basics" ? "You’re ready! Have fun." : "Now you know! Back to your game.",
   });
-  window.setTimeout(() => set({ toast: null }), 1800);
+  window.setTimeout(() => set({ toast: null }), 1400);
   persistSoon(get);
 }
 

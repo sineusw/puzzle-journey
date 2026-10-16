@@ -8,6 +8,7 @@ import { BoardFxRunner } from "./board-fx";
 import { SideRails } from "./overlays";
 import { SPECIAL_WORDS } from "./explainers";
 import { TutorialHand } from "./tutorial-coach";
+import { Cheerleader } from "./cheerleader";
 import { VisitorLayer } from "./visitors/visitor-layer";
 
 /** Tray pieces are drawn at this cell size before they're picked up. */
@@ -403,6 +404,7 @@ export function PlayArea() {
       <VisitorLayer grid={gridRef.current} />
       <TutorialHand dragging={dragIndex !== null} />
       <RunBanner />
+      <Cheerleader />
     </div>
   );
 }
@@ -624,7 +626,7 @@ export function RunBanner() {
     done.current = banner.id;
     setShown(banner.id);
     audio.feelMilestone();
-    const t = window.setTimeout(() => setShown(null), 2200);
+    const t = window.setTimeout(() => setShown(null), 1600);
     return () => window.clearTimeout(t);
   }, [banner, panel]);
   if (!banner || shown !== banner.id) return null;

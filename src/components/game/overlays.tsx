@@ -25,6 +25,8 @@ import {
   SKINS,
   goalLabel,
   xpForLevel,
+  starPar,
+  starsFor,
 } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
 import { VISITOR_IDS, VISITOR_META } from "@/lib/game/visitors";
@@ -36,16 +38,21 @@ import { nameFor, useBoard } from "@/lib/game/leaderboard";
 import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
 import { SpecialFace } from "./tile-art";
 import { ShapeGallery, SPECIAL_WORDS, SpecialDemo } from "./explainers";
+import { ChallengeScreen, RanksScreen } from "./competition";
 import { Fireworks } from "./fireworks";
 import { lessonForUnlock } from "@/lib/game/tutorial";
+import { dailySet, rollover } from "@/lib/game/challenges";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
   const dailyNextAt = useGame((s) => s.profile.daily.nextAt);
   const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
-  const questReady = useGame((s) =>
-    QUESTS.some((q) => s.profile.quests[q.id].value >= q.target && !s.profile.quests[q.id].claimed),
-  );
+  const setTab = useGame((s) => s.setTab);
+  // Red dot while today's challenges aren't all done.
+  const challengesLeft = useGame((s) => {
+    const st = rollover(s.profile.challenges);
+    return dailySet(st.day).some((c) => !st.done.includes(c.id));
+  });
 
   if (side === "l") {
     return (
@@ -70,10 +77,10 @@ export function SideRails({ side }: { side: "l" | "r" }) {
         <GameIcon name="map" />
         Map
       </button>
-      <button type="button" className="pj-rail relative" onClick={() => setPanel("quests")}>
-        {questReady ? <span className="pj-badge" /> : null}
+      <button type="button" className="pj-rail relative" data-testid="rail-challenges" onClick={() => setTab("challenges")}>
+        {challengesLeft ? <span className="pj-badge" /> : null}
         <GameIcon name="quests" />
-        Quests
+        Challenges
       </button>
       <button type="button" className="pj-rail" onClick={() => setPanel("shop")}>
         <GameIcon name="shop" />
@@ -726,8 +733,8 @@ function WonSheet() {
       ? ADVENTURE.find((l) => l.id === nextId)?.introduces
       : undefined;
   // Stars earned this run (not the saved best), so the reveal matches the play.
-  const ratio = match.goal ? match.goalProgress / match.goal.value : 1;
-  const stars = ratio >= 1.6 ? 3 : ratio >= 1.2 ? 2 : 1;
+  const stars = starsFor(match.goal, match.moves);
+  const par = match.goal ? starPar(match.goal) : 0;
   const reward = id
     ? list.find((l) => l.id === id)?.reward
     : CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value)
@@ -781,6 +788,11 @@ function WonSheet() {
         </div>
         <h2 className="pj-result-title mt-1 font-display text-cream">{title}</h2>
         <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
+        {par ? (
+          <p className="pj-star-hint" data-testid="star-hint">
+            Done in <b>{match.moves}</b> moves{stars < 3 ? <> · ★★★ takes {par} or fewer</> : <> · par was {par}</>}
+          </p>
+        ) : null}
         <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
         <p className="text-xs text-muted">
           {match.goal ? goalLabel(match.goal) : "Challenge complete"}
@@ -943,78 +955,6 @@ function AdventureScreen() {
   );
 }
 
-function RanksScreen() {
-  const board = useBoard();
-  const [scope, setScope] = useState<"today" | "all">("today");
-  const today = dayKey();
-  const cats = categories().filter((c) => c.scope === scope);
-  const players = Object.keys(board.cards).length;
-  return (
-    <div data-testid="ranks">
-      <h2 className="font-display text-2xl">Leaderboard</h2>
-      <p className="mt-1 text-sm text-muted">
-        {board.mode === "shared"
-          ? `${players} ${players === 1 ? "player" : "players"} on this island. ${board.canPost ? "Your scores post automatically." : "You can watch, but ask the owner for edit access to post scores."}`
-          : "Your personal records. Play on the shared game page to compete with friends."}
-      </p>
-      <div className="pj-modes mt-3" role="tablist" aria-label="Leaderboard period">
-        {(
-          [
-            ["today", "Today"],
-            ["all", "All-time"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={scope === id}
-            className={`pj-mode-tab ${scope === id ? "is-on" : ""}`}
-            onClick={() => setScope(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-3 space-y-2">
-        {cats.map((cat) => {
-          const ranked = rank(cat, board.cards, today);
-          const myIdx = ranked.findIndex((r) => r.id === board.myId);
-          const top = ranked.slice(0, 3);
-          return (
-            <div key={cat.id} className="pj-card pj-rank-card">
-              <div className="pj-rank-title">{cat.title}</div>
-              {ranked.length === 0 ? (
-                <div className="text-xs text-muted">No one yet. Be the first!</div>
-              ) : (
-                <ol className="pj-rank-list">
-                  {top.map((r, i) => (
-                    <li key={r.id} className={r.id === board.myId ? "is-me" : ""}>
-                      <span className={`pj-rank-pos is-${i + 1}`}>
-                        {i === 0 ? <Crown className="size-3.5" /> : i + 1}
-                      </span>
-                      <span className="pj-rank-name">{nameFor(r.id, board)}</span>
-                      <span className="pj-rank-val tabular-nums">{cat.format(r.value)}</span>
-                    </li>
-                  ))}
-                  {myIdx >= 3 ? (
-                    <li className="is-me">
-                      <span className="pj-rank-pos">{myIdx + 1}</span>
-                      <span className="pj-rank-name">You</span>
-                      <span className="pj-rank-val tabular-nums">
-                        {cat.format(ranked[myIdx]!.value)}
-                      </span>
-                    </li>
-                  ) : null}
-                </ol>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function SandboxCard() {
   const best = useGame((s) => s.profile.sandboxBest);
@@ -1073,33 +1013,6 @@ function ClassicList() {
   );
 }
 
-function ChallengeScreen() {
-  const startChallenge = useGame((s) => s.startChallenge);
-  return (
-    <div>
-      <h2 className="font-display text-2xl">Challenges</h2>
-      <p className="mt-1 text-sm text-muted">Short goals on a fresh board.</p>
-      <div className="mt-3 space-y-2">
-        {CHALLENGES.map((ch) => (
-          <div key={ch.id} className="pj-card flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="font-extrabold">{ch.name}</div>
-              <div className="text-xs text-muted">{ch.blurb}</div>
-            </div>
-            <button
-              type="button"
-              data-testid={`challenge-${ch.id}`}
-              className="pj-btn pj-btn-primary shrink-0 text-sm"
-              onClick={() => startChallenge(ch.id)}
-            >
-              Play
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function SkinsScreen() {
   const skin = useGame((s) => s.profile.skin);

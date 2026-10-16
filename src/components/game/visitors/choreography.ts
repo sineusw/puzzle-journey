@@ -80,7 +80,9 @@ class Board {
 class Actor {
   el: HTMLDivElement;
   body: HTMLDivElement;
-  img: HTMLImageElement;
+  img: HTMLDivElement;
+  /** Horizontal bands of the character art that bend independently. */
+  private slices: HTMLDivElement[] = [];
   shadow: HTMLDivElement;
   prop: HTMLDivElement;
   bubble: HTMLDivElement;
@@ -99,6 +101,10 @@ class Actor {
   private lastX = 0;
   private lean = 0;
   private still = false;
+  private vxs = 0;
+  private lastLift = 0;
+  private vys = 0;
+  private wiggleUntil = 0;
   private born = performance.now();
   private raf = 0;
   private reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -115,11 +121,22 @@ class Actor {
     this.shadow.className = "pj-actor-shadow";
     this.body = document.createElement("div");
     this.body.className = "pj-actor-body";
-    this.img = document.createElement("img");
-    this.img.src = CHARACTER_ART[id];
-    this.img.alt = "";
-    this.img.draggable = false;
-    this.img.className = "pj-actor-img";
+    // The art is cut into stacked bands: feet stay planted while the body,
+    // shoulders and head sway, lag behind movement and bounce on landings.
+    this.img = document.createElement("div");
+    this.img.className = "pj-actor-img pj-actor-rig";
+    const N = 8;
+    for (let i = 0; i < N; i++) {
+      const band = document.createElement("div");
+      band.className = "pj-actor-band";
+      band.style.top = `${(i / N) * 100}%`;
+      band.style.height = `calc(${100 / N}% + 1.5px)`;
+      band.style.backgroundImage = `url(${CHARACTER_ART[id]})`;
+      band.style.backgroundSize = `${this.w}px ${this.h}px`;
+      band.style.backgroundPosition = `0 ${-(i / N) * this.h}px`;
+      this.img.appendChild(band);
+      this.slices.push(band);
+    }
     this.body.appendChild(this.img);
     // A soft highlight that sweeps across the character, masked to its
     // silhouette, so the art reads as a rounded 3D figure, not a flat cut-out.
@@ -153,6 +170,12 @@ class Actor {
       this.lastX = this.x;
       this.lean += (Math.max(-22, Math.min(22, vx * 2.2)) - this.lean) * 0.18;
       this.still = Math.abs(vx) < 0.3 && this.lift < 1;
+      // Smoothed velocities drive the body's follow-through.
+      this.vxs += (vx - this.vxs) * 0.25;
+      const vy = this.lift - this.lastLift;
+      this.lastLift = this.lift;
+      this.vys += (vy - this.vys) * 0.3;
+      this.bend((performance.now() - this.born) / 1000);
     }
     const t = (performance.now() - this.born) / 1000;
     const still = this.still;
@@ -184,6 +207,21 @@ class Actor {
     this.shadow.style.opacity = String(0.55 * k);
   }
 
+  /** Bend the bands: an S-curve sway, trailing on moves, bounce on landings. */
+  private bend(t: number): void {
+    const n = this.slices.length;
+    const wiggle = performance.now() < this.wiggleUntil ? 1 : 0;
+    const dir = this.flip;
+    for (let i = 0; i < n; i++) {
+      const w = Math.pow((n - 1 - i) / (n - 1), 1.4); // 1 at the head, 0 at the feet
+      const sway = Math.sin(t * 2.6 - i * 0.55) * (this.still ? 2.2 : 1.2) * w;
+      const dance = wiggle ? Math.sin(t * 22 - i * 0.9) * 3.5 * w : 0;
+      const trail = Math.max(-14, Math.min(14, -this.vxs * 2.2)) * w * dir;
+      const bob = Math.max(-10, Math.min(10, this.vys * 1.4)) * w;
+      this.slices[i]!.style.transform = `translate3d(${(sway + dance + trail).toFixed(2)}px, ${bob.toFixed(2)}px, 0)`;
+    }
+  }
+
   pose(sx: number, sy: number, rot = this.rot): void {
     this.sx = sx;
     this.sy = sy;
@@ -201,6 +239,8 @@ class Actor {
   }
 
   say(text: string, ms = 1300): void {
+    // A happy wiggle every time they talk.
+    this.wiggleUntil = performance.now() + 650;
     window.clearTimeout(this.bubbleTimer);
     this.bubble.textContent = text;
     this.bubble.classList.add("is-on");
@@ -227,7 +267,8 @@ class Actor {
         const x = lerp(x0, tx, t);
         const y = lerp(y0, ty, t);
         const arc = 4 * height * t * (1 - t);
-        const stretch = t < 0.5 ? 1.1 : 0.96;
+        // Stretch on the way up, tuck at the top, reach down to land.
+        const stretch = t < 0.35 ? 1.12 : t < 0.65 ? 0.9 : 1.06;
         this.sx = 2 - stretch;
         this.sy = stretch;
         this.rot = lean * (1 - 2 * t) + (opts.spin ?? 0) * t;
@@ -253,9 +294,12 @@ class Actor {
     for (let i = 1; i <= steps; i++) {
       const fx0 = this.x;
       const fy0 = this.y;
+      // A curved path (not a straight slide), with a little skip every third step.
+      const arc = Math.sin((Math.PI * i) / steps) * Math.min(this.h * 0.35, dist * 0.18);
       const nx = lerp(x0, tx, i / steps);
-      const ny = lerp(y0, ty, i / steps);
-      const tilt = i % 2 ? 5 : -5;
+      const ny = lerp(y0, ty, i / steps) - arc;
+      const skip = i % 3 === 0 ? 2.2 : 1;
+      const tilt = i % 2 ? 7 : -7;
       await tween(
         ctl,
         msPerStep,
@@ -263,7 +307,7 @@ class Actor {
           this.rot = tilt * Math.sin(Math.PI * t);
           this.sy = 1 - 0.06 * Math.sin(Math.PI * t * 2);
           this.sx = 2 - this.sy;
-          this.place(lerp(fx0, nx, t), lerp(fy0, ny, t), Math.sin(Math.PI * t) * this.h * 0.07);
+          this.place(lerp(fx0, nx, t), lerp(fy0, ny, t), Math.sin(Math.PI * t) * this.h * 0.08 * skip);
         },
         (t) => t,
       );
