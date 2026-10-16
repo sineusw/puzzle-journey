@@ -311,6 +311,21 @@ describe("puzzle journey engine", () => {
     assert.ok(stone.t === "k" && stone.hp === 1);
   });
 
+  it("bombs and arrows always come as their own single block", () => {
+    let seed = 7;
+    const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    let specials = 0;
+    for (let i = 0; i < 2000; i++) {
+      const p = makePiece(rng, undefined, ALL_FEATURES);
+      if (p.special && p.special !== "stone") {
+        specials++;
+        assert.equal(p.cells.length, 1);
+        assert.equal(p.specialAt, 0);
+      }
+    }
+    assert.ok(specials > 50);
+  });
+
   it("a vertical rocket clears its column", () => {
     const board = emptyBoard();
     board[7] = filledRow("amber");

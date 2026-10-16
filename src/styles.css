@@ -647,13 +647,13 @@
   filter: none;
 }
 .pj-sp-arrow {
-  inset: -6%;
+  inset: 9%;
   filter:
     drop-shadow(0 2px 0 rgba(7, 22, 54, 0.72))
     drop-shadow(0 0 5px rgba(126, 224, 255, 0.45));
 }
 .pj-sp-bomb {
-  inset: 8%;
+  inset: 9%;
   filter:
     drop-shadow(0 3px 2px rgba(0, 0, 0, 0.62))
     drop-shadow(0 0 5px rgba(186, 91, 255, 0.3));
@@ -3011,3 +3011,8 @@
 }
 @media (prefers-reduced-motion: reduce) { .pj-fireworks { display: none; } }
 .pj-score-pop.is-star { color: #fff3a0; text-shadow: 0 0 14px rgb(255 220 90 / 0.9), 0 3px 0 #8a5a00; }
+/* Icons: same size, dead centre, in every place a special block is drawn. */
+.pj-intro-tile .pj-sp-bomb, .pj-intro-tile .pj-sp-arrow,
+.pj-demo-tile .pj-sp-bomb, .pj-demo-tile .pj-sp-arrow,
+.pj-how-ico .pj-sp-bomb, .pj-how-ico .pj-sp-arrow { inset: 9%; }
+.pj-sp-bomb { transform-origin: 50% 50%; }

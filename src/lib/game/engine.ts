@@ -246,7 +246,9 @@ export function sanitizeMatch(match: Match): Match {
     features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
     // Special blocks never wait on the board: an old save's leftovers turn plain.
     board: cloneBoard(match.board ?? emptyBoard()).map((row) => row.map((cell) => ((cell.t === "b" || cell.t === "s") && cell.sp ? { ...cell, sp: undefined } : cell))),
-    tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
+    tray: (match.tray ?? [null, null, null]).map((p) =>
+      p ? (p.special && p.special !== "stone" && p.cells.length > 1 ? specialPiece(p.special) : sanitizePiece(p)) : null,
+    ),
     goal: match.goal ? { ...match.goal } : null,
   };
 }
@@ -389,6 +391,9 @@ export function makePiece(rng: () => number, forceShape?: string, features: Feat
   const gold = features.stars && starRoll > 0.97;
   const starAt = features.stars && (gold || starRoll > 0.9) ? Math.floor(rng() * cells.length) : null;
   const special = rollSpecial(rng, features);
+  // Bombs, arrows and golden blocks always come as their own single block,
+  // so every one behaves the same wherever you drop it.
+  if (special && special !== "stone") return specialPiece(special);
   const specialAt = special !== null ? Math.floor(rng() * cells.length) : null;
   return {
     id: uid(),
@@ -400,6 +405,12 @@ export function makePiece(rng: () => number, forceShape?: string, features: Feat
     special,
     specialAt,
   };
+}
+
+/** A one-square piece that is a special block (bomb, arrow or golden block). */
+export function specialPiece(special: Exclude<SpecialId, "stone">): Piece {
+  const color: ColorId = special === "bomb" ? "violet" : special === "blast" ? "amber" : "azure";
+  return { id: uid(), shape: "o1", cells: [[0, 0]], color, starAt: null, gold: false, special, specialAt: 0 };
 }
 
 export function namedPiece(
@@ -963,7 +974,7 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
     const i = Math.floor(rng() * pieces.length);
     const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
-    if (special) pieces[i] = { ...pieces[i]!, special, specialAt: 0 };
+    if (special) pieces[i] = special === "stone" ? { ...pieces[i]!, special, specialAt: 0 } : specialPiece(special);
   }
   match.tray = pieces;
 }

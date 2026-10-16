@@ -596,7 +596,14 @@ const TraySlot = memo(function TraySlot({
       }}
       aria-label={piece ? `Next block ${index + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${index + 1}`}
     >
-      {piece ? <PieceGrid piece={piece} cell={TRAY_CELL} faded={!fits || lifted} /> : null}
+      {piece ? (
+        <PieceGrid
+          piece={piece}
+          // A lone special block is drawn bigger so its icon is easy to see.
+          cell={piece.cells.length === 1 && piece.special && piece.special !== "stone" ? Math.round(TRAY_CELL * 2) : TRAY_CELL}
+          faded={!fits || lifted}
+        />
+      ) : null}
       {isNew && !lifted ? <span className="pj-new-tag">New shape</span> : null}
     </button>
   );

@@ -23,30 +23,27 @@ export function PowerGlyph({ name }: { name: "hammer" | "refresh" | "bomb" | "fr
   return <FrostGlyph />;
 }
 
+// Both icons are drawn centred on (16, 16) at the same size, so they sit in
+// the middle of every block on the board, in the tray and in the lessons.
 function BombFace() {
   const id = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true">
       <defs>
-        <radialGradient id={`${id}-b`} cx="32%" cy="28%" r="72%">
-          <stop offset="0%" stopColor="#7a628c" />
-          <stop offset="38%" stopColor="#3a2448" />
+        <radialGradient id={`${id}-b`} cx="36%" cy="34%" r="70%">
+          <stop offset="0%" stopColor="#8a70a0" />
+          <stop offset="40%" stopColor="#3a2448" />
           <stop offset="100%" stopColor="#120814" />
         </radialGradient>
-        <linearGradient id={`${id}-c`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f4e6c0" />
-          <stop offset="100%" stopColor="#a07838" />
-        </linearGradient>
       </defs>
-      <ellipse cx="15.3" cy="28.2" rx="10.6" ry="2.2" fill="#050208" opacity="0.5" />
-      <circle cx="15.4" cy="18.2" r="11.8" fill="#0b0610" stroke="#8f6aa8" strokeWidth="1.7" />
-      <circle cx="15.4" cy="18.2" r="10.5" fill={`url(#${id}-b)`} stroke="#e0b8f0" strokeWidth="0.55" />
-      <path d="M8.7 13.2c2.5-4.5 8.6-6.2 13.1-2.9" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" opacity="0.25" />
-      <ellipse cx="11.7" cy="13.7" rx="4" ry="2.4" fill="rgba(255,255,255,0.3)" />
-      <rect x="12.5" y="5.6" width="6.2" height="4.2" rx="1" fill={`url(#${id}-c)`} stroke="#fff1bf" strokeWidth="0.65" />
-      <path d="M18.7 7c3-3.1 6.8-2.4 7.6.4" fill="none" stroke="#d98822" strokeWidth="2.1" strokeLinecap="round" />
-      <path d="M26.5 3.1l1 2.3 2.4.95-2.4.95-1 2.3-1-2.3-2.4-.95 2.4-.95z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.5" />
-      <circle cx="26.5" cy="6.35" r="1.25" fill="#ff9f20" opacity="0.8" />
+      {/* ball */}
+      <circle cx="16" cy="18" r="10.4" fill="#0b0610" stroke="#e0b8f0" strokeWidth="1.4" />
+      <circle cx="16" cy="18" r="9.2" fill={`url(#${id}-b)`} />
+      <ellipse cx="12.6" cy="14.4" rx="3.4" ry="2.1" fill="rgba(255,255,255,0.32)" />
+      {/* cap + short fuse straight up, spark on top: all on the centre line */}
+      <rect x="13.4" y="5.6" width="5.2" height="3.6" rx="1" fill="#e8d4a0" stroke="#fff1bf" strokeWidth="0.6" />
+      <path d="M16 5.6 V3.2" stroke="#d98822" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M16 0.2l.8 1.7 1.8.7-1.8.7-.8 1.7-.8-1.7-1.8-.7 1.8-.7z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.4" />
     </svg>
   );
 }
@@ -63,15 +60,13 @@ function ArrowFace({ dir }: { dir: "h" | "v" }) {
       <defs>
         <linearGradient id={`${id}-a`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="42%" stopColor="#d4eeff" />
+          <stop offset="45%" stopColor="#d4eeff" />
           <stop offset="100%" stopColor="#6aa8e0" />
         </linearGradient>
       </defs>
-      <path d="M16 1.8 L29.5 16.3 H22.4 V30 H9.6 V16.3 H2.5 Z" fill="#16376f" stroke="#87d5ff" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d="M16 3.4 L27.5 16 H20.7 V28.2 H11.3 V16 H4.5 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.75" strokeLinejoin="round" />
-      <path d="M16 4.8 L25.1 15.8 H19.2 V26.8 H16 Z" fill="#3976b9" opacity="0.44" />
-      <path d="M15.8 4.3 L6.9 15.8 H11" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" opacity="0.92" />
-      <path d="M13 27.3 V17.2" stroke="#fff" strokeWidth="1.15" strokeLinecap="round" opacity="0.58" />
+      {/* Double-headed arrow: it zaps both ways along its line. */}
+      <path d="M16 2 L26 12 H20.5 V20 H26 L16 30 L6 20 H11.5 V12 H6 Z" fill="#16376f" stroke="#87d5ff" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M16 4.4 L23.4 11.2 H19 V20.8 H23.4 L16 27.6 L8.6 20.8 H13 V11.2 H8.6 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.7" strokeLinejoin="round" />
     </svg>
   );
 }
