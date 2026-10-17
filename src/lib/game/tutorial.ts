@@ -97,8 +97,8 @@ const ARROWS: TutorialStep[] = [
   },
   {
     say: "This arrow points side to side.",
-    hint: "Drop it anywhere. It clears every block in its side-to-side line.",
-    praise: "ZAP! Side to side!",
+    hint: "It clears its side-to-side line. If that line had 4 or more blocks, it counts as a cleared line for your goal.",
+    praise: "ZAP! That counts as a cleared line!",
     board: board((put) => {
       put(5, 0, "orange");
       put(5, 6, "pink");

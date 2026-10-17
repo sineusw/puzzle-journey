@@ -7,7 +7,8 @@ import { useGame } from "@/lib/game/store";
 import { formatInt } from "@/lib/utils";
 import { NightIsle } from "./background";
 import { GameIcon } from "./icons";
-import { Overlays, PowerBar, TabScreens } from "./overlays";
+import { Overlays, PowerBar, SideRails, TabScreens } from "./overlays";
+import { useCompactLayout } from "./use-compact";
 import { PlayArea } from "./play-area";
 import { NoticeHost } from "./notice-host";
 import { TutorialCoach, TutorialScreens, TutorialSkipBar } from "./tutorial-coach";
@@ -19,6 +20,7 @@ export function GameShell() {
   const start = useGame((s) => s.start);
   const skin = useGame((s) => s.profile.skin);
   const tutorialOn = useGame((s) => s.tutorial !== null);
+  const compactLayout = useCompactLayout();
   const tab = useGame((s) => s.tab);
   const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
@@ -58,7 +60,7 @@ export function GameShell() {
   }, [cancelTarget, selectPiece, setPanel]);
 
   return (
-    <div className="pj-root" data-skin={skin} data-tutorial={tutorialOn ? "" : undefined}>
+    <div className="pj-root" data-skin={skin} data-tutorial={tutorialOn ? "" : undefined} data-compact={compactLayout ? "" : undefined}>
       <div className="pj-stars" />
       <NightIsle />
       <JungleAmbience />
@@ -103,6 +105,14 @@ export function GameShell() {
       <Overlays />
       <TutorialScreens />
       <NoticeHost />
+      {/* Phones turned sideways would squeeze the board to tiny cells. */}
+      <div className="pj-rotate" role="alert">
+        <div className="pj-rotate-card">
+          <span className="pj-rotate-phone" aria-hidden="true" />
+          <b>Turn your phone upright</b>
+          <span>Block Journey plays best in portrait.</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -228,9 +238,18 @@ function TitleBar() {
   const moves = useGame((s) => s.match.moves);
   const limits = goal && levelId ? starMoves(goal, mode, levelId) : null;
   const goalPct = goal ? Math.min(100, Math.round((goalProgress / goal.value) * 100)) : 0;
+  const compact = useCompactLayout();
   return (
-    <div className="pj-title">
-      <Logo />
+    <div className={`pj-title${compact ? " is-compact" : ""}`}>
+      {compact ? (
+        <div className="pj-title-row">
+          <SideRails side="l" />
+          <Logo />
+          <SideRails side="r" />
+        </div>
+      ) : (
+        <Logo />
+      )}
       {tutorial ? (
         <TutorialCoach />
       ) : (

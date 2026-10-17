@@ -61,11 +61,13 @@ export function SideRails({ side }: { side: "l" | "r" }) {
         <DailyRail nextAt={dailyNextAt} onOpen={() => setPanel("daily")} />
         <button type="button" className="pj-rail" onClick={() => setPanel("daily")}>
           <GameIcon name="gift" />
-          <GiftTimer nextAt={dailyNextAt} />
+          <span className="pj-rail-label">
+            <GiftTimer nextAt={dailyNextAt} />
+          </span>
         </button>
         <button type="button" className="pj-rail" onClick={() => setPanel("events")}>
           <GameIcon name="events" />
-          Events
+          <span className="pj-rail-label">Events</span>
         </button>
       </div>
     );
@@ -76,16 +78,16 @@ export function SideRails({ side }: { side: "l" | "r" }) {
       <button type="button" className="pj-rail relative" onClick={() => setPanel("map")}>
         {firstIsland ? <span className="pj-badge" /> : null}
         <GameIcon name="map" />
-        Map
+        <span className="pj-rail-label">Map</span>
       </button>
       <button type="button" className="pj-rail relative" data-testid="rail-challenges" onClick={() => setTab("challenges")}>
         {challengesLeft ? <span className="pj-badge" /> : null}
         <GameIcon name="quests" />
-        Challenges
+        <span className="pj-rail-label">Challenges</span>
       </button>
       <button type="button" className="pj-rail" onClick={() => setPanel("shop")}>
         <GameIcon name="shop" />
-        Shop
+        <span className="pj-rail-label">Shop</span>
       </button>
     </div>
   );
@@ -107,7 +109,7 @@ function DailyRail({ nextAt, onOpen }: { nextAt: number; onOpen: () => void }) {
     <button type="button" className="pj-rail relative" onClick={onOpen}>
       {ready ? <span className="pj-badge" /> : null}
       <GameIcon name="daily" />
-      Daily
+      <span className="pj-rail-label">Daily</span>
     </button>
   );
 }

@@ -86,7 +86,7 @@ function boardValue(b: Cell[][]): number {
 function moveScore(m: Match, mv: Move): { value: number; next: Match } | null {
   const res = placePiece(m, mv.i, mv.r, mv.c);
   if (!res.ok) return null;
-  const lines = res.clear?.lines ?? 0;
+  const lines = (res.clear?.lines ?? 0) + (res.clear?.zapLines ?? 0);
   let value = boardValue(res.match.board) + lines * 12 + res.gained * 0.01;
   if (res.match.won) value += 1000;
   if (res.match.over) value -= 500;

@@ -125,7 +125,40 @@ export type ClearInfo = {
   fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
   /** A star block's color sweep: which color popped and how many blocks. */
   swept?: { color: ColorId; count: number };
+  /**
+   * Rows and columns a special emptied (arrow, bomb, golden block, star pop)
+   * that were at least half full. They count toward "Clear N lines" goals but
+   * score as the special, not as a line clear.
+   */
+  zapLines?: number;
 };
+
+/** A line a special empties counts as cleared when it held at least this many blocks. */
+export const ZAP_LINE_MIN = 4;
+
+/**
+ * Rows and columns that held at least ZAP_LINE_MIN blocks before and are
+ * empty after (unbreakable cells aside).
+ */
+export function countZapLines(before: Cell[][], after: Cell[][]): number {
+  let n = 0;
+  const filled = (cell: Cell) => cell.t !== "e" && !isUnbreakable(cell);
+  for (let i = 0; i < SIZE; i++) {
+    let rowBefore = 0;
+    let rowAfter = 0;
+    let colBefore = 0;
+    let colAfter = 0;
+    for (let j = 0; j < SIZE; j++) {
+      if (filled(before[i]![j]!)) rowBefore++;
+      if (filled(after[i]![j]!)) rowAfter++;
+      if (filled(before[j]![i]!)) colBefore++;
+      if (filled(after[j]![i]!)) colAfter++;
+    }
+    if (rowBefore >= ZAP_LINE_MIN && rowAfter === 0) n++;
+    if (colBefore >= ZAP_LINE_MIN && colAfter === 0) n++;
+  }
+  return n;
+}
 
 export type PlaceResult = {
   ok: boolean;
@@ -722,6 +755,8 @@ export function mergeClears(a: ClearInfo | null, b: ClearInfo | null): ClearInfo
     rockets: a.rockets + b.rockets,
     blasts: a.blasts + b.blasts,
     fired: [...a.fired, ...b.fired],
+    ...(a.zapLines || b.zapLines ? { zapLines: (a.zapLines ?? 0) + (b.zapLines ?? 0) } : {}),
+    ...(a.swept || b.swept ? { swept: b.swept ?? a.swept } : {}),
   };
 }
 
@@ -732,10 +767,16 @@ function settlePiece(board: Cell[][], piece: Piece, row: number, col: number): C
   const lines = resolveClears(board);
   const at = piece.specialAt !== null ? piece.cells[piece.specialAt] : undefined;
   const alreadyFired = Boolean(at && lines?.fired.some((f) => f.r === row + at[0] && f.c === col + at[1]));
+  const beforeSpecials = cloneBoard(board);
   // …then a special that's still sitting there goes off right away.
-  let clear = alreadyFired ? lines : mergeClears(lines, detonatePlaced(board, piece, row, col));
+  let specials = alreadyFired ? null : detonatePlaced(board, piece, row, col);
   // Nothing ever waits for a full line: any other special left on the board goes off too.
-  clear = mergeClears(clear, fireDormant(board));
+  specials = mergeClears(specials, fireDormant(board));
+  if (specials) {
+    const zap = countZapLines(beforeSpecials, board);
+    if (zap) specials.zapLines = zap;
+  }
+  let clear = mergeClears(lines, specials);
   // Stones crack when anything right next to them clears (two cracks break one).
   clear = mergeClears(clear, crackStonesNear(board, clear));
   return clear;
@@ -890,7 +931,12 @@ function settleWithStar(board: Cell[][], piece: Piece, row: number, col: number)
   const star = piece.starAt !== null;
   const clear = settlePiece(board, star ? { ...piece, starAt: null, gold: false } : piece, row, col);
   if (!star) return clear;
+  const beforeSweep = cloneBoard(board);
   const sweep = colorSweep(board, piece.color);
+  if (sweep) {
+    const zap = countZapLines(beforeSweep, board);
+    if (zap) sweep.zapLines = zap;
+  }
   const merged = mergeClears(clear, sweep);
   if (merged && sweep?.swept) merged.swept = sweep.swept;
   return merged;
@@ -1162,7 +1208,7 @@ export function placePiece(
     // A clear within the window extends the streak; otherwise it starts a new one.
     next.combo = match.sinceClear < COMBO_WINDOW ? match.combo + 1 : 1;
     next.sinceClear = 0;
-    next.lines += clear.lines;
+    next.lines += clear.lines + (clear.zapLines ?? 0);
     next.stonesCleared += clear.cells.filter((c) => c.cell.t === "k").length;
   } else {
     next.sinceClear = match.sinceClear + 1;

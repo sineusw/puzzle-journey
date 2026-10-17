@@ -6,6 +6,7 @@ import * as audio from "@/lib/game/audio";
 import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize } from "./block";
 import { BoardFxRunner } from "./board-fx";
 import { SideRails } from "./overlays";
+import { useCompactLayout } from "./use-compact";
 import { SPECIAL_WORDS } from "./explainers";
 import { TutorialHand } from "./tutorial-coach";
 import { Cheerleader } from "./cheerleader";
@@ -13,6 +14,17 @@ import { VisitorLayer } from "./visitors/visitor-layer";
 
 /** Tray pieces are drawn at this cell size before they're picked up. */
 const TRAY_CELL = 23;
+
+/**
+ * Cell size for a piece in the tray: as big as fits its third of the tray
+ * (small pieces read larger, long ones still fit). A lone special block is
+ * drawn bigger so its icon is easy to see.
+ */
+function trayCellFor(piece: Piece): number {
+  if (piece.cells.length === 1 && piece.special && piece.special !== "stone") return Math.round(TRAY_CELL * 2);
+  const { rows, cols } = bounds(piece.cells);
+  return Math.max(16, Math.min(27, Math.floor(108 / cols), Math.floor(84 / rows)));
+}
 
 type Metrics = { left: number; top: number; cell: number; gap: number; stride: number; right: number; bottom: number };
 
@@ -71,6 +83,7 @@ export function PlayArea() {
   const selected = useGame((s) => s.selected);
   const targeting = useGame((s) => s.targeting);
   const visitorBusy = useGame((s) => s.visitorBusy);
+  const compact = useCompactLayout();
   const visitorHide = useGame((s) => s.visitorHide);
   const fx = useGame((s) => s.fx);
 
@@ -211,7 +224,7 @@ export function PlayArea() {
       const ty = d.slot.top + d.slot.height / 2 - size.h / 2;
       el.classList.add("is-returning");
       el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-      inner.style.transform = `scale(${TRAY_CELL / d.m.cell})`;
+      inner.style.transform = `scale(${trayCellFor(d.piece) / d.m.cell})`;
       window.setTimeout(() => setDragIndex((i) => (i === d.index ? null : i)), 190);
     },
     [],
@@ -287,7 +300,8 @@ export function PlayArea() {
       y: e.clientY,
       startX: e.clientX,
       startY: e.clientY,
-      lift: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9),
+      // Touch: hold the piece above the finger, its bottom edge clear of the fingertip.
+      lift: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
       m,
       moved: false,
       slot: e.currentTarget.getBoundingClientRect(),
@@ -308,7 +322,7 @@ export function PlayArea() {
     const slot = d.slot;
     const size = pieceSize(d.piece.cells, d.m.cell, d.m.gap);
     el.style.transform = `translate3d(${slot.left + slot.width / 2 - size.w / 2}px, ${slot.top + slot.height / 2 - size.h / 2}px, 0)`;
-    inner.style.transform = `scale(${TRAY_CELL / d.m.cell})`;
+    inner.style.transform = `scale(${trayCellFor(d.piece) / d.m.cell})`;
     const id = requestAnimationFrame(() => {
       if (dragRef.current !== d) return;
       el.classList.add("is-live");
@@ -357,7 +371,7 @@ export function PlayArea() {
   return (
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
       <div ref={rowRef} className="pj-board-row">
-        <SideRails side="l" />
+        {compact ? null : <SideRails side="l" />}
         <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
           <ComboMeter />
           <BoardGrid
@@ -370,7 +384,7 @@ export function PlayArea() {
             onClick={onGridClick}
           />
         </div>
-        <SideRails side="r" />
+        {compact ? null : <SideRails side="r" />}
       </div>
 
       <div
@@ -608,8 +622,7 @@ const TraySlot = memo(function TraySlot({
       {piece ? (
         <PieceGrid
           piece={piece}
-          // A lone special block is drawn bigger so its icon is easy to see.
-          cell={piece.cells.length === 1 && piece.special && piece.special !== "stone" ? Math.round(TRAY_CELL * 2) : TRAY_CELL}
+          cell={trayCellFor(piece)}
           faded={!fits || lifted}
         />
       ) : null}

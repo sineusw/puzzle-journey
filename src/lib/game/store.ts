@@ -112,6 +112,8 @@ export type BoardFx = {
   power?: "hammer" | "bomb" | "refresh" | "freeze" | null;
   /** A color pop (star block or Pip's paint): which color and how many. */
   swept?: { color: ColorId; count: number } | null;
+  /** Lines a special emptied that count toward "Clear N lines". */
+  zapLines?: number;
   /** A star block that paid out on drop (sparkle + "+50 ★"). */
   star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
@@ -466,8 +468,9 @@ export const useGame = create<GameStore>((set, get) => ({
     rs.bestCombo = result.match.bestCombo;
     rs.perfects = result.match.perfects;
     if (result.clear) {
-      rs.lines += result.clear.lines;
-      for (let i = 0; i < result.clear.lines; i++) rs.lineTimes.push(now);
+      const counted = result.clear.lines + (result.clear.zapLines ?? 0);
+      rs.lines += counted;
+      for (let i = 0; i < counted; i++) rs.lineTimes.push(now);
       for (const { cell } of result.clear.cells) {
         if (cell.t === "b" || cell.t === "s") rs.colors[cell.c] = (rs.colors[cell.c] ?? 0) + 1;
       }
@@ -476,7 +479,7 @@ export const useGame = create<GameStore>((set, get) => ({
     {
       const colors: ChallengeEvent["colors"] = {};
       for (const { cell } of result.clear?.cells ?? []) if (cell.t === "b" || cell.t === "s") colors[cell.c] = (colors[cell.c] ?? 0) + 1;
-      const lines = result.clear?.lines ?? 0;
+      const lines = (result.clear?.lines ?? 0) + (result.clear?.zapLines ?? 0);
       const levelWin = result.match.won && (result.match.mode === "adventure" || result.match.mode === "classic");
       nextProfile = trackChallenges(nextProfile, {
         lines,
@@ -592,6 +595,7 @@ export const useGame = create<GameStore>((set, get) => ({
       fired: clear?.fired ?? [],
       caption,
       swept: clear?.swept ?? null,
+      zapLines: clear?.zapLines ?? 0,
       star: result.star ?? null,
     };
     set({

@@ -682,3 +682,46 @@ describe("Block Blast scoring rules", () => {
 function boardIsEmptyLike(board: Cell[][]): boolean {
   return board.every((row) => row.every((c) => c.t === "e"));
 }
+
+describe("special clears and line goals", () => {
+  const piece1 = (special: "rocketH" | "rocketV" | "bomb"): Piece => ({ id: "z", shape: "o1", cells: [[0, 0]], color: "azure", starAt: null, gold: false, special, specialAt: 0 });
+  const lineMatch = () => {
+    const m = newLevelMatch("adventure", 5, { type: "lines", value: 10 }, 0, { stars: false, specials: ["rocketH", "rocketV", "bomb"], stones: false, visitors: [] });
+    m.board = emptyBoard();
+    m.lines = 0;
+    m.goalProgress = 0;
+    return m;
+  };
+
+  it("an arrow that empties a half-full row counts as a line (but scores as a special)", () => {
+    const m = lineMatch();
+    for (const c of [0, 1, 6]) m.board[5]![c] = { t: "b", c: "pink" };
+    m.tray = [piece1("rocketH"), null, { ...piece1("bomb"), special: null, specialAt: null }];
+    const r = placePiece(m, 0, 5, 3);
+    assert.ok(r.ok);
+    assert.equal(r.clear?.lines, 0);
+    assert.equal(r.clear?.zapLines, 1);
+    assert.equal(r.match.lines, 1);
+    assert.equal(r.match.goalProgress, 1);
+  });
+
+  it("zapping a nearly empty row does not count", () => {
+    const m = lineMatch();
+    m.board[5]![0] = { t: "b", c: "pink" };
+    m.tray = [piece1("rocketH"), null, { ...piece1("bomb"), special: null, specialAt: null }];
+    const r = placePiece(m, 0, 5, 3);
+    assert.ok(r.ok);
+    assert.equal(r.clear?.zapLines ?? 0, 0);
+    assert.equal(r.match.lines, 0);
+  });
+
+  it("a bomb's partial hole never counts as a line", () => {
+    const m = lineMatch();
+    for (let c = 0; c < 6; c++) m.board[3]![c] = { t: "b", c: "lime" };
+    m.tray = [piece1("bomb"), null, { ...piece1("bomb"), special: null, specialAt: null }];
+    const r = placePiece(m, 0, 4, 2);
+    assert.ok(r.ok);
+    assert.equal(r.clear?.zapLines ?? 0, 0);
+    assert.equal(r.match.lines, 0);
+  });
+});

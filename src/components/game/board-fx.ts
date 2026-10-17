@@ -239,6 +239,11 @@ export class BoardFxRunner {
       audio.feelStar(e.star.gold ? 2 : 1);
     }
     if (e.caption) this.caption(gridBox, e.caption, reduce);
+    if (e.zapLines) {
+      // A row/column a special wiped out counts as a cleared line: say so.
+      const n = e.zapLines;
+      window.setTimeout(() => this.textPop(originX, originY - cell * 0.9, `+${n} line${n === 1 ? "" : "s"}`, reduce), 180);
+    }
     if (e.gained > 0 && e.cleared.length) this.scorePop(originX, originY, e.gained, reduce);
     const word = e.praise ?? (e.cleared.length && e.placedCells > 0 ? MINI_PRAISE[miniIdx++ % MINI_PRAISE.length]! : null);
     if (word) this.praise(gridBox, word, e.perfect, reduce, !e.praise);
@@ -456,6 +461,23 @@ export class BoardFxRunner {
       ],
       { duration: reduce ? 160 : 380, easing: "ease-out" },
     ).finished.then(() => bar.remove(), () => bar.remove());
+  }
+
+  private textPop(x: number, y: number, text: string, reduce: boolean): void {
+    const el = document.createElement("div");
+    el.className = "pj-score-pop is-lines";
+    el.textContent = text;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    this.layer.appendChild(el);
+    el.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(0.6)", opacity: 0 },
+        { transform: "translate(-50%, -90%) scale(1.15)", opacity: 1, offset: 0.25 },
+        { transform: "translate(-50%, -190%) scale(1)", opacity: 0 },
+      ],
+      { duration: reduce ? 600 : 1100, easing: "ease-out" },
+    ).finished.then(() => el.remove(), () => el.remove());
   }
 
   private scorePop(x: number, y: number, gained: number, reduce: boolean, prefix = ""): void {

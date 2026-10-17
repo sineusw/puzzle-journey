@@ -7,8 +7,8 @@ export const STAR_TABLE: Record<"adventure" | "classic", Record<number, { three:
    "two": 12
   },
   "2": {
-   "three": 24,
-   "two": 28
+   "three": 22,
+   "two": 25
   },
   "3": {
    "three": 8,
@@ -16,35 +16,35 @@ export const STAR_TABLE: Record<"adventure" | "classic", Record<number, { three:
   },
   "4": {
    "three": 7,
-   "two": 13
+   "two": 15
   },
   "5": {
-   "three": 48,
-   "two": 65
+   "three": 34,
+   "two": 41
   },
   "6": {
    "three": 10,
    "two": 13
   },
   "7": {
-   "three": 54,
-   "two": 70
+   "three": 42,
+   "two": 51
   },
   "8": {
-   "three": 13,
+   "three": 14,
    "two": 18
   },
   "9": {
-   "three": 10,
-   "two": 20
+   "three": 11,
+   "two": 19
   },
   "10": {
    "three": 15,
-   "two": 19
+   "two": 20
   },
   "11": {
-   "three": 73,
-   "two": 94
+   "three": 46,
+   "two": 55
   },
   "12": {
    "three": 19,
@@ -55,12 +55,12 @@ export const STAR_TABLE: Record<"adventure" | "classic", Record<number, { three:
    "two": 32
   },
   "14": {
-   "three": 91,
-   "two": 113
+   "three": 58,
+   "two": 67
   },
   "15": {
-   "three": 20,
-   "two": 28
+   "three": 21,
+   "two": 27
   }
  },
  "classic": {
