@@ -9,6 +9,7 @@ import { useGame } from "@/lib/game/store";
 import { nameFor, useBoard, type BoardState } from "@/lib/game/leaderboard";
 import { categories, dayKey, rank, weekKey, type Category } from "@/lib/game/stats";
 import { dailySet, rollover, weeklySet, type ChallengeDef } from "@/lib/game/challenges";
+import type { BoardRow } from "@/lib/game/ranked-service";
 import { GameIcon } from "./icons";
 
 /* ---------------------------------------------------------------- helpers */
@@ -313,6 +314,82 @@ function Podium({ cat, board, today }: { cat: Category; board: BoardState; today
   );
 }
 
+/**
+ * Verified scores: ranked Sandbox runs replayed by the server. Shown only
+ * where the server can check scores (the deployed site with its database);
+ * elsewhere it stays hidden rather than showing scores nobody checked.
+ */
+function VerifiedBoard() {
+  const startRanked = useGame((s) => s.startRanked);
+  const [state, setState] = useState<{ available: boolean; rows: BoardRow[] } | null>(null);
+  const [nick, setNick] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    import("@/lib/game/ranked-api")
+      .then(({ rankedBoard }) => rankedBoard())
+      .then((r) => live && setState(r))
+      .catch(() => live && setState({ available: false, rows: [] }));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!state?.available) return null;
+  const save = async () => {
+    const { rankedSetNick } = await import("@/lib/game/ranked-api");
+    const r = await rankedSetNick({ data: { nick } }).catch(() => ({ ok: false }) as { ok: boolean; nick?: string });
+    setSaved(r.ok ? `Saved as ${r.nick}` : "Use 2–16 letters or numbers.");
+  };
+  return (
+    <section className="pj-verified" data-testid="verified-board" aria-labelledby="verified-title">
+      <div className="pj-verified-head">
+        <h3 id="verified-title" className="font-display text-lg">✅ Verified scores</h3>
+        <span className="text-xs text-muted">Ranked runs, replayed and checked by the server</span>
+      </div>
+      {state.rows.length ? (
+        <ol className="pj-verified-list">
+          {state.rows.map((r) => (
+            <li key={r.rank} className={r.me ? "is-me" : ""}>
+              <span className="pj-verified-rank">#{r.rank}</span>
+              <span className="pj-verified-name">{r.name}{r.me ? " (you)" : ""}</span>
+              <strong className="tabular-nums">{r.score.toLocaleString("en-US")}</strong>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted">No verified scores yet. Be the first!</p>
+      )}
+      <button
+        type="button"
+        className="pj-btn pj-btn-primary mt-2 w-full"
+        data-testid="play-ranked"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          await startRanked();
+          setBusy(false);
+        }}
+      >
+        Play a ranked run
+      </button>
+      <p className="mt-1 text-xs text-muted">Sandbox rules, no boosters or continues. One score per run.</p>
+      <form
+        className="pj-verified-nick"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <label htmlFor="bj-nick" className="sr-only">Display name</label>
+        <input id="bj-nick" value={nick} maxLength={16} placeholder="Your display name" onChange={(e) => setNick(e.target.value)} autoComplete="nickname" />
+        <button type="submit" className="pj-btn pj-btn-ghost">Save</button>
+      </form>
+      {saved ? <p className="text-xs text-muted" role="status">{saved}</p> : null}
+    </section>
+  );
+}
+
 export function RanksScreen() {
   const board = useBoard();
   const [scope, setScope] = useState<"today" | "all">("today");
@@ -342,6 +419,8 @@ export function RanksScreen() {
           <span>crowns</span>
         </div>
       </div>
+
+      <VerifiedBoard />
 
       <div className="pj-standing">
         {rival ? <p>⚔️ {rival}</p> : players > 1 ? <p>👑 You lead every category you’ve played. Defend your crowns!</p> : <p>🏝️ You’re the only one here so far. Invite a friend and race for the crowns.</p>}

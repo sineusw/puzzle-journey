@@ -46,6 +46,7 @@ import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
 import { applyChallengeEvent, claimReward, settleRollover, type ChallengeEvent } from "./challenges.ts";
 import { notify } from "./notices.ts";
+import { newRankedMatch } from "./ranked.ts";
 import { cheer } from "./voice";
 import {
   applyVisitorAction,
@@ -198,6 +199,8 @@ type GameStore = {
   startAdventure: (levelId: number) => void;
   startClassic: (levelId: number) => void;
   startSandbox: () => void;
+  /** Start a Sandbox run dealt from a server seed; its score is verified when it ends. */
+  startRanked: () => Promise<boolean>;
   startChallenge: (id: string) => void;
   continueRun: () => void;
   claimDaily: () => void;
@@ -368,6 +371,8 @@ export const useGame = create<GameStore>((set, get) => ({
     });
     // Rewards paid for an ended day are saved at once, so a reload can't lose them.
     if (profile.challenges !== loaded.challenges) get().persist();
+    // A ranked run that ended before its result came back: send it now.
+    if (match.ranked && match.over && !match.ranked.submitted && !match.ranked.void) void submitRanked(get, set);
     // New (and returning) players play through the tutorial once; Skip is always there.
     if (!profile.tutorialDone) get().startTutorial("basics", true);
   },
@@ -598,6 +603,9 @@ export const useGame = create<GameStore>((set, get) => ({
       zapLines: clear?.zapLines ?? 0,
       star: result.star ?? null,
     };
+    if (match.ranked && !match.ranked.void) {
+      result.match.ranked = { ...match.ranked, moves: [...match.ranked.moves, [trayIndex, row, col]] };
+    }
     set({
       match: result.match,
       profile: nextProfile,
@@ -610,6 +618,7 @@ export const useGame = create<GameStore>((set, get) => ({
       panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,
     });
     persistSoon(get);
+    if (result.match.over) void submitRanked(get, set);
     return true;
   },
 
@@ -621,7 +630,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return;
     }
     if (id === "refresh") {
-      const next = refreshTray(match);
+      const next = voidRanked(refreshTray(match));
       const nextProfile = trackChallenges(
         applyQuestScore({ ...profile, powerups: { ...profile.powerups, refresh: profile.powerups.refresh - 1 } }, next, 1),
         { powers: 1 },
@@ -632,7 +641,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return;
     }
     if (id === "freeze") {
-      const next = applyFreeze(match);
+      const next = voidRanked(applyFreeze(match));
       const nextProfile = trackChallenges(
         applyQuestScore({ ...profile, powerups: { ...profile.powerups, freeze: profile.powerups.freeze - 1 } }, next, 1),
         { powers: 1 },
@@ -655,8 +664,9 @@ export const useGame = create<GameStore>((set, get) => ({
   usePowerOnCell: (row, col) => {
     const { targeting, match, profile, visitorBusy } = get();
     if (!targeting || visitorBusy) return false;
-    const used =
+    const hit =
       targeting === "hammer" ? hammerCell(match, row, col) : targeting === "bomb" ? bombCell(match, row, col) : null;
+    const used = hit ? voidRanked(hit) : null;
     if (!used) {
       audio.sfxBad();
       return false;
@@ -716,6 +726,26 @@ export const useGame = create<GameStore>((set, get) => ({
     beginRun(get, set, newSandboxMatch());
   },
 
+  startRanked: async () => {
+    try {
+      const { rankedStart } = await import("./ranked-api.ts");
+      const res = await rankedStart();
+      if (!res.ok) {
+        notify({ icon: "⏳", title: res.error === "rate_limited" ? "Too many ranked runs" : "Ranked play is offline", sub: res.error === "rate_limited" ? "Try again in a little while." : "Your game still saves on this device.", tone: "info" });
+        return false;
+      }
+      audio.sfxUi();
+      const match = newRankedMatch(res.seed);
+      match.ranked = { runId: res.runId, moves: [] };
+      beginRun(get, set, match);
+      set({ runBanner: { id: Date.now(), title: "Ranked run", sub: "No boosters · your score is checked by the server" } });
+      return true;
+    } catch {
+      notify({ icon: "⏳", title: "Ranked play is offline", sub: "Your game still saves on this device.", tone: "info" });
+      return false;
+    }
+  },
+
   startAdventure: (levelId) => {
     const level = ADVENTURE.find((l) => l.id === levelId);
     if (!level) return;
@@ -765,7 +795,7 @@ export const useGame = create<GameStore>((set, get) => ({
       set({ panel: "shop", toast: `Need ${CONTINUE_COST} gems to continue.` });
       return;
     }
-    const next = continueMatch(match);
+    const next = voidRanked(continueMatch(match));
     audio.sfxWin();
     const prev = get().runStats;
     set({
@@ -1184,6 +1214,37 @@ function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => vo
     runBanner: bannerFor(match),
   });
   persistSoon(get);
+}
+
+/** A booster or continue in a ranked run: it keeps playing but no longer counts. */
+function voidRanked(next: Match): Match {
+  if (!next.ranked || next.ranked.void) return next;
+  notify({ icon: "ℹ️", title: "This run is no longer ranked", sub: "Boosters and continues aren't allowed in ranked play.", tone: "info" });
+  return { ...next, ranked: { ...next.ranked, void: "booster" } };
+}
+
+let submitting = false;
+/** Send a finished ranked run for verification and report the server's answer. */
+async function submitRanked(get: () => GameStore, set: (partial: Partial<GameStore>) => void): Promise<void> {
+  const m = get().match;
+  if (!m.ranked || m.ranked.void || m.ranked.submitted || submitting) return;
+  submitting = true;
+  try {
+    const { rankedSubmit } = await import("./ranked-api.ts");
+    const res = await rankedSubmit({ data: { runId: m.ranked.runId, moves: m.ranked.moves } });
+    const cur = get().match;
+    if (cur.ranked?.runId === m.ranked.runId) set({ match: { ...cur, ranked: { ...cur.ranked, submitted: true } } });
+    persistSoon(get);
+    if (res.ok) {
+      notify({ icon: "🏆", title: `Verified: ${res.score.toLocaleString("en-US")}`, sub: `#${res.rank} on the ranked board${res.best ? " · new personal best!" : ""}`, tone: "win" });
+    } else if (res.error !== "unavailable") {
+      notify({ icon: "⚠️", title: "Score not verified", sub: res.error === "expired" ? "Ranked runs must finish within 3 hours." : "This run couldn't be checked.", tone: "info" });
+    }
+  } catch {
+    // Offline: the run stays unsent and goes out on the next load.
+  } finally {
+    submitting = false;
+  }
 }
 
 let bannerSeq = 1;

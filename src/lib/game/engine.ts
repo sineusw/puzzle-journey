@@ -107,6 +107,12 @@ export type Match = {
   seed?: number;
   /** Trays dealt so far (with `seed`, picks the next deal's random stream). */
   deals?: number;
+  /**
+   * A ranked run (server-issued seed): the placements so far, sent for
+   * verification when the game ends. `void` = a booster or continue was used,
+   * so the run no longer counts.
+   */
+  ranked?: { runId: string; moves: Array<[number, number, number]>; void?: string; submitted?: boolean };
 };
 
 export type ClearInfo = {
@@ -1140,9 +1146,14 @@ export function newGoalMatch(goal: Goal, features: Features = ALL_FEATURES): Mat
 }
 
 /** Sandbox: endless, plain blocks only, chase the high score. */
-export function newSandboxMatch(): Match {
+export function newSandboxMatch(seed?: number): Match {
   const match = blankMatch(PLAIN_FEATURES);
   match.mode = "sandbox";
+  // A given seed (a server-issued ranked run) makes every deal reproducible.
+  if (seed !== undefined) {
+    match.seed = seed >>> 0;
+    match.deals = 0;
+  }
   fillTray(match, dealRng(match), true);
   return match;
 }

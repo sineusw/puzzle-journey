@@ -7,30 +7,37 @@
 
 import { memo, type CSSProperties } from "react";
 
-// Fixed pseudo-random layout so it never changes between renders.
+// Fixed pseudo-random layout so it never changes between renders. Integer
+// math only and rounded to 3 places: the server's render and the browser's
+// must produce the exact same style strings (Math.sin can differ slightly).
 function rand(seed: number): number {
-  const x = Math.sin(seed * 9301 + 49297) * 233280;
-  return x - Math.floor(x);
+  let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return Math.round(((h >>> 0) / 4294967296) * 1000) / 1000;
 }
 
+/** Short, exact numbers for style strings (browsers shorten long ones, which reads as a hydration mismatch). */
+const f2 = (n: number) => n.toFixed(2);
+
 const FIREFLIES = Array.from({ length: 12 }, (_, i) => ({
-  left: `${4 + rand(i + 1) * 92}%`,
-  top: `${10 + rand(i + 31) * 82}%`,
-  dx: `${(rand(i + 61) - 0.5) * 60}px`,
-  dy: `${-20 - rand(i + 91) * 50}px`,
-  dur: `${7 + rand(i + 121) * 7}s`,
-  blink: `${2 + rand(i + 151) * 2.5}s`,
-  delay: `${-rand(i + 181) * 10}s`,
-  size: `${3 + rand(i + 211) * 3}px`,
+  left: `${f2(4 + rand(i + 1) * 92)}%`,
+  top: `${f2(10 + rand(i + 31) * 82)}%`,
+  dx: `${f2((rand(i + 61) - 0.5) * 60)}px`,
+  dy: `${f2(-20 - rand(i + 91) * 50)}px`,
+  dur: `${f2(7 + rand(i + 121) * 7)}s`,
+  blink: `${f2(2 + rand(i + 151) * 2.5)}s`,
+  delay: `${f2(-rand(i + 181) * 10)}s`,
+  size: `${f2(3 + rand(i + 211) * 3)}px`,
 }));
 
 const LEAVES = Array.from({ length: 5 }, (_, i) => ({
-  left: `${rand(i + 7) * 90}%`,
-  dur: `${14 + rand(i + 17) * 10}s`,
-  delay: `${-rand(i + 27) * 24}s`,
-  drift: `${40 + rand(i + 37) * 80}px`,
+  left: `${f2(rand(i + 7) * 90)}%`,
+  dur: `${f2(14 + rand(i + 17) * 10)}s`,
+  delay: `${f2(-rand(i + 27) * 24)}s`,
+  drift: `${f2(40 + rand(i + 37) * 80)}px`,
   hue: i % 3,
-  scale: 0.7 + rand(i + 47) * 0.6,
+  scale: Number(f2(0.7 + rand(i + 47) * 0.6)),
 }));
 
 const LEAF_COLORS = ["#5fbf6a", "#9ccf4e", "#3d9a63"];

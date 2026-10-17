@@ -3456,3 +3456,14 @@ svg.pj-sp { display: block; max-width: none; }
   0%, 30% { transform: rotate(-90deg); }
   60%, 100% { transform: rotate(0deg); }
 }
+
+/* Verified (server-checked) ranked scores on the Ranks tab. */
+.pj-verified { margin-top: 12px; padding: 12px; border-radius: 16px; background: linear-gradient(180deg, rgb(30 60 48 / 0.85), rgb(12 30 26 / 0.9)); box-shadow: inset 0 0 0 1px rgb(120 230 160 / 0.35); }
+.pj-verified-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin-bottom: 8px; }
+.pj-verified-list { display: grid; gap: 4px; }
+.pj-verified-list li { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: rgb(0 0 0 / 0.2); font-size: 0.9rem; }
+.pj-verified-list li.is-me { box-shadow: inset 0 0 0 2px rgb(255 210 87 / 0.7); }
+.pj-verified-rank { font-weight: 800; color: #ffd257; }
+.pj-verified-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-verified-nick { display: flex; gap: 6px; margin-top: 8px; }
+.pj-verified-nick input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(0 0 0 / 0.3); color: inherit; }
