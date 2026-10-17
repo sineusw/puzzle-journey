@@ -47,13 +47,13 @@ export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
   stars: { id: "stars", kind: "block", name: "Star blocks", blurb: "Star blocks are color bombs! Drop one anywhere and every block of its color pops. No full row needed!", art: "/art/tiles/star-blue.webp" },
   arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Drop an arrow block anywhere, no full row needed. ZAP! Every block in the line it points along disappears.", art: "/art/tiles/cyan.webp", special: "rocketV" },
   bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Drop a bomb block anywhere, no full row needed. BOOM! The blocks all around it disappear.", art: "/art/tiles/violet.webp", special: "bomb" },
-  milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.png" },
+  milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.webp" },
   stones: { id: "stones", kind: "block", name: "Stones", blurb: "Stones are tough. Clear blocks right next to a stone two times and it breaks. No full row needed!", art: "/art/tiles/stone.webp" },
-  kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.png" },
-  luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Waves her wand and turns a block into an arrow or a bomb that goes off right away!", art: "/characters/luna-3d.png" },
+  kai: { id: "kai", kind: "visitor", name: "Kai the Builder", blurb: "Hammers stones apart, or builds a new one.", art: "/characters/kai-3d.webp" },
+  luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Waves her wand and turns a block into an arrow or a bomb that goes off right away!", art: "/characters/luna-3d.webp" },
   blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "Super rare! Put the golden block down and every block on the board disappears.", art: "/art/tiles/amber.webp", special: "blast" },
-  nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.png" },
-  pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb on a block. If it matches the blocks touching it, the whole group pops!", art: "/characters/pip-3d.png" },
+  nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.webp" },
+  pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb on a block. If it matches the blocks touching it, the whole group pops!", art: "/characters/pip-3d.webp" },
 };
 
 export type AdventureLevel = {

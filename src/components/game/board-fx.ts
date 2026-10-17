@@ -305,7 +305,7 @@ export class BoardFxRunner {
     const y = b.top + b.height / 2;
     if (power === "hammer") {
       // The hammer swings down onto the cell: impact ring, stone chips, sparks.
-      const icon = this.icon("/icons/hammer.png", x + cell * 0.6, y - cell * 0.9, cell * 1.6);
+      const icon = this.icon("/icons/hammer.webp", x + cell * 0.6, y - cell * 0.9, cell * 1.6);
       icon.animate(
         [
           { transform: "translate(-50%, -50%) rotate(-70deg) scale(0.6)", opacity: 0 },
@@ -322,7 +322,7 @@ export class BoardFxRunner {
         this.flash(grid, 0.4, "#ffffff");
       }, 330);
     } else if (power === "bomb") {
-      const icon = this.icon("/icons/bomb.png", x, y, cell * 1.4);
+      const icon = this.icon("/icons/bomb.webp", x, y, cell * 1.4);
       icon.animate(
         [
           { transform: "translate(-50%, -120%) scale(0.4)", opacity: 0 },

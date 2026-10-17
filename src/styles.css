@@ -3467,3 +3467,17 @@ svg.pj-sp { display: block; max-width: none; }
 .pj-verified-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pj-verified-nick { display: flex; gap: 6px; margin-top: 8px; }
 .pj-verified-nick input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(0 0 0 / 0.3); color: inherit; }
+
+/* Small "+" buttons keep their look but get a 44px touch area. */
+.pj-plus { position: relative; }
+.pj-plus::after,
+.pj-add::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+.pj-title-row .pj-rail::after {
+  content: "";
+  position: absolute;
+  inset: -4px -2px;
+}

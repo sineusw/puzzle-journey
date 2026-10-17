@@ -75,7 +75,7 @@ function flyCoins(from: HTMLElement, n = 8): void {
   if (!to) return;
   for (let i = 0; i < n; i++) {
     const coin = document.createElement("img");
-    coin.src = "/icons/coin.png";
+    coin.src = "/icons/coin.webp";
     coin.alt = "";
     coin.className = "pj-fly-coin";
     coin.style.left = `${a.left + a.width / 2}px`;

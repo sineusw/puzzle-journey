@@ -238,7 +238,10 @@ export function sfxUi(): void {
 function ensureTrack(): HTMLAudioElement | null {
   if (typeof window === "undefined") return null;
   if (track) return track;
-  const el = new Audio("/music/island.ogg");
+  // Safari plays AAC everywhere but Ogg only on recent versions.
+  const probe = document.createElement("audio");
+  const ogg = probe.canPlayType('audio/ogg; codecs="vorbis"') !== "";
+  const el = new Audio(ogg ? "/music/island-small.ogg" : "/music/island.m4a");
   el.loop = true;
   el.preload = "auto";
   el.volume = 0.34;
