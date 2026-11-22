@@ -41,6 +41,17 @@ const STAR_TEXTURE: Partial<Record<CubeColor, string>> = {
   violet: "star-purple",
 };
 
+/** Tile set of the equipped skin ("" = the base Island Gloss set). */
+let skinDir = "";
+const SKINNED = new Set(["ocean", "candy", "sunset", "frost", "midnight", "royal", "cosmic"]);
+export function setTileSkin(skin: string): void {
+  skinDir = SKINNED.has(skin) ? `${skin}/` : "";
+}
+export function tileUrl(tex: string, skin?: string): string {
+  const dir = skin === undefined ? skinDir : SKINNED.has(skin) ? `${skin}/` : "";
+  return tex.startsWith("stone") ? `/art/tiles/${tex}.webp` : `/art/tiles/${dir}${tex}.webp`;
+}
+
 function textureFor(color: CubeColor, kind: SpecialId | undefined, star: boolean, gold: boolean, hp?: 1 | 2): string | null {
   if (kind === "stone") return hp === 1 ? "stone-cracked" : "stone";
   if (star && !kind) return gold ? "star-orange" : STAR_TEXTURE[color] ?? null;
@@ -53,13 +64,13 @@ export function cellTextureUrl(cell: Cell): string | null {
   if (!color) return null;
   const kind: SpecialId | undefined = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
   const tex = textureFor(color, kind, cell.t === "s", cell.t === "s" && Boolean(cell.gold), cell.t === "k" ? cell.hp : undefined);
-  return tex ? `/art/tiles/${tex}.webp` : null;
+  return tex ? tileUrl(tex) : null;
 }
 
 /** Texture URL for a plain block of `color`. */
-export function colorTextureUrl(color: CubeColor): string | null {
+export function colorTextureUrl(color: CubeColor, skin?: string): string | null {
   const tex = TILE_TEXTURE[color];
-  return tex ? `/art/tiles/${tex}.webp` : null;
+  return tex ? tileUrl(tex, skin) : null;
 }
 
 export function BlockFace({
@@ -73,7 +84,9 @@ export function BlockFace({
   stoneHp,
   overlays,
   className,
+  skin,
 }: {
+  skin?: string;
   color: CubeColor;
   star?: boolean;
   gold?: boolean;
@@ -95,7 +108,7 @@ export function BlockFace({
       data-sp={kind}
     >
       {tex ? (
-        <span className="pj-tex" style={{ backgroundImage: `url(/art/tiles/${tex}.webp)` }} />
+        <span className="pj-tex" style={{ backgroundImage: `url(${tileUrl(tex, skin)})` }} />
       ) : (
         <CubeMesh color={color} />
       )}

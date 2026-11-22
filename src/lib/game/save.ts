@@ -1,4 +1,5 @@
 import { emptyChallenges, normalizeChallenges, type ChallengeState } from "./challenges.ts";
+import { emptyLive, normalizeLive, type Live } from "./liveops.ts";
 import { newLevelMatch, sanitizeMatch, type Match } from "./engine.ts";
 import { emptyCard, type PlayerCard } from "./stats.ts";
 import { ADVENTURE, adventureFeatures, type PowerId, type QuestId, type SkinId, type UnlockId } from "./content.ts";
@@ -45,6 +46,8 @@ export type Profile = {
   /** Levels won in a row (Classic/Adventure); a loss resets it. */
   levelStreak: number;
   skin: SkinId;
+  /** Shop, skins, calendar, events, weekly quests, passes. */
+  live: Live;
   seenHowTo: boolean;
   match: Match | null;
 };
@@ -84,6 +87,7 @@ export function defaultProfile(): Profile {
     card: emptyCard(),
     levelStreak: 0,
     skin: "classic",
+    live: emptyLive(),
     seenHowTo: false,
     match: null,
   };
@@ -124,11 +128,17 @@ function migrate(raw: Profile): Profile {
     challenges: normalizeChallenges(raw.challenges),
     card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
+    live: normalizeLive(raw.live),
     // Version 3 introduced game modes. Keep currency and progress, but start
     // the player on a fresh run so an old special-filled board doesn't carry
     // over into the plain-block start.
     match: shouldRefreshShowcase ? null : raw.match,
   };
+  // Skins from before the shop (or a skin not owned) fall back to the default.
+  if (!next.live.ownedSkins.includes(next.skin)) {
+    if (raw.skin && ["ocean", "sunset", "midnight"].includes(raw.skin) && !raw.live) next.live.ownedSkins.push(raw.skin);
+    else next.skin = "classic";
+  }
   if (next.questDay !== todayKey()) {
     next.questDay = todayKey();
     next.quests = EMPTY_QUESTS();

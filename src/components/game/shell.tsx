@@ -13,12 +13,15 @@ import { PlayArea } from "./play-area";
 import { NoticeHost } from "./notice-host";
 import { TutorialCoach, TutorialScreens, TutorialSkipBar } from "./tutorial-coach";
 import { VisitorDirector } from "./visitors/director";
+import { setTileSkin } from "./block";
+import { claimCheckoutReturn } from "@/lib/game/payments";
 
 export function GameShell() {
   const hydrate = useGame((s) => s.hydrate);
   const persist = useGame((s) => s.persist);
   const start = useGame((s) => s.start);
   const skin = useGame((s) => s.profile.skin);
+  setTileSkin(skin);
   const tutorialOn = useGame((s) => s.tutorial !== null);
   const compactLayout = useCompactLayout();
   const tab = useGame((s) => s.tab);
@@ -29,6 +32,11 @@ export function GameShell() {
 
   useEffect(() => {
     hydrate();
+    // Back from Stripe checkout: pay out the purchase once.
+    void claimCheckoutReturn(
+      (sku, id) => useGame.getState().grantPaid(sku, id),
+      (msg) => useGame.getState().setToast(msg),
+    );
     const unbind = bindAudioLifecycle();
     const onHide = () => {
       if (document.visibilityState === "hidden") persist();

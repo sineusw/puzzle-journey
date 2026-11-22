@@ -19,10 +19,6 @@ import {
   CHALLENGES,
   CLASSIC,
   UNLOCKS,
-  CONTINUE_COST,
-  QUESTS,
-  SHOP_ITEMS,
-  SKINS,
   goalLabel,
   xpForLevel,
   starPar,
@@ -42,6 +38,8 @@ import { ChallengeScreen, RanksScreen } from "./competition";
 import { Fireworks } from "./fireworks";
 import { lessonForUnlock } from "@/lib/game/tutorial";
 import { dailySet, rollover } from "@/lib/game/challenges";
+import { AdventureMap } from "./adventure-map";
+import { ContinueOptions, DailySheet, EventsSheet, HouseAd, QuestSheet, ShopSheet, SkinsScreen } from "./store-ui";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
@@ -191,6 +189,7 @@ export function Overlays() {
   return (
     <>
       {toast ? <div className="pj-toast">{toast}</div> : null}
+      <HouseAd />
       {levelUpTo && panel !== "over" && panel !== "won" ? (
         <LevelUpSheet level={levelUpTo} onClose={dismissLevelUp} />
       ) : null}
@@ -247,118 +246,6 @@ function Sheet({ title, children }: { title: string; children: ReactNode }) {
       <h2 className="font-display text-2xl text-cream pr-8">{title}</h2>
       <div className="mt-3 space-y-2">{children}</div>
     </div>
-  );
-}
-
-function ShopSheet() {
-  const buy = useGame((s) => s.buy);
-  const profile = useGame((s) => s.profile);
-  return (
-    <Sheet title="Night market">
-      <p className="text-sm text-muted">
-        {formatInt(profile.coins)} coins · {formatInt(profile.gems)} gems
-      </p>
-      {SHOP_ITEMS.map((item) => (
-        <div key={item.id} className="pj-card flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="font-extrabold">{item.name}</div>
-            <div className="text-xs text-muted">{item.blurb}</div>
-          </div>
-          <button
-            type="button"
-            data-testid={`buy-${item.id}`}
-            className="pj-btn pj-btn-primary shrink-0 text-sm"
-            onClick={() => buy(item.id)}
-          >
-            {item.coins ? `${item.coins}c` : `${item.gems}g`}
-          </button>
-        </div>
-      ))}
-    </Sheet>
-  );
-}
-
-function QuestSheet() {
-  const profile = useGame((s) => s.profile);
-  const claimQuest = useGame((s) => s.claimQuest);
-  return (
-    <Sheet title="Quests">
-      {QUESTS.map((q) => {
-        const p = profile.quests[q.id];
-        const ready = p.value >= q.target && !p.claimed;
-        return (
-          <div key={q.id} className="pj-card">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-extrabold">{q.title}</div>
-                <div className="text-xs text-muted">{q.blurb}</div>
-              </div>
-              <button
-                type="button"
-                className="pj-btn pj-btn-primary text-sm"
-                disabled={!ready}
-                onClick={() => claimQuest(q.id)}
-              >
-                {p.claimed
-                  ? "Done"
-                  : ready
-                    ? "Claim"
-                    : `${Math.min(p.value, q.target)}/${q.target}`}
-              </button>
-            </div>
-            <div className="pj-meter mt-2">
-              <span style={{ width: `${Math.min(100, (p.value / q.target) * 100)}%` }} />
-            </div>
-          </div>
-        );
-      })}
-    </Sheet>
-  );
-}
-
-function DailySheet() {
-  const profile = useGame((s) => s.profile);
-  const claimDaily = useGame((s) => s.claimDaily);
-  const ready = Date.now() >= profile.daily.nextAt;
-  return (
-    <Sheet title="Daily gift">
-      <div className="pj-card text-center">
-        <GameIcon name="gift" className="mx-auto size-12" />
-        <p className="mt-2 font-extrabold">Streak {profile.daily.streak}</p>
-        <p className="text-sm text-muted">A small pouch every eight hours.</p>
-        <button
-          type="button"
-          className="pj-btn pj-btn-primary mt-4 w-full"
-          disabled={!ready}
-          onClick={claimDaily}
-        >
-          {ready ? "Claim gift" : "Come back later"}
-        </button>
-      </div>
-    </Sheet>
-  );
-}
-
-function EventsSheet() {
-  const startChallenge = useGame((s) => s.startChallenge);
-  const setPanel = useGame((s) => s.setPanel);
-  return (
-    <Sheet title="Lantern weekend">
-      <div className="pj-card">
-        <div className="font-extrabold">Combo tide</div>
-        <p className="mt-1 text-sm text-muted">String a x3 combo while the lanterns are lit.</p>
-        <button
-          type="button"
-          className="pj-btn pj-btn-primary mt-3 w-full"
-          onClick={() => {
-            setPanel(null);
-            startChallenge("streak");
-          }}
-        >
-          Play event
-        </button>
-      </div>
-    </Sheet>
   );
 }
 
@@ -639,7 +526,6 @@ function OverSheet() {
   const match = useGame((s) => s.match);
   const bestAtStart = useGame((s) => s.run.bestAtStart);
   const newGame = useGame((s) => s.newGame);
-  const continueRun = useGame((s) => s.continueRun);
   const setTab = useGame((s) => s.setTab);
   const sandbox = match.mode === "sandbox";
   const best = sandbox ? profile.sandboxBest : profile.highScore;
@@ -695,13 +581,10 @@ function OverSheet() {
       )}
       <RunStats />
       <IqAndAwards delay={700} />
-      <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
+      <ContinueOptions />
+      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" onClick={newGame}>
         {match.levelId ? "Try again" : "Play again"}
       </button>
-      <button type="button" className="pj-btn pj-btn-ghost mt-2 w-full" onClick={continueRun}>
-        Continue · {CONTINUE_COST} gems
-      </button>
-      <p className="mt-1 text-center text-xs text-muted">Continue empties your two fullest rows and deals pieces that fit.</p>
       <button
         type="button"
         className="pj-btn pj-btn-ghost mt-2 w-full"
@@ -928,7 +811,7 @@ function AdventureScreen() {
   const active = modes.find((m) => m.id === mode)!;
   return (
     <div>
-      <h2 className="font-display text-2xl">Play</h2>
+      <h2 className="pj-store-title">Play</h2>
       <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
         {modes.map((m) => (
           <button
@@ -947,7 +830,7 @@ function AdventureScreen() {
       <p className="mt-2 text-sm text-muted">{active.blurb}</p>
       <div className="mt-3">
         {mode === "adventure" ? (
-          <AdventureList />
+          <AdventureMap />
         ) : mode === "classic" ? (
           <ClassicList />
         ) : (
@@ -1016,35 +899,6 @@ function ClassicList() {
   );
 }
 
-
-function SkinsScreen() {
-  const skin = useGame((s) => s.profile.skin);
-  const setSkin = useGame((s) => s.setSkin);
-  return (
-    <div>
-      <h2 className="font-display text-2xl">Skins</h2>
-      <p className="mt-1 text-sm text-muted">Same blocks, different dusk.</p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {SKINS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`pj-card text-left ${skin === s.id ? "is-on" : ""}`}
-            onClick={() => setSkin(s.id)}
-          >
-            <div className="flex gap-1">
-              <span className="pj-swatch" data-c="cyan" data-skin={s.id} />
-              <span className="pj-swatch" data-c="pink" data-skin={s.id} />
-              <span className="pj-swatch" data-c="amber" data-skin={s.id} />
-            </div>
-            <div className="mt-2 font-extrabold">{s.name}</div>
-            <div className="text-xs text-muted">{s.blurb}</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function MoreScreen() {
   const profile = useGame((s) => s.profile);

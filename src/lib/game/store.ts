@@ -23,6 +23,7 @@ import {
   CLASSIC,
   CONTINUE_COST,
   QUESTS,
+  SKINS,
   adventureFeatures,
   goalLabel,
   starsFor,
@@ -46,6 +47,25 @@ import { connectBoard, postCard, useBoard } from "./leaderboard.ts";
 import { LESSONS, stepMatch, type LessonId } from "./tutorial.ts";
 import { applyChallengeEvent, claimReward, settleRollover, type ChallengeEvent } from "./challenges.ts";
 import { notify } from "./notices.ts";
+import {
+  AD_COINS,
+  AD_DAILY_CAP,
+  DAILY_REWARDS,
+  EVENT_TIERS,
+  QUEST_CHEST,
+  SHOP,
+  WEEKLY,
+  calendarReady,
+  currentEvent,
+  dayKey,
+  eventPoints,
+  grantText,
+  moneyPrice,
+  normalizeLive,
+  type Grant,
+} from "./liveops.ts";
+import { showRewardedVideo } from "./ads.ts";
+import { startCheckout } from "./payments.ts";
 import { newRankedMatch } from "./ranked.ts";
 import { cheer } from "./voice";
 import {
@@ -206,7 +226,26 @@ type GameStore = {
   claimDaily: () => void;
   claimQuest: (id: (typeof QUESTS)[number]["id"]) => void;
   buy: (itemId: string) => void;
+  /** Buy a shop item with coins or gems. */
+  buyItem: (itemId: string) => void;
+  /** Buy a shop item or skin ("skin:<id>") with real money. */
+  buyMoney: (sku: string) => Promise<void>;
+  /** Pay out a confirmed real-money checkout. */
+  grantPaid: (sku: string, sessionId: string) => void;
+  buySkin: (skin: SkinId) => void;
   setSkin: (skin: SkinId) => void;
+  claimCalendar: () => void;
+  claimEventTier: (index: number) => void;
+  claimWeekly: (id: string) => void;
+  claimQuestChest: () => void;
+  /** Free coins for watching a video. */
+  watchForCoins: () => Promise<void>;
+  /** Keep a lost run going: by video (once per run), Continue Pass, or gems. */
+  continueWith: (how: "video" | "pass" | "gems") => Promise<void>;
+  /** Run (by start time) that already used its one video continue. */
+  videoContinueRun: number;
+  /** A rewarded video is playing. */
+  videoBusy: boolean;
   toggleSetting: (key: "sfx" | "music" | "shake" | "voice") => void;
   /** Mark a one-time tip (e.g. a special block's explanation) as read. */
   dismissTip: (key: string) => void;
@@ -299,6 +338,33 @@ function trackChallenges(profile: Profile, ev: ChallengeEvent): Profile {
   return p;
 }
 
+/** Add a reward to the profile. */
+export function applyGrant(profile: Profile, g: Grant): Profile {
+  const powerups = { ...profile.powerups };
+  for (const [k, n] of Object.entries(g.powers ?? {}) as Array<[PowerId, number]>) powerups[k] = (powerups[k] ?? 0) + (n ?? 0);
+  const owned = g.skin && !profile.live.ownedSkins.includes(g.skin) ? [...profile.live.ownedSkins, g.skin] : profile.live.ownedSkins;
+  return {
+    ...profile,
+    coins: profile.coins + (g.coins ?? 0),
+    gems: profile.gems + (g.gems ?? 0),
+    powerups,
+    live: { ...profile.live, passes: profile.live.passes + (g.passes ?? 0), ownedSkins: owned },
+  };
+}
+
+/** Event points and weekly quest progress from one move. */
+function trackLive(profile: Profile, move: { lines: number; specials: number; gained: number; combo: number; wins: number }): Profile {
+  const live = normalizeLive(profile.live);
+  const ev = currentEvent().def;
+  const pts = eventPoints(ev.source, move);
+  const prog = { ...live.weekly.prog };
+  prog.lines = (prog.lines ?? 0) + move.lines;
+  prog.wins = (prog.wins ?? 0) + move.wins;
+  prog.specials = (prog.specials ?? 0) + move.specials;
+  if (move.combo >= 3) prog.combos = (prog.combos ?? 0) + 1;
+  return { ...profile, live: { ...live, event: { ...live.event, pts: live.event.pts + pts }, weekly: { ...live.weekly, prog } } };
+}
+
 function applyQuestScore(profile: Profile, match: Match, powersUsed = 0): Profile {
   const q = { ...profile.quests };
   q.lines = { ...q.lines, value: Math.max(q.lines.value, match.lines) };
@@ -338,6 +404,8 @@ export const useGame = create<GameStore>((set, get) => ({
   runStats: emptyRun("adventure", 1),
   lastResult: null,
   toast: null,
+  videoContinueRun: 0,
+  videoBusy: false,
   levelUpTo: null,
   introUnlock: null,
   tutorial: null,
@@ -497,6 +565,13 @@ export const useGame = create<GameStore>((set, get) => ({
         levels: levelWin ? 1 : 0,
         stars: levelWin ? starsFor(result.match.goal, result.match.moves, result.match.mode, result.match.levelId) : 0,
         colors,
+      });
+      nextProfile = trackLive(nextProfile, {
+        lines,
+        specials: (result.clear?.fired.length ?? 0) + (result.clear?.swept ? 1 : 0) + (result.star ? 1 : 0),
+        gained: result.gained,
+        combo: result.match.combo,
+        wins: levelWin ? 1 : 0,
       });
     }
     let lastResult = get().lastResult;
@@ -909,7 +984,196 @@ export const useGame = create<GameStore>((set, get) => ({
     persistSoon(get);
   },
 
+  buyItem: (itemId) => {
+    const { profile } = get();
+    const item = SHOP.find((i) => i.id === itemId);
+    if (!item) return;
+    if (item.once && profile.live.bought.includes(item.id)) return;
+    if (item.coins) {
+      if (profile.coins < item.coins) {
+        set({ toast: "Not enough coins." });
+        window.setTimeout(() => set({ toast: null }), 1400);
+        return;
+      }
+      const p = applyGrant({ ...profile, coins: profile.coins - item.coins }, item.grant);
+      audio.feelCoins(5);
+      set({ profile: p, toast: `Got ${grantText(item.grant)}!` });
+    } else if (item.gems) {
+      if (profile.gems < item.gems) {
+        set({ toast: "Not enough gems." });
+        window.setTimeout(() => set({ toast: null }), 1400);
+        return;
+      }
+      const p = applyGrant({ ...profile, gems: profile.gems - item.gems }, item.grant);
+      audio.feelCoins(5);
+      set({ profile: p, toast: `Got ${grantText(item.grant)}!` });
+    } else return;
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1600);
+  },
+
+  buyMoney: async (sku) => {
+    if (!moneyPrice(sku)) return;
+    audio.sfxUi();
+    get().persist();
+    const res = await startCheckout(sku);
+    if (!res.ok) {
+      set({ toast: res.message });
+      window.setTimeout(() => set({ toast: null }), 2600);
+    }
+  },
+
+  grantPaid: (sku, sessionId) => {
+    const { profile } = get();
+    if (profile.live.paid.includes(sessionId)) return;
+    const price = moneyPrice(sku);
+    if (!price) return;
+    let p = applyGrant(profile, price.grant);
+    const item = SHOP.find((i) => i.id === sku);
+    p = {
+      ...p,
+      live: { ...p.live, paid: [...p.live.paid, sessionId].slice(-50), bought: item?.once ? [...p.live.bought, item.id] : p.live.bought },
+    };
+    if (price.grant.skin) p = { ...p, skin: price.grant.skin };
+    audio.feelCoins(8);
+    audio.feelMilestone();
+    set({ profile: p, toast: `Thank you! You got ${grantText(price.grant)}.` });
+    get().persist();
+    window.setTimeout(() => set({ toast: null }), 3000);
+  },
+
+  buySkin: (id) => {
+    const { profile } = get();
+    const skin = SKINS.find((s) => s.id === id);
+    if (!skin || profile.live.ownedSkins.includes(id)) return;
+    if (profile.coins < skin.coins) {
+      set({ toast: `Need ${(skin.coins - profile.coins).toLocaleString("en-US")} more coins.` });
+      window.setTimeout(() => set({ toast: null }), 1600);
+      return;
+    }
+    audio.feelCoins(6);
+    audio.feelMilestone();
+    const p = applyGrant({ ...profile, coins: profile.coins - skin.coins }, { skin: id });
+    set({ profile: { ...p, skin: id }, toast: `${skin.name} unlocked!` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1600);
+  },
+
+  claimCalendar: () => {
+    const { profile } = get();
+    const live = normalizeLive(profile.live);
+    if (!calendarReady(live)) return;
+    const g = DAILY_REWARDS[live.calendar.claimed]!;
+    const p = applyGrant({ ...profile, live: { ...live, calendar: { claimed: live.calendar.claimed + 1, last: dayKey() } } }, g);
+    audio.feelCoins(6);
+    set({ profile: p, toast: `Day ${live.calendar.claimed + 1}: ${grantText(g)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  claimEventTier: (index) => {
+    const { profile } = get();
+    const live = normalizeLive(profile.live);
+    const tier = EVENT_TIERS[index];
+    if (!tier || live.event.pts < tier.pts || live.event.claimed.includes(index)) return;
+    const p = applyGrant({ ...profile, live: { ...live, event: { ...live.event, claimed: [...live.event.claimed, index] } } }, tier.grant);
+    audio.feelCoins(6);
+    audio.feelMilestone();
+    set({ profile: p, toast: `Event reward: ${grantText(tier.grant)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  claimWeekly: (id) => {
+    const { profile } = get();
+    const live = normalizeLive(profile.live);
+    const def = WEEKLY.find((w) => w.id === id);
+    if (!def || live.weekly.claimed.includes(id) || (live.weekly.prog[id] ?? 0) < def.target) return;
+    const p = applyGrant({ ...profile, live: { ...live, weekly: { ...live.weekly, claimed: [...live.weekly.claimed, id] } } }, def.grant);
+    audio.feelCoins(6);
+    set({ profile: p, toast: `${def.title}: ${grantText(def.grant)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  claimQuestChest: () => {
+    const { profile } = get();
+    const live = normalizeLive(profile.live);
+    const allDone = QUESTS.every((q) => profile.quests[q.id].claimed);
+    if (!allDone || live.questChest.claimed) return;
+    const p = applyGrant({ ...profile, live: { ...live, questChest: { ...live.questChest, claimed: true } } }, QUEST_CHEST);
+    audio.feelCoins(8);
+    audio.feelMilestone();
+    set({ profile: p, toast: `Quest chest: ${grantText(QUEST_CHEST)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  watchForCoins: async () => {
+    const live = normalizeLive(get().profile.live);
+    if (live.ads.n >= AD_DAILY_CAP || get().videoBusy) return;
+    set({ videoBusy: true });
+    const ok = await showRewardedVideo("coins");
+    set({ videoBusy: false });
+    if (!ok) return;
+    const { profile } = get();
+    const l = normalizeLive(profile.live);
+    const p = applyGrant({ ...profile, live: { ...l, ads: { ...l.ads, n: l.ads.n + 1 } } }, { coins: AD_COINS });
+    audio.feelCoins(6);
+    set({ profile: p, toast: `+${AD_COINS} coins` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 1400);
+  },
+
+  continueWith: async (how) => {
+    const { profile, match } = get();
+    if (!match.over) return;
+    let p = profile;
+    // Video and Pass continues are rescues: an extra row cleared and three
+    // trays of small, easy pieces. Gems keep the classic continue.
+    let easy = 3;
+    let extra = 1;
+    if (how === "video") {
+      if (get().videoContinueRun === get().runStats.startedAt || get().videoBusy) return;
+      set({ videoBusy: true });
+      const ok = await showRewardedVideo("continue");
+      set({ videoBusy: false });
+      if (!ok) return;
+      p = get().profile;
+      set({ videoContinueRun: get().runStats.startedAt });
+    } else if (how === "pass") {
+      if (profile.live.passes <= 0) {
+        set({ panel: "shop", toast: "Get a Continue Pass to keep going." });
+        window.setTimeout(() => set({ toast: null }), 1800);
+        return;
+      }
+      p = { ...profile, live: { ...profile.live, passes: profile.live.passes - 1 } };
+    } else {
+      if (profile.gems < CONTINUE_COST) {
+        set({ panel: "shop", toast: `Need ${CONTINUE_COST} gems to continue.` });
+        window.setTimeout(() => set({ toast: null }), 1800);
+        return;
+      }
+      p = { ...profile, gems: profile.gems - CONTINUE_COST };
+      easy = 1;
+      extra = 0;
+    }
+    const next = voidRanked(continueMatch(get().match, easy, extra));
+    audio.sfxWin();
+    const prev = get().runStats;
+    set({
+      runStats: { ...emptyRun(next.mode, next.levelId), startedAt: prev.startedAt },
+      match: next,
+      profile: p,
+      panel: null,
+      selected: next.tray.findIndex((x) => x),
+      runBanner: { id: Date.now(), title: "You're back!", sub: easy > 1 ? "Easier blocks for the next few turns." : "Two rows cleared." },
+    });
+    persistSoon(get);
+  },
+
   setSkin: (skin) => {
+    if (!get().profile.live.ownedSkins.includes(skin)) return;
     audio.sfxUi();
     set({ profile: { ...get().profile, skin } });
     persistSoon(get);
@@ -1312,3 +1576,5 @@ function shuffleIds(ids: VisitorId[]): VisitorId[] {
   }
   return next;
 }
+
+if (typeof window !== "undefined" && import.meta.env.DEV) (window as unknown as { __game: typeof useGame }).__game = useGame;

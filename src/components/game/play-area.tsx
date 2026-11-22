@@ -68,6 +68,7 @@ function measure(grid: HTMLElement): Metrics | null {
 let lastFxId = 0;
 
 export function PlayArea() {
+  const skin = useGame((s) => s.profile.skin);
   const board = useGame((s) => s.match.board);
   const tray = useGame((s) => s.match.tray);
   const seenShapes = useGame((s) => s.profile.seenShapes);
@@ -105,6 +106,7 @@ export function PlayArea() {
     else delete root.dataset.dragging;
   }, [dragIndex]);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const dropping = useRef(false);
   const previewKey = useRef("");
   const previewLines = useRef(0);
 
@@ -264,6 +266,21 @@ export function PlayArea() {
         skipClick.current = true;
         // Only swallow the click that follows this drag; touch drags often send none.
         window.setTimeout(() => (skipClick.current = false), 350);
+        const el = ghostRef.current;
+        if (el && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          // Glide the piece into its slot, then commit: drops read as one smooth motion.
+          dragRef.current = null;
+          dropping.current = true;
+          el.classList.add("is-dropping");
+          el.style.transform = `translate3d(${d.m.left + target[1]! * d.m.stride}px, ${d.m.top + target[0]! * d.m.stride}px, 0)`;
+          window.setTimeout(() => {
+            dropping.current = false;
+            el.classList.remove("is-dropping");
+            const ok = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
+            endDrag(d, ok);
+          }, 80);
+          return;
+        }
         placed = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
       } else if (d.moved) {
         audio.feelNope();
@@ -284,7 +301,7 @@ export function PlayArea() {
   const onPieceDown = useCallback((index: number, e: PE<HTMLButtonElement>) => {
     const { tray: t, over: o, visitorBusy: busy } = live.current;
     const piece = t[index];
-    if (o || busy || !piece || !gridRef.current) return;
+    if (o || busy || dropping.current || !piece || !gridRef.current) return;
     const m = measure(gridRef.current);
     if (!m) return;
     e.preventDefault();
@@ -375,6 +392,7 @@ export function PlayArea() {
         <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
           <ComboMeter />
           <BoardGrid
+            key={skin}
             gridRef={gridRef}
             board={board}
             preview={preview}
@@ -396,6 +414,7 @@ export function PlayArea() {
         <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}`} data-testid="tray">
           {tray.map((piece, i) => (
             <TraySlot
+              skin={skin}
               key={piece?.id ?? `empty-${i}`}
               index={i}
               piece={piece}
@@ -597,6 +616,7 @@ const TraySlot = memo(function TraySlot({
   onDown,
   isNew,
 }: {
+  skin?: string;
   index: number;
   piece: Piece | null;
   fits: boolean;

@@ -174,13 +174,20 @@ export const QUESTS: QuestDef[] = [
   { id: "powers", title: "Tool time", blurb: "Use 3 power-ups.", target: 3, coins: 30, gems: 2 },
 ];
 
-export type SkinId = "classic" | "ocean" | "sunset" | "midnight";
+export type SkinId = "classic" | "ocean" | "candy" | "sunset" | "frost" | "midnight" | "royal" | "cosmic";
 
-export const SKINS: Array<{ id: SkinId; name: string; blurb: string }> = [
-  { id: "classic", name: "Island gloss", blurb: "The original candy blocks." },
-  { id: "ocean", name: "Tide glass", blurb: "Cooler sea-glass sheen." },
-  { id: "sunset", name: "Dusk fire", blurb: "Warm lantern tones." },
-  { id: "midnight", name: "Night market", blurb: "Deep neon after dark." },
+export type Rarity = "Common" | "Rare" | "Epic" | "Legendary";
+
+/** Block skins. Each has a coin price and a real-money price. */
+export const SKINS: Array<{ id: SkinId; name: string; blurb: string; rarity: Rarity; coins: number; usd: number }> = [
+  { id: "classic", name: "Island Gloss", blurb: "The original candy blocks.", rarity: "Common", coins: 0, usd: 0 },
+  { id: "ocean", name: "Sea Glass", blurb: "Frosted glass washed up from the tide pools.", rarity: "Rare", coins: 2500, usd: 0.99 },
+  { id: "candy", name: "Candy Pop", blurb: "Pastel sweets with sugar sprinkles.", rarity: "Rare", coins: 3000, usd: 0.99 },
+  { id: "frost", name: "Frost Bite", blurb: "Ice-cold crystal blocks.", rarity: "Epic", coins: 5000, usd: 1.99 },
+  { id: "sunset", name: "Lava Glow", blurb: "Molten rock straight from the volcano.", rarity: "Epic", coins: 6000, usd: 1.99 },
+  { id: "midnight", name: "Neon Night", blurb: "Glowing neon tubes after dark.", rarity: "Epic", coins: 7500, usd: 2.99 },
+  { id: "royal", name: "Royal Gems", blurb: "Cut jewels set in solid gold.", rarity: "Legendary", coins: 12000, usd: 3.99 },
+  { id: "cosmic", name: "Cosmic", blurb: "A galaxy swirling inside every block.", rarity: "Legendary", coins: 15000, usd: 4.99 },
 ];
 
 export const CONTINUE_COST = 40;

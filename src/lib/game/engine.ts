@@ -83,6 +83,8 @@ export function cloneFeatures(f: Features): Features {
 }
 
 export type Match = {
+  /** Trays left that deal small, easy pieces (after a Continue). */
+  easy?: number;
   board: Cell[][];
   tray: Array<Piece | null>;
   score: number;
@@ -1078,6 +1080,15 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
     if (easy) {
       return [make("o4"), make("i3"), make("l3")];
     }
+    if ((match.easy ?? 0) > 0) {
+      // Gentle deal after a Continue: small pieces, always a set that fits.
+      const GENTLE = ["o1", "i2", "i2v", "l3", "i3", "o4", "i3v"].filter((id) => SHAPE_MAP.has(id));
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const pieces = [0, 1, 2].map(() => make(GENTLE[Math.floor(rng() * GENTLE.length)]));
+        if (setIsPlayable(match.board, pieces)) return pieces;
+      }
+      return [make("o1"), make("o1"), make("i2")];
+    }
     let partial: Piece[] | null = null;
     for (let attempt = 0; attempt < 28; attempt++) {
       const pieces = [make(), make(), make()];
@@ -1095,13 +1106,14 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const pieces = makeFitting();
   // When specials are unlocked, make sure they actually show up now and then:
   // half the sets without one get one of the allowed kinds.
-  const anySpecial = f.specials.length > 0 || f.stones;
+  const anySpecial = (f.specials.length > 0 || f.stones) && !(match.easy ?? 0);
   if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
     const i = Math.floor(rng() * pieces.length);
     const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
     if (special) pieces[i] = special === "stone" ? { ...pieces[i]!, special, specialAt: 0 } : specialPiece(special);
   }
   match.tray = pieces;
+  if ((match.easy ?? 0) > 0) match.easy = match.easy! - 1;
 }
 
 export function refillIfNeeded(match: Match, rng?: () => number): Match {
@@ -1313,12 +1325,20 @@ export function continueRows(board: Cell[][]): number[] {
     .sort((a, b) => a - b);
 }
 
-export function continueMatch(match: Match): Match {
+export function continueMatch(match: Match, easyTrays = 0, extraRows = 0): Match {
   const next = cloneMatch(match);
   // Predictable: Continue always empties the two fullest rows, then deals a
-  // tray that's checked to fit.
-  for (const r of continueRows(next.board)) for (let c = 0; c < SIZE; c++) next.board[r]![c] = { t: "e" };
+  // tray that's checked to fit. A rescue continue also clears extra rows and
+  // deals small, easy pieces for the next few trays.
+  const rows = continueRows(next.board);
+  if (extraRows > 0) {
+    const fullness = next.board.map((row, r) => ({ r, n: row.filter((c) => c.t !== "e").length })).filter((x) => !rows.includes(x.r));
+    fullness.sort((a, b) => b.n - a.n);
+    rows.push(...fullness.slice(0, extraRows).map((x) => x.r));
+  }
+  for (const r of rows) for (let c = 0; c < SIZE; c++) next.board[r]![c] = { t: "e" };
   next.over = false;
+  next.easy = easyTrays;
   fillTray(next, dealRng(next), false);
   checkOver(next);
   return next;
