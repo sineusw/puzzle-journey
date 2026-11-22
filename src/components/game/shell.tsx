@@ -264,9 +264,12 @@ function TitleBar() {
         <>
       <div className="pj-mode-label" data-testid="mode-label">{modeLabel({ mode, levelId })}</div>
       {goal ? (
-        <div className="pj-objective" aria-label={`${goalLabel(goal)}. ${goalPct}% complete.`}>
+        <div className="pj-objective" data-goal-box="" aria-label={`${goalLabel(goal)}. ${goalPct}% complete.`}>
           <div className="pj-objective-copy">
-            <span>{goalLabel(goal)}</span>
+            <span className="inline-flex items-center gap-1">
+              {goal.type === "gems" ? <img src="/icons/gem.webp" alt="" className="pj-goal-gem" data-goal-target="" /> : null}
+              {goalLabel(goal)}
+            </span>
             <strong className="tabular-nums">
               {Math.min(goalProgress, goal.value)}/{goal.value}
             </strong>

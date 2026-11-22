@@ -122,6 +122,8 @@ export type Live = {
   questChest: { day: string; claimed: boolean };
   /** Rewarded videos watched today. */
   ads: { day: string; n: number };
+  /** Lucky spin: free spin used today, extra (video) spins used today. */
+  spin: { day: string; free: boolean; extra: number };
 };
 
 export function dayKey(d = new Date()): string {
@@ -146,6 +148,7 @@ export function emptyLive(): Live {
     weekly: { week: weekKey(), prog: {}, claimed: [] },
     questChest: { day: dayKey(), claimed: false },
     ads: { day: dayKey(), n: 0 },
+    spin: { day: dayKey(), free: false, extra: 0 },
   };
 }
 
@@ -161,7 +164,9 @@ export function normalizeLive(raw: Partial<Live> | undefined, now = new Date()):
     weekly: { ...base.weekly, ...raw?.weekly },
     questChest: { ...base.questChest, ...raw?.questChest },
     ads: { ...base.ads, ...raw?.ads },
+    spin: { ...base.spin, ...raw?.spin },
   };
+  if (l.spin.day !== dayKey(now)) l.spin = { day: dayKey(now), free: false, extra: 0 };
   const ev = currentEvent(now).def.id;
   if (l.event.id !== ev) l.event = { id: ev, pts: 0, claimed: [] };
   if (l.weekly.week !== weekKey(now)) l.weekly = { week: weekKey(now), prog: {}, claimed: [] };
@@ -257,6 +262,31 @@ export const QUEST_CHEST: Grant = { coins: 400, passes: 1 };
 /** Rewarded videos a player can watch per day (free coins in the shop). */
 export const AD_DAILY_CAP = 6;
 export const AD_COINS = 150;
+
+/* ------------------------------------------------------------ lucky spin */
+
+export const SPIN_EXTRA_PER_DAY = 2;
+
+export const SPIN_PRIZES: Array<{ grant: Grant; weight: number; label: string; color: string }> = [
+  { grant: { coins: 100 }, weight: 24, label: "100", color: "#ffc93c" },
+  { grant: { powers: { hammer: 1 } }, weight: 15, label: "Hammer", color: "#ff6b8a" },
+  { grant: { coins: 250 }, weight: 16, label: "250", color: "#5fd2ff" },
+  { grant: { gems: 15 }, weight: 12, label: "15", color: "#c26bff" },
+  { grant: { powers: { bomb: 1 } }, weight: 12, label: "Bomb", color: "#6fe05a" },
+  { grant: { passes: 1 }, weight: 8, label: "Pass", color: "#ff9a3c" },
+  { grant: { coins: 1000 }, weight: 7, label: "1,000", color: "#4f8bff" },
+  { grant: { gems: 100 }, weight: 2, label: "JACKPOT", color: "#ff3c5f" },
+];
+
+export function rollSpin(rnd = Math.random): number {
+  const total = SPIN_PRIZES.reduce((a, p) => a + p.weight, 0);
+  let x = rnd() * total;
+  for (let i = 0; i < SPIN_PRIZES.length; i++) {
+    x -= SPIN_PRIZES[i]!.weight;
+    if (x < 0) return i;
+  }
+  return 0;
+}
 
 /* ---------------------------------------------------------------- grants */
 

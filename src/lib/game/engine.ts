@@ -26,7 +26,7 @@ export type ObstacleKind = "stone" | "steel" | "wall" | "crate";
 
 export type Cell =
   | { t: "e" }
-  | { t: "b"; c: ColorId; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[] }
+  | { t: "b"; c: ColorId; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[]; gm?: 1 }
   | { t: "s"; c: ColorId; gold?: boolean; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[] }
   | { t: "k"; hp: 1 | 2; kind?: ObstacleKind }
   | { t: "crate"; hp: 1 | 2 }
@@ -48,7 +48,8 @@ export type Piece = {
 export type Goal =
   | { type: "score"; value: number }
   | { type: "lines"; value: number }
-  | { type: "combo"; value: number };
+  | { type: "combo"; value: number }
+  | { type: "gems"; value: number };
 
 /** Game modes. "classic" = plain-block levels, "adventure" = levels that
  *  unlock specials and visitors one at a time, "sandbox" = endless high
@@ -1009,6 +1010,12 @@ function updateGoal(match: Match): void {
   }
   if (match.goal.type === "score") match.goalProgress = match.score;
   else if (match.goal.type === "lines") match.goalProgress = match.lines;
+  else if (match.goal.type === "gems") {
+    // Gems are collected by clearing the blocks that hold them.
+    let left = 0;
+    for (const row of match.board) for (const cell of row) if (cell.t === "b" && cell.gm) left++;
+    match.goalProgress = Math.max(0, match.goal.value - left);
+  }
   else match.goalProgress = match.bestCombo;
   match.won = match.goalProgress >= match.goal.value;
 }
@@ -1182,16 +1189,91 @@ export function newEndlessMatch(opts?: { showcase?: boolean }): Match {
 }
 
 /** A level in Classic or Adventure. Stones are only placed when allowed. */
+/** A level's starting board: some blocks already placed, some holding gems. */
+export type Layout = { fill: number; gems: number; /** Share of gems placed up high, as lone blocks. */ high?: number };
+
+const LAYOUT_COLORS: ColorId[] = ["cyan", "azure", "lime", "pink", "amber", "orange", "violet"];
+
+/**
+ * Pre-fill the lower part of the board in a mirrored pattern, leaving at
+ * least one gap in every row and column so nothing clears by itself, then
+ * hide `gems` gems in the placed blocks.
+ */
+export function applyLayout(board: Cell[][], layout: Layout, rng: () => number): void {
+  const rows = Math.max(2, Math.min(5, Math.round(2 + layout.fill * 4)));
+  const top = SIZE - rows;
+  const half = SIZE / 2;
+  for (let r = top; r < SIZE; r++) {
+    const color = LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!;
+    const alt = LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!;
+    for (let c = 0; c < half; c++) {
+      if (board[r]![c]!.t !== "e") continue;
+      if (rng() < 0.42 + layout.fill * 0.35) {
+        const col = (c + r) % 3 === 0 ? alt : color;
+        board[r]![c] = { t: "b", c: col };
+        if (board[r]![SIZE - 1 - c]!.t === "e") board[r]![SIZE - 1 - c] = { t: "b", c: col };
+      }
+    }
+    // Never a full row.
+    if (board[r]!.every((x) => x.t !== "e")) {
+      const g = Math.floor(rng() * half);
+      board[r]![g] = { t: "e" };
+      board[r]![SIZE - 1 - g] = { t: "e" };
+    }
+  }
+  for (let c = 0; c < SIZE; c++) {
+    if (board.every((row) => row[c]!.t !== "e")) board[top + Math.floor(rng() * rows)]![c] = { t: "e" };
+  }
+  // Gems go in placed blocks; if there aren't enough, the gem blocks are added.
+  const spots: Array<[number, number]> = [];
+  for (let r = top; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "b") spots.push([r, c]);
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [spots[i], spots[j]] = [spots[j]!, spots[i]!];
+  }
+  let placed = 0;
+  // Some gems sit up high on their own: you have to build lines to reach them.
+  const highWant = Math.round(layout.gems * (layout.high ?? 0));
+  const free: Array<[number, number]> = [];
+  for (let r = 1; r < top; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "e" && (r + c) % 2 === 0) free.push([r, c]);
+  for (let i = free.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [free[i], free[j]] = [free[j]!, free[i]!];
+  }
+  for (const [r, c] of free.slice(0, highWant)) {
+    board[r]![c] = { t: "b", c: LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!, gm: 1 };
+    placed++;
+  }
+  for (const [r, c] of spots) {
+    if (placed >= layout.gems) break;
+    const cell = board[r]![c]!;
+    if (cell.t === "b") {
+      board[r]![c] = { ...cell, gm: 1 };
+      placed++;
+    }
+  }
+  for (let r = top - 1; r >= 0 && placed < layout.gems; r--) {
+    for (let c = 0; c < SIZE && placed < layout.gems; c += 3) {
+      if (board[r]![c]!.t === "e") {
+        board[r]![c] = { t: "b", c: LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!, gm: 1 };
+        placed++;
+      }
+    }
+  }
+}
+
 export function newLevelMatch(
   mode: "classic" | "adventure",
   levelId: number,
   goal: Goal,
   stones: number,
   features: Features,
+  layout?: Layout,
 ): Match {
   const rng = mulberry32(levelId * 9973 + (mode === "classic" ? 4219 : 17));
   const board = emptyBoard();
   if (features.stones) sprinkleStones(board, stones, rng);
+  if (layout) applyLayout(board, layout, rng);
   const match = blankMatch(features);
   match.board = board;
   match.mode = mode;
@@ -1202,8 +1284,8 @@ export function newLevelMatch(
   return match;
 }
 
-export function newAdventureMatch(levelId: number, goal: Goal, stones: number, features: Features = ALL_FEATURES): Match {
-  return newLevelMatch("adventure", levelId, goal, stones, features);
+export function newAdventureMatch(levelId: number, goal: Goal, stones: number, features: Features = ALL_FEATURES, layout?: Layout): Match {
+  return newLevelMatch("adventure", levelId, goal, stones, features, layout);
 }
 
 export function placePiece(

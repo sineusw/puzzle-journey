@@ -1,5 +1,5 @@
 import { STAR_TABLE } from "./star-table.ts";
-import { PLAIN_FEATURES, cloneFeatures, type Features, type Goal } from "./engine.ts";
+import { PLAIN_FEATURES, cloneFeatures, type Features, type Goal, type Layout } from "./engine.ts";
 
 export type PowerId = "hammer" | "refresh" | "bomb" | "freeze";
 
@@ -29,7 +29,8 @@ export type UnlockId =
   | "luna"
   | "blast"
   | "nia"
-  | "pip";
+  | "pip"
+  | "gems";
 
 export type UnlockInfo = {
   id: UnlockId;
@@ -53,6 +54,7 @@ export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
   luna: { id: "luna", kind: "visitor", name: "Luna the Magician", blurb: "Waves her wand and turns a block into an arrow or a bomb that goes off right away!", art: "/characters/luna-3d.webp" },
   blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "Super rare! Put the golden block down and every block on the board disappears.", art: "/art/tiles/amber.webp", special: "blast" },
   nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.webp" },
+  gems: { id: "gems", kind: "block", name: "Gem blocks", blurb: "Some blocks hold sparkling gems. Clear the row or column they're in to collect them. Collect them all to win!", art: "/icons/gem.webp" },
   pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb on a block. If it matches the blocks touching it, the whole group pops!", art: "/characters/pip-3d.webp" },
 };
 
@@ -65,7 +67,44 @@ export type AdventureLevel = {
   reward: { coins: number; gems: number };
   /** The one new thing this level introduces, if any. */
   introduces?: UnlockId;
+  /** Starting board: pre-placed blocks and gems. */
+  layout?: Layout;
+  /** Last island of a world: tougher, bigger reward. */
+  boss?: boolean;
 };
+
+/** The rhythm of goals across each world's 15 islands; the last is the boss. */
+const WORLD_RHYTHM: Goal["type"][] = ["gems", "score", "gems", "lines", "gems", "combo", "gems", "score", "lines", "gems", "combo", "gems", "score", "lines", "gems"];
+
+/** Every world is 15 islands. */
+export const WORLD_SIZE = 15;
+export const WORLDS = [
+  "Sunny Shore",
+  "Coral Reef",
+  "Jungle Deep",
+  "Crystal Caves",
+  "Volcano Isle",
+  "Frozen Peaks",
+  "Pirate Cove",
+  "Sky Kingdom",
+  "Moonlit Lagoon",
+  "Golden Temple",
+  "Mushroom Grove",
+  "Sunken City",
+  "Thunder Cliffs",
+  "Candy Coast",
+  "Starfall Bay",
+  "Dragon Isle",
+  "Rainbow Falls",
+  "Mystic Marsh",
+  "Cloud Harbor",
+  "Treasure Atoll",
+];
+
+export function worldOf(levelId: number): { index: number; name: string } {
+  const index = Math.floor((levelId - 1) / WORLD_SIZE);
+  return { index, name: WORLDS[index % WORLDS.length]! };
+}
 
 /** Island Adventure: starts with plain blocks and adds one thing at a time. */
 export const ADVENTURE: AdventureLevel[] = [
@@ -83,8 +122,52 @@ export const ADVENTURE: AdventureLevel[] = [
   { id: 12, name: "Reef", blurb: "Score 2,500 over the reef.", goal: { type: "score", value: 2500 }, stones: 5, reward: { coins: 170, gems: 16 }, introduces: "pip" },
   { id: 13, name: "Lagoon", blurb: "Reach a x5 combo across the lagoon.", goal: { type: "combo", value: 5 }, stones: 6, reward: { coins: 180, gems: 16 } },
   { id: 14, name: "Volcano", blurb: "Clear 20 lines on the volcano's rim.", goal: { type: "lines", value: 20 }, stones: 6, reward: { coins: 200, gems: 18 } },
-  { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 7, reward: { coins: 240, gems: 24 } },
+  { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 7, reward: { coins: 240, gems: 24 }, boss: true },
+  ...Array.from({ length: WORLDS.length * WORLD_SIZE - 15 }, (_, i) => generatedLevel(i + 16)),
 ];
+
+
+/** Islands past the first world: a steady climb with a varied mix of goals. */
+function generatedLevel(id: number): AdventureLevel {
+  const w = Math.floor((id - 1) / WORLD_SIZE);
+  const k = (id - 1) % WORLD_SIZE;
+  const d = Math.min(1, (id - 16) / 285);
+  const boss = k === WORLD_SIZE - 1;
+  const kind = WORLD_RHYTHM[k]!;
+  const world = WORLDS[w % WORLDS.length]!;
+  const short = world.split(" ").pop()!;
+  let goal: Goal;
+  let blurb: string;
+  if (kind === "gems") {
+    const n = Math.min(20, 5 + Math.floor(w * 1.1) + (k % 4) + (boss ? 4 : 0));
+    goal = { type: "gems", value: n };
+    blurb = `Collect ${n} gems.`;
+  } else if (kind === "score") {
+    const v = Math.round((2000 + (id - 15) * 18) / 50) * 50;
+    goal = { type: "score", value: v };
+    blurb = `Score ${v.toLocaleString("en-US")}.`;
+  } else if (kind === "lines") {
+    const v = Math.min(40, 12 + Math.floor((id - 15) / 12));
+    goal = { type: "lines", value: v };
+    blurb = `Clear ${v} lines.`;
+  } else {
+    const v = Math.min(7, 3 + Math.floor(w / 2));
+    goal = { type: "combo", value: v };
+    blurb = `Reach a x${v} combo.`;
+  }
+  const fill = Math.min(0.85, 0.2 + d * 0.5 + (k % 3) * 0.05 + (boss ? 0.1 : 0));
+  return {
+    id,
+    name: boss ? `${short} Boss` : `${short} ${k + 1}`,
+    blurb,
+    goal,
+    stones: Math.min(8, 3 + Math.floor(w / 2)),
+    reward: { coins: (150 + id * 2) * (boss ? 2 : 1), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
+    introduces: id === 16 ? "gems" : undefined,
+    layout: { fill, gems: kind === "gems" ? goal.value : 0, high: Math.min(0.7, 0.2 + d * 0.5 + (boss ? 0.2 : 0)) },
+    boss,
+  };
+}
 
 /** Everything unlocked by the time the player reaches `levelId`. */
 export function unlockedAt(levelId: number): UnlockId[] {
@@ -208,8 +291,16 @@ export type StarMoves = { three: number; two: number };
 export function starMoves(goal: Goal, mode?: string | null, levelId?: number | null): StarMoves {
   const fixed = (mode === "adventure" || mode === "classic") && levelId ? STAR_TABLE[mode][levelId] : undefined;
   if (fixed) return fixed;
+  // Calibrated from bot runs (tools/simulate.ts) so generated islands earn
+  // 3 stars about as often as the hand-tuned first world.
   const three =
-    goal.type === "score" ? Math.ceil(5 + goal.value / 140) : goal.type === "lines" ? Math.ceil(6 + goal.value * 2.6) : Math.ceil(6 + goal.value * 3.2);
+    goal.type === "score"
+      ? Math.ceil(4 + goal.value / 220)
+      : goal.type === "lines"
+        ? Math.ceil(goal.value * 2.6)
+        : goal.type === "gems"
+          ? Math.ceil(11 + goal.value * 0.45)
+          : Math.ceil(goal.value * 3 + 1);
   return { three, two: Math.round(three * 1.6) };
 }
 
@@ -228,5 +319,6 @@ export function starsFor(goal: Goal | null, moves: number, mode?: string | null,
 export function goalLabel(goal: Goal): string {
   if (goal.type === "score") return `Score ${goal.value.toLocaleString("en-US")}`;
   if (goal.type === "lines") return `Clear ${goal.value} lines`;
+  if (goal.type === "gems") return `Collect ${goal.value} gems`;
   return `Reach a x${goal.value} combo`;
 }

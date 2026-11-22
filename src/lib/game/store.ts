@@ -16,6 +16,8 @@ import {
   type Cell,
   type ColorId,
   type Match,
+  emptyBoard,
+  specialPiece,
 } from "./engine";
 import {
   ADVENTURE,
@@ -54,6 +56,9 @@ import {
   EVENT_TIERS,
   QUEST_CHEST,
   SHOP,
+  SPIN_EXTRA_PER_DAY,
+  SPIN_PRIZES,
+  rollSpin,
   WEEKLY,
   calendarReady,
   currentEvent,
@@ -91,7 +96,8 @@ export type Panel =
   | "over"
   | "won"
   | "levelup"
-  | "intro";
+  | "intro"
+  | "spin";
 
 export type FlashCell = { r: number; c: number; cell: Cell };
 export type LandedCell = { r: number; c: number };
@@ -137,6 +143,8 @@ export type BoardFx = {
   zapLines?: number;
   /** A star block that paid out on drop (sparkle + "+50 ★"). */
   star?: { r: number; c: number; gold: boolean; bonus: number } | null;
+  /** Level won: play the island finale (leftover blocks burst for coins). */
+  finale?: { bonus: number };
 };
 
 /** What each special block did, in plain words. */
@@ -238,6 +246,8 @@ type GameStore = {
   claimEventTier: (index: number) => void;
   claimWeekly: (id: string) => void;
   claimQuestChest: () => void;
+  /** Spin the lucky wheel (free once a day, or by video). Returns the prize index. */
+  spinWheel: (how: "free" | "video") => Promise<number | null>;
   /** Free coins for watching a video. */
   watchForCoins: () => Promise<void>;
   /** Keep a lost run going: by video (once per run), Continue Pass, or gems. */
@@ -678,6 +688,13 @@ export const useGame = create<GameStore>((set, get) => ({
       zapLines: clear?.zapLines ?? 0,
       star: result.star ?? null,
     };
+    // Island finale: every block left on a won board bursts for bonus coins.
+    if (result.match.won) {
+      const left = result.match.board.flat().filter((c) => c.t !== "e").length;
+      const bonus = Math.max(10, left * 3);
+      fx.finale = { bonus };
+      nextProfile = { ...nextProfile, coins: nextProfile.coins + bonus };
+    }
     if (match.ranked && !match.ranked.void) {
       result.match.ranked = { ...match.ranked, moves: [...match.ranked.moves, [trayIndex, row, col]] };
     }
@@ -690,8 +707,15 @@ export const useGame = create<GameStore>((set, get) => ({
       runStats: rs,
       lastResult,
       levelUpTo: leveled.leveled,
-      panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,
+      panel: result.match.won ? null : result.match.over ? "over" : get().panel,
     });
+    if (result.match.won) {
+      const wonMatch = result.match;
+      window.setTimeout(() => {
+        // The finale already burst the leftovers: clear them so no hidden cube lingers.
+        if (get().match === wonMatch && !get().panel) set({ panel: "won", match: { ...wonMatch, board: emptyBoard() } });
+      }, 2100);
+    }
     persistSoon(get);
     if (result.match.over) void submitRanked(get, set);
     return true;
@@ -831,8 +855,12 @@ export const useGame = create<GameStore>((set, get) => ({
       return;
     }
     audio.sfxUi();
-    const match = newLevelMatch("adventure", level.id, level.goal, level.stones, adventureFeatures(level.id));
+    const match = withStreakBoosters(
+      newLevelMatch("adventure", level.id, level.goal, level.stones, adventureFeatures(level.id), level.layout),
+      profile.levelStreak,
+    );
     beginRun(get, set, match);
+    streakBanner(set, profile.levelStreak);
     // A visitor this island introduces drops in early, and before anyone else.
     const introVisitor = VISITOR_IDS.find((v) => v === level.introduces) ?? null;
     if (introVisitor) set({ visitorFeatured: introVisitor, visitorNextAt: 3 });
@@ -854,7 +882,8 @@ export const useGame = create<GameStore>((set, get) => ({
       return;
     }
     audio.sfxUi();
-    beginRun(get, set, newLevelMatch("classic", level.id, level.goal, 0, PLAIN_FEATURES));
+    beginRun(get, set, withStreakBoosters(newLevelMatch("classic", level.id, level.goal, 0, PLAIN_FEATURES), get().profile.levelStreak));
+    streakBanner(set, get().profile.levelStreak);
   },
 
   startChallenge: (id) => {
@@ -1107,6 +1136,26 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ profile: p, toast: `Quest chest: ${grantText(QUEST_CHEST)}` });
     persistSoon(get);
     window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  spinWheel: async (how) => {
+    const live = normalizeLive(get().profile.live);
+    if (how === "free" && live.spin.free) return null;
+    if (how === "video") {
+      if (live.spin.extra >= SPIN_EXTRA_PER_DAY || get().videoBusy) return null;
+      set({ videoBusy: true });
+      const ok = await showRewardedVideo("coins");
+      set({ videoBusy: false });
+      if (!ok) return null;
+    }
+    const idx = rollSpin();
+    const prize = SPIN_PRIZES[idx]!;
+    const { profile } = get();
+    const l = normalizeLive(profile.live);
+    const spin = how === "free" ? { ...l.spin, free: true } : { ...l.spin, extra: l.spin.extra + 1 };
+    set({ profile: applyGrant({ ...profile, live: { ...l, spin } }, prize.grant) });
+    persistSoon(get);
+    return idx;
   },
 
   watchForCoins: async () => {
@@ -1455,6 +1504,25 @@ function runFlagsFor(match: Match, profile: Profile, resume: boolean): RunFlags 
 }
 
 /** Shared reset for starting any run. */
+/**
+ * Win streak rewards (levels won in a row): free special blocks in the first
+ * tray. 2 wins: an arrow. 4: + a bomb. 6+: + a board-wipe block.
+ */
+export function withStreakBoosters(match: Match, streak: number): Match {
+  if (streak < 2) return match;
+  const tray = [...match.tray];
+  tray[0] = specialPiece(streak % 2 ? "rocketV" : "rocketH");
+  if (streak >= 4) tray[1] = specialPiece("bomb");
+  if (streak >= 6) tray[2] = specialPiece("blast");
+  return { ...match, tray };
+}
+
+function streakBanner(set: (partial: Partial<GameStore>) => void, streak: number): void {
+  if (streak < 2) return;
+  const gift = streak >= 6 ? "arrow, bomb and golden block" : streak >= 4 ? "arrow and bomb" : "arrow block";
+  set({ runBanner: { id: Date.now(), title: `🔥 ${streak} wins in a row!`, sub: `Free ${gift} to start. Don't lose your streak!` } });
+}
+
 function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => void, match: Match): void {
   const { profile } = get();
   set({

@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Lock, Play, Star } from "lucide-react";
-import { ADVENTURE, UNLOCKS, goalLabel } from "@/lib/game/content";
+import { ADVENTURE, UNLOCKS, WORLD_SIZE, goalLabel, worldOf } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
 import { SpecialFace } from "./tile-art";
 
 /** X position (0–100%) of each island along the winding path. */
 const LANE = [50, 76, 62, 30, 22, 46, 74, 80, 54, 26, 20, 44, 72, 78, 50];
 const STEP = 112;
+/** Extra room above each new world's banner. */
+const WORLD_GAP = 56;
+const yOf = (i: number) => 60 + i * STEP + Math.floor(i / WORLD_SIZE) * WORLD_GAP;
 const BIOME: Array<[string, string]> = [
+  ["#ffc93c", "#b8641a"],
   ["#5fd2ff", "#1a6fb8"],
   ["#6fe05a", "#1d7a3a"],
-  ["#ffc93c", "#b8641a"],
   ["#c26bff", "#5a1fa8"],
   ["#ff7a5c", "#a8281f"],
+  ["#bfefff", "#3a7fb8"],
+  ["#ff9a3c", "#7a3a12"],
+  ["#9fb8ff", "#3a4fb8"],
 ];
 
 export function AdventureMap() {
@@ -26,13 +32,13 @@ export function AdventureMap() {
 
   useEffect(() => {
     const box = wrap.current;
-    if (box) box.scrollTop = Math.max(0, 50 + (current - 1) * STEP - box.clientHeight / 2);
+    if (box) box.scrollTop = Math.max(0, yOf(current - 1) - box.clientHeight / 2);
   }, [current]);
 
   const level = ADVENTURE.find((l) => l.id === sel) ?? ADVENTURE[0]!;
   const locked = level.id > unlocked;
-  const h = ADVENTURE.length * STEP + 40;
-  const pts = ADVENTURE.map((l, i) => ({ x: LANE[i % LANE.length]!, y: 50 + i * STEP }));
+  const h = yOf(ADVENTURE.length - 1) + 90;
+  const pts = ADVENTURE.map((l, i) => ({ x: LANE[i % LANE.length]!, y: yOf(i) }));
   const path = pts.map((p, i) => {
     if (i === 0) return `M ${p.x} ${p.y}`;
     const prev = pts[i - 1]!;
@@ -46,9 +52,7 @@ export function AdventureMap() {
         <span>
           <Star className="size-4 text-gold" fill="currentColor" /> {total} / {ADVENTURE.length * 3}
         </span>
-        <span>
-          Island {current} of {ADVENTURE.length}
-        </span>
+        <span>{worldOf(current).name}</span>
       </div>
       <div ref={wrap} className="pj-advmap">
         <div className="pj-advmap-inner" style={{ height: h }}>
@@ -65,7 +69,7 @@ export function AdventureMap() {
             const isLocked = l.id > unlocked;
             const isCurrent = l.id === current;
             const s = stars[String(l.id)] ?? 0;
-            const [c1, c2] = BIOME[Math.floor(i / 3) % BIOME.length]!;
+            const [c1, c2] = BIOME[Math.floor(i / WORLD_SIZE) % BIOME.length]!;
             const intro = l.introduces ? UNLOCKS[l.introduces] : null;
             return (
               <button
@@ -73,11 +77,13 @@ export function AdventureMap() {
                 type="button"
                 data-node={l.id}
                 data-testid={`adv-${l.id}`}
-                className={`pj-node${isLocked ? " is-locked" : ""}${isCurrent ? " is-current" : ""}${sel === l.id ? " is-sel" : ""}`}
+                className={`pj-node${l.boss ? " is-boss" : ""}${isLocked ? " is-locked" : ""}${isCurrent ? " is-current" : ""}${sel === l.id ? " is-sel" : ""}`}
                 style={{ left: `${p.x}%`, top: p.y, ["--c1" as string]: c1, ["--c2" as string]: c2 }}
                 onClick={() => (sel === l.id && !isLocked ? startAdventure(l.id) : setSel(l.id))}
                 aria-label={`Island ${l.id}, ${l.name}${isLocked ? ", locked" : ""}`}
               >
+                {i % WORLD_SIZE === 0 ? <span className="pj-world-flag">World {Math.floor(i / WORLD_SIZE) + 1} · {worldOf(l.id).name}</span> : null}
+                {l.boss ? <span className="pj-node-crown" aria-hidden="true">👑</span> : null}
                 <span className="pj-node-disc">{isLocked ? <Lock className="size-5" /> : l.id}</span>
                 {intro && !isLocked ? (
                   <span className="pj-node-new" title={intro.name}>

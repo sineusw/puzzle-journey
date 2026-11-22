@@ -85,8 +85,10 @@ export function BlockFace({
   overlays,
   className,
   skin,
+  gem,
 }: {
   skin?: string;
+  gem?: boolean;
   color: CubeColor;
   star?: boolean;
   gold?: boolean;
@@ -119,6 +121,7 @@ export function BlockFace({
         {ov.map((o) => (
           <OverlayFace key={o} kind={o} />
         ))}
+        {gem ? <img src="/icons/gem.webp" alt="" className="pj-gem-face" draggable={false} /> : null}
       </div>
     </div>
   );

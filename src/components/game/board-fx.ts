@@ -148,6 +148,40 @@ export class BoardFxRunner {
       this.layer.appendChild(batch);
     }
 
+    // Gems fly from the board to the goal counter, one after another.
+    const gemCells = e.cleared.filter((x) => x.cell.t === "b" && x.cell.gm);
+    if (gemCells.length) {
+      const target = (document.querySelector<HTMLElement>("[data-goal-target]") ?? document.querySelector<HTMLElement>("[data-goal-box]"))?.getBoundingClientRect();
+      gemCells.forEach((item, i) => {
+        const b = boxOf(item.r, item.c);
+        const x0 = b.left + b.width / 2;
+        const y0 = b.top + b.height / 2;
+        const img = this.icon("/icons/gem.webp", x0, y0, b.width * 0.9);
+        img.classList.add("pj-gem-fly");
+        const tx = target ? target.left + target.width / 2 - x0 : 0;
+        const ty = target ? target.top + target.height / 2 - y0 : -200;
+        const lift = -60 - Math.random() * 40;
+        img.animate(
+          [
+            { transform: "translate(-50%, -50%) scale(0.6)", opacity: 0 },
+            { transform: `translate(-50%, -50%) translate(0px, ${lift}px) scale(1.5) rotate(-15deg)`, opacity: 1, offset: 0.3 },
+            { transform: `translate(-50%, -50%) translate(${tx}px, ${ty}px) scale(0.5) rotate(20deg)`, opacity: 1 },
+          ],
+          { duration: reduce ? 300 : 820, delay: (delays[e.cleared.indexOf(item)] ?? 0) + i * 70, easing: "cubic-bezier(0.5, 0, 0.3, 1)", fill: "both" },
+        ).finished.then(
+          () => {
+            img.remove();
+            if (target) {
+              this.fx.burst("sparkle", target.left + target.width / 2, target.top + target.height / 2, { count: 8, color: ["#ffffff", "#c9a6ff", "#7fe7ff"], speed: 160, size: 4 });
+              document.querySelector<HTMLElement>("[data-goal-box]")?.animate([{ transform: "scale(1)" }, { transform: "scale(1.06)" }, { transform: "scale(1)" }], { duration: 220 });
+            }
+            audio.feelStar(1);
+          },
+          () => img.remove(),
+        );
+      });
+    }
+
     // Big moments: a flash over the board, a shockwave per cleared line,
     // fireworks for multi-line clears, and a glow around the screen.
     const lines = e.rows.length + e.cols.length;
@@ -276,6 +310,7 @@ export class BoardFxRunner {
         window.setTimeout(() => this.fx.burst("confetti", gridBox.left + gridBox.width * (0.2 + 0.3 * i), gridBox.top + gridBox.height * 0.4, { count: 22, speed: 380 }), i * 120);
       }
     }
+    if (e.finale) this.finale(e.finale.bonus, gridBox, reduce);
     if (e.shake && !reduce) {
       const k = e.perfect || e.special === "blast" ? 12 : lines >= 3 || e.special === "bomb" ? 9 : 6;
       this.frame.animate(
@@ -290,6 +325,51 @@ export class BoardFxRunner {
         { duration: 320, easing: "ease-out" },
       );
     }
+  }
+
+  /** Level won: a big banner, then every block left on the board bursts. */
+  private finale(bonus: number, gridBox: DOMRect, reduce: boolean): void {
+    const start = 520;
+    window.setTimeout(() => {
+      this.banner(gridBox, "LEVEL COMPLETE!", "is-best", reduce);
+      audio.feelLevelComplete();
+      cheer("Level complete!", { priority: true });
+    }, 200);
+    const cubes = Array.from(this.grid.querySelectorAll<HTMLElement>("[data-cell] .pj-cube")).filter((el) => !el.classList.contains("is-ghost"));
+    cubes.sort((a, b) => {
+      const [ar, ac] = a.closest<HTMLElement>("[data-cell]")!.dataset.cell!.split("-").map(Number) as [number, number];
+      const [br, bc] = b.closest<HTMLElement>("[data-cell]")!.dataset.cell!.split("-").map(Number) as [number, number];
+      return br - ar || ac - bc;
+    });
+    const step = reduce ? 0 : Math.min(55, 900 / Math.max(1, cubes.length));
+    cubes.forEach((cube, i) => {
+      const t = start + i * step;
+      cube.animate(
+        [
+          { transform: "scale(1)", filter: "brightness(1)", opacity: 1 },
+          { transform: "scale(1.25)", filter: "brightness(2)", opacity: 1, offset: 0.4 },
+          { transform: "scale(0)", filter: "brightness(2.5)", opacity: 0 },
+        ],
+        { duration: 320, delay: t, easing: "ease-in", fill: "forwards" },
+      );
+      window.setTimeout(() => {
+        const b = cube.getBoundingClientRect();
+        const x = b.left + b.width / 2;
+        const y = b.top + b.height / 2;
+        if (!reduce) this.fx.burst("sparkle", x, y, { count: 6, color: ["#ffffff", "#ffd257", "#9af7ff"], speed: 240, size: 5 });
+        if (i % 3 === 0) this.textPop(x, y, "+3", reduce);
+        audio.feelCoins(1);
+      }, t + 120);
+    });
+    const end = start + cubes.length * step + 300;
+    window.setTimeout(() => {
+      this.textPop(gridBox.left + gridBox.width / 2, gridBox.top + gridBox.height / 2, `+${bonus} coins`, reduce);
+      if (!reduce) {
+        for (let i = 0; i < 4; i++) window.setTimeout(() => this.firework(gridBox.left + gridBox.width * (0.2 + Math.random() * 0.6), gridBox.top + gridBox.height * (0.15 + Math.random() * 0.5)), i * 150);
+        this.screenGlow("#ffd257");
+        this.fx.burst("confetti", gridBox.left + gridBox.width / 2, gridBox.top + gridBox.height * 0.3, { count: 40, speed: 420 });
+      }
+    }, end);
   }
 
   /** Big, distinct effects for each power-up. */

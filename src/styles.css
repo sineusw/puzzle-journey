@@ -3795,3 +3795,35 @@ svg.pj-sp { display: block; max-width: none; }
 .pj-modes { background: rgb(4 10 24 / 0.55); }
 .pj-mode-tab.is-on { box-shadow: 0 3px 0 #a86f0e; }
 @media (prefers-reduced-motion: reduce) { .pj-node.is-current .pj-node-disc, .pj-node-you { animation: none; } }
+
+/* --- gem blocks */
+.pj-gem-face {
+  position: absolute; left: 8%; top: 4%; width: 84%; height: 108%; object-fit: contain; z-index: 5; pointer-events: none;
+  filter: drop-shadow(0 2px 1px rgb(0 0 0 / 0.55)) drop-shadow(0 0 5px rgb(220 180 255 / 0.9));
+  animation: pj-gem-twinkle 2.2s ease-in-out infinite;
+}
+@keyframes pj-gem-twinkle { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.08) rotate(-4deg); } }
+.pj-goal-gem { width: 18px; height: 18px; object-fit: contain; }
+.pj-gem-fly { z-index: 60; filter: drop-shadow(0 0 8px #c9a6ff); }
+@media (prefers-reduced-motion: reduce) { .pj-gem-face { animation: none; } }
+
+/* --- lucky spin */
+.pj-wheel-wrap { position: relative; width: min(78vw, 300px); aspect-ratio: 1; margin: 6px auto 4px; }
+.pj-wheel {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 8px solid #ffe07a; box-shadow: 0 0 0 4px #a86f0e, 0 10px 24px rgb(0 0 0 / 0.5), inset 0 0 0 3px rgb(255 255 255 / 0.4), inset 0 0 30px rgb(0 0 0 / 0.25);
+}
+.pj-wheel-seg { position: absolute; left: 50%; top: 0; width: 64px; height: 50%; margin-left: -32px; transform-origin: 50% 100%; display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 2px; }
+.pj-wheel-seg img { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 2px 1px rgb(0 0 0 / 0.4)); }
+.pj-wheel-seg span { font-weight: 900; font-size: 0.72rem; color: #fff; -webkit-text-stroke: 3px rgb(0 0 0 / 0.55); paint-order: stroke fill; }
+.pj-wheel-hub { position: absolute; left: 50%; top: 50%; translate: -50% -50%; display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; font-family: var(--font-display); color: #4a2c08; background: radial-gradient(circle at 35% 30%, #fff3b0, #f0b93a 60%, #b07a12); box-shadow: 0 4px 0 #8a5a00, 0 6px 12px rgb(0 0 0 / 0.4); border: 3px solid #fff; }
+.pj-wheel-pointer { position: absolute; left: 50%; top: -14px; translate: -50% 0; z-index: 3; width: 0; height: 0; border-left: 16px solid transparent; border-right: 16px solid transparent; border-top: 30px solid #ff3c5f; filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.5)); }
+.pj-spin-won { text-align: center; animation: pj-up 250ms ease both; }
+.pj-spin-won b { font-family: var(--font-display); font-size: 1.5rem; color: var(--color-gold); }
+.pj-spin-won .pj-chips { justify-content: center; }
+.pj-spin-ico { width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(#ffc93c 0 45deg, #ff6b8a 45deg 90deg, #5fd2ff 90deg 135deg, #c26bff 135deg 180deg, #6fe05a 180deg 225deg, #ff9a3c 225deg 270deg, #4f8bff 270deg 315deg, #ff3c5f 315deg); border: 2px solid #ffe07a; box-shadow: 0 2px 0 #a86f0e; animation: pj-spin 6s linear infinite; }
+.pj-streak-warn { text-align: center; font-size: 0.8rem; font-weight: 800; color: #ffb04a; padding: 6px 10px; border-radius: 12px; background: rgb(255 120 40 / 0.12); border: 1px solid rgb(255 150 60 / 0.35); }
+@media (prefers-reduced-motion: reduce) { .pj-spin-ico { animation: none; } }
+.pj-world-flag { position: absolute; top: -50px; white-space: nowrap; padding: 3px 12px; border-radius: 10px; font-family: var(--font-display); font-size: 0.85rem; color: #fff; background: linear-gradient(180deg, var(--c1), var(--c2)); box-shadow: 0 3px 0 rgb(0 0 0 / 0.35); border: 2px solid rgb(255 255 255 / 0.7); }
+.pj-node.is-boss .pj-node-disc { width: 78px; height: 78px; border-color: #ffe07a; box-shadow: 0 6px 0 color-mix(in oklab, var(--c2) 70%, black), 0 0 18px rgb(255 210 80 / 0.6), inset 0 2px 0 rgb(255 255 255 / 0.5); }
+.pj-node-crown { position: absolute; top: -22px; font-size: 1.4rem; z-index: 3; filter: drop-shadow(0 2px 1px rgb(0 0 0 / 0.4)); }

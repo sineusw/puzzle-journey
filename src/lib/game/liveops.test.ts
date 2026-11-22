@@ -41,3 +41,15 @@ test("a rescue continue clears three rows and deals easy trays", () => {
   const after = refillIfNeeded(next);
   assert.equal(after.easy, 1);
 });
+
+test("gem levels start with exactly their gems on a board with no full line", async () => {
+  const { ADVENTURE, adventureFeatures } = await import("./content.ts");
+  for (const lvl of ADVENTURE.filter((l) => l.goal.type === "gems").slice(0, 40)) {
+    const m = newLevelMatch("adventure", lvl.id, lvl.goal, lvl.stones, adventureFeatures(lvl.id), lvl.layout);
+    const gems = m.board.flat().filter((c) => c.t === "b" && c.gm).length;
+    assert.equal(gems, lvl.goal.value, `level ${lvl.id}`);
+    assert.equal(m.goalProgress, 0);
+    for (const row of m.board) assert.ok(row.some((c) => c.t === "e"), `full row on ${lvl.id}`);
+    for (let c = 0; c < 8; c++) assert.ok(m.board.some((row) => row[c]!.t === "e"), `full column on ${lvl.id}`);
+  }
+});

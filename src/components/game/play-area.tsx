@@ -478,7 +478,7 @@ function faceKey(cell: Cell): string {
     case "e":
       return "";
     case "b":
-      return `b:${cell.c}:${cell.sp ?? ""}:${(cell.ov ?? []).join(",")}`;
+      return `b:${cell.c}:${cell.sp ?? ""}:${(cell.ov ?? []).join(",")}:${cell.gm ? 1 : 0}`;
     case "s":
       return `s:${cell.c}:${cell.gold ? 1 : 0}:${cell.sp ?? ""}:${(cell.ov ?? []).join(",")}`;
     case "k":
@@ -568,6 +568,7 @@ const BoardCell = memo(
             special={special}
             stoneHp={cell.t === "k" ? cell.hp : undefined}
             overlays={overlaysOf(cell)}
+            gem={cell.t === "b" && Boolean(cell.gm)}
           />
         ) : shadow ? (
           <BlockFace color={shadow} ghost />

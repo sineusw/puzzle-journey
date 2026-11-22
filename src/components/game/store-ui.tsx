@@ -8,6 +8,8 @@ import {
   EVENT_TIERS,
   QUEST_CHEST,
   SHOP,
+  SPIN_EXTRA_PER_DAY,
+  SPIN_PRIZES,
   WEEKLY,
   calendarReady,
   currentEvent,
@@ -526,6 +528,76 @@ function QuestRow(p: { title: string; blurb: string; value: number; target: numb
   );
 }
 
+/* ------------------------------------------------------------ lucky spin */
+
+export function SpinSheet() {
+  const rawLive = useGame((s) => s.profile.live);
+  const live = useMemo(() => normalizeLive(rawLive), [rawLive]);
+  const spinWheel = useGame((s) => s.spinWheel);
+  const busy = useGame((s) => s.videoBusy);
+  const [angle, setAngle] = useState(0);
+  const [spinning, setSpinning] = useState(false);
+  const [won, setWon] = useState<number | null>(null);
+  const n = SPIN_PRIZES.length;
+  const seg = 360 / n;
+  const go = async (how: "free" | "video") => {
+    if (spinning) return;
+    setWon(null);
+    const idx = await spinWheel(how);
+    if (idx === null) return;
+    setSpinning(true);
+    // Land the prize under the pointer at the top, after a few full turns.
+    const target = 360 * 6 + (360 - (idx * seg + seg / 2)) + (Math.random() - 0.5) * seg * 0.6;
+    setAngle((a) => a - (a % 360) + target);
+    window.setTimeout(() => {
+      setSpinning(false);
+      setWon(idx);
+    }, 4200);
+  };
+  const extraLeft = SPIN_EXTRA_PER_DAY - live.spin.extra;
+  const gradient = `conic-gradient(${SPIN_PRIZES.map((p, i) => `${p.color} ${i * seg}deg ${(i + 1) * seg}deg`).join(", ")})`;
+  return (
+    <ShopSheetFrame title="Lucky Spin" sub="One free spin every day. Win up to 100 gems!">
+      <div className="pj-wheel-wrap">
+        <div className="pj-wheel-pointer" />
+        <div className="pj-wheel" style={{ background: gradient, transform: `rotate(${angle}deg)`, transition: spinning ? "transform 4.1s cubic-bezier(0.12, 0.7, 0.08, 1)" : "none" }}>
+          {SPIN_PRIZES.map((p, i) => {
+            const part = grantParts(p.grant)[0]!;
+            return (
+              <div key={i} className="pj-wheel-seg" style={{ transform: `rotate(${i * seg + seg / 2}deg)` }}>
+                <img src={part.icon} alt="" />
+                <span>{p.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="pj-wheel-hub">SPIN</div>
+      </div>
+      {won !== null ? (
+        <div className="pj-spin-won">
+          <b>{SPIN_PRIZES[won]!.label === "JACKPOT" ? "JACKPOT!" : "You won!"}</b>
+          <RewardChips grant={SPIN_PRIZES[won]!.grant} />
+        </div>
+      ) : null}
+      {!live.spin.free ? (
+        <button type="button" className="pj-btn pj-btn-primary w-full" disabled={spinning} onClick={() => void go("free")}>
+          Free spin!
+        </button>
+      ) : (
+        <button type="button" className="pj-cont-btn is-video" disabled={spinning || busy || extraLeft <= 0} onClick={() => void go("video")}>
+          <span className="pj-cont-ico">
+            <Play className="size-5" fill="currentColor" />
+          </span>
+          <span className="flex-1 text-left">
+            <b>{extraLeft > 0 ? "Spin again" : "No spins left today"}</b>
+            <small>{extraLeft > 0 ? `Watch a short video · ${extraLeft} left today` : "Your free spin resets tomorrow"}</small>
+          </span>
+        </button>
+      )}
+    </ShopSheetFrame>
+  );
+}
+
 /* -------------------------------------------------------------- continue */
 
 /** The "keep going" box on the game-over sheet. */
@@ -536,9 +608,11 @@ export function ContinueOptions() {
   const busy = useGame((s) => s.videoBusy);
   const continueWith = useGame((s) => s.continueWith);
   const buyMoney = useGame((s) => s.buyMoney);
+  const streak = useGame((s) => (s.match.mode === "adventure" || s.match.mode === "classic" ? s.profile.levelStreak : 0));
   return (
     <div className="pj-continue">
       <div className="pj-continue-title">Keep going?</div>
+      {streak >= 2 ? <div className="pj-streak-warn">🔥 Continue to keep your {streak}-win streak and its free boosters!</div> : null}
       <button type="button" className="pj-cont-btn is-video" disabled={used || busy} onClick={() => void continueWith("video")}>
         <span className="pj-cont-ico">
           <Play className="size-5" fill="currentColor" />

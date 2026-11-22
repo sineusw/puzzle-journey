@@ -202,7 +202,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`.padStart(4);
 const t0 = Date.now();
 
 const levels = [
-  ...(only !== "classic" ? ADVENTURE.map((l) => ({ mode: "adventure" as const, id: l.id, goal: l.goal, stones: l.stones, features: adventureFeatures(l.id) })) : []),
+  ...(only !== "classic" ? ADVENTURE.map((l) => ({ mode: "adventure" as const, id: l.id, goal: l.goal, stones: l.stones, features: adventureFeatures(l.id), layout: l.layout })) : []),
   ...(only !== "adventure" ? CLASSIC.map((l) => ({ mode: "classic" as const, id: l.id, goal: l.goal, stones: 0, features: cloneFeatures(PLAIN_FEATURES) })) : []),
 ];
 const CALIBRATE = process.argv.includes("--calibrate");
@@ -212,7 +212,7 @@ for (const lvl of levels) {
     const games = strategy === "planner" ? Math.max(20, Math.floor(N / 2)) : N;
     const rs: GameResult[] = [];
     for (let g = 0; g < games; g++) {
-      const start = newLevelMatch(lvl.mode, lvl.id, lvl.goal, lvl.stones, lvl.features);
+      const start = newLevelMatch(lvl.mode, lvl.id, lvl.goal, lvl.stones, lvl.features, "layout" in lvl ? lvl.layout : undefined);
       // Deal legality is checked on the greedy games (the most deals per game).
       rs.push(play(start, strategy, SEED_BASE + g * 7919 + lvl.id, strategy === "greedy"));
     }

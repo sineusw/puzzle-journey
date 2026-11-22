@@ -39,13 +39,15 @@ import { Fireworks } from "./fireworks";
 import { lessonForUnlock } from "@/lib/game/tutorial";
 import { dailySet, rollover } from "@/lib/game/challenges";
 import { AdventureMap } from "./adventure-map";
-import { ContinueOptions, DailySheet, EventsSheet, HouseAd, QuestSheet, ShopSheet, SkinsScreen } from "./store-ui";
+import { ContinueOptions, DailySheet, EventsSheet, HouseAd, QuestSheet, ShopSheet, SkinsScreen, SpinSheet } from "./store-ui";
+import { normalizeLive } from "@/lib/game/liveops";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
   const dailyNextAt = useGame((s) => s.profile.daily.nextAt);
   const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
   const setTab = useGame((s) => s.setTab);
+  const spinReady = useGame((s) => !normalizeLive(s.profile.live).spin.free);
   // Red dot while today's challenges aren't all done.
   // Red dot while there's a reward to claim or today's set isn't done.
   const challengesLeft = useGame((s) => {
@@ -57,11 +59,10 @@ export function SideRails({ side }: { side: "l" | "r" }) {
     return (
       <div className="pj-rails pj-rails-l">
         <DailyRail nextAt={dailyNextAt} onOpen={() => setPanel("daily")} />
-        <button type="button" className="pj-rail" onClick={() => setPanel("daily")}>
-          <GameIcon name="gift" />
-          <span className="pj-rail-label">
-            <GiftTimer nextAt={dailyNextAt} />
-          </span>
+        <button type="button" className="pj-rail relative" onClick={() => setPanel("spin")}>
+          {spinReady ? <span className="pj-badge" /> : null}
+          <span className="pj-spin-ico" aria-hidden="true" />
+          <span className="pj-rail-label">Spin</span>
         </button>
         <button type="button" className="pj-rail" onClick={() => setPanel("events")}>
           <GameIcon name="events" />
@@ -110,16 +111,6 @@ function DailyRail({ nextAt, onOpen }: { nextAt: number; onOpen: () => void }) {
       <span className="pj-rail-label">Daily</span>
     </button>
   );
-}
-
-function GiftTimer({ nextAt }: { nextAt: number }) {
-  const now = useNow();
-  const remain = Math.max(0, nextAt - now);
-  if (remain === 0) return <>Claim</>;
-  const hh = String(Math.floor(remain / 3600000)).padStart(2, "0");
-  const mm = String(Math.floor(remain / 60000) % 60).padStart(2, "0");
-  const ss = String(Math.floor((remain / 1000) % 60)).padStart(2, "0");
-  return <>{`${hh}:${mm}:${ss}`}</>;
 }
 
 export function PowerBar() {
@@ -209,6 +200,7 @@ export function Overlays() {
           {panel === "over" ? <OverSheet /> : null}
           {panel === "won" ? <WonSheet /> : null}
           {panel === "intro" ? <IntroSheet /> : null}
+          {panel === "spin" ? <SpinSheet /> : null}
         </div>
       ) : null}
     </>
@@ -252,7 +244,7 @@ function Sheet({ title, children }: { title: string; children: ReactNode }) {
 function MapSheet() {
   return (
     <Sheet title="Island map">
-      <AdventureList compact />
+      <AdventureMap />
     </Sheet>
   );
 }
@@ -697,6 +689,14 @@ function WonSheet() {
             Next: {UNLOCKS[nextNew].name}
           </p>
         ) : null}
+        {profile.levelStreak >= 2 ? (
+          <div className="pj-streak-warn mt-2">
+            🔥 {profile.levelStreak} wins in a row! Next level starts with a free{" "}
+            {profile.levelStreak >= 6 ? "arrow, bomb and golden block" : profile.levelStreak >= 4 ? "arrow and bomb" : "arrow block"}.
+          </div>
+        ) : profile.levelStreak === 1 ? (
+          <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
+        ) : null}
         {nextOpen && nextId ? (
           <button
             type="button"
@@ -945,53 +945,6 @@ function MoreScreen() {
           New Sandbox run
         </button>
       </div>
-    </div>
-  );
-}
-
-function AdventureList({ compact = false }: { compact?: boolean }) {
-  const profile = useGame((s) => s.profile);
-  const startAdventure = useGame((s) => s.startAdventure);
-  return (
-    <div className="space-y-2">
-      {ADVENTURE.map((lvl) => {
-        const locked = lvl.id > profile.adventure.unlocked;
-        const stars = profile.adventure.stars[String(lvl.id)] ?? 0;
-        return (
-          <div key={lvl.id} className="pj-card flex items-center gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-dusk font-extrabold">
-              {locked ? <Lock className="size-4 text-muted" /> : lvl.id}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="font-extrabold">{lvl.name}</span>
-                {lvl.introduces ? (
-                  <span className="pj-new-chip">New: {UNLOCKS[lvl.introduces].name}</span>
-                ) : null}
-              </div>
-              <div className="text-xs text-muted">{compact ? goalLabel(lvl.goal) : lvl.blurb}</div>
-              <div className="mt-1 flex gap-0.5">
-                {[1, 2, 3].map((n) => (
-                  <Star
-                    key={n}
-                    className={`size-3 ${n <= stars ? "text-gold" : "text-muted/40"}`}
-                    fill={n <= stars ? "currentColor" : "none"}
-                  />
-                ))}
-              </div>
-            </div>
-            <button
-              type="button"
-              data-testid={`adv-${lvl.id}`}
-              className="pj-btn pj-btn-primary shrink-0 text-sm"
-              disabled={locked}
-              onClick={() => startAdventure(lvl.id)}
-            >
-              {locked ? "Locked" : stars ? "Replay" : "Play"}
-            </button>
-          </div>
-        );
-      })}
     </div>
   );
 }
