@@ -277,7 +277,9 @@ export const useGame = create<GameStore>((set, get) => ({
       result.clear && result.combo > 0
         ? {
             id: popSeq++,
-            label: result.clear.blasts
+            label: result.match.board.every((row) => row.every((x) => x.t === "e"))
+              ? "Perfect clear!"
+              : result.clear.blasts
               ? "Board wipe"
               : result.clear.bombs
                 ? "Boom"
@@ -299,7 +301,7 @@ export const useGame = create<GameStore>((set, get) => ({
       selected: result.match.tray.findIndex((p) => p),
       flash: result.clear?.cells ?? [],
       landed,
-      shake: Boolean(result.clear && profile.settings.shake && result.clear.lines >= 2),
+      shake: Boolean(result.clear && profile.settings.shake && (result.clear.lines >= 1 || result.clear.bombs || result.clear.rockets || result.clear.blasts)),
       comboPop,
       levelUpTo: leveled.leveled,
       panel: result.match.won ? "won" : result.match.over ? "over" : get().panel,

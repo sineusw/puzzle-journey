@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as PE } from "react";
+import { FxLayer } from "./fx-layer";
 import { bounds, canPlace, findHint, pieceFits, placeFromCell, previewClear, SIZE, snapPlace, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
 import * as audio from "@/lib/game/audio";
@@ -333,6 +334,7 @@ export function PlayArea() {
               }),
             )}
           </div>
+          <FxLayer gridRef={gridRef} />
           {comboPop ? (
             <div className="pj-float">
               <div className="pj-combo">
