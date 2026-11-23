@@ -24,14 +24,15 @@ export function Cheerleader() {
   useEffect(() => {
     if (!fx || busy) return;
     const lines = fx.rows.length + fx.cols.length;
-    const big = fx.perfect || lines >= 2 || fx.combo >= 3 || (fx.fired?.length ?? 0) > 0;
+    // Only truly great plays: a perfect clear, 3+ lines at once, or a combo milestone (x5, x10, ...).
+    const big = lines > 0 && (fx.perfect || lines >= 3 || (fx.combo >= 5 && fx.combo % 5 === 0));
     const now = Date.now();
-    if (!big || now - last.current < 2500) return;
+    if (!big || now - last.current < 6000) return;
     last.current = now;
     const met = VISITOR_IDS.filter((v) => seen.includes(v as never));
     const pool: VisitorId[] = met.length ? met : ["milo"];
     const who = pool[Math.floor(Math.random() * pool.length)]!;
-    const word = fx.perfect ? "PERFECT!" : fx.combo >= 3 ? `Combo ×${fx.combo}!` : LINES[who][Math.floor(Math.random() * 3)]!;
+    const word = fx.perfect ? "PERFECT!" : fx.combo >= 5 ? `Combo ×${fx.combo}!` : LINES[who][Math.floor(Math.random() * 3)]!;
     setShow({ k: fx.id, who, text: word, side: Math.random() < 0.5 ? "l" : "r" });
     const t = window.setTimeout(() => setShow(null), 1500);
     return () => window.clearTimeout(t);

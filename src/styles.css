@@ -3995,3 +3995,27 @@ svg.pj-sp { display: block; max-width: none; }
 .pj-lobby-ranks p { margin: 4px 0 0; font-size: 0.78rem; color: rgb(244 238 227 / 0.8); }
 @media (max-height: 680px) { .pj-lobby-logo span { font-size: 40px; } .pj-lobby-play { height: 54px; font-size: 1.6rem; } }
 @media (prefers-reduced-motion: reduce) { .pj-lobby-floaters i, .pj-lobby-logo span, .pj-lobby-play, .pj-won-next { animation: none; } }
+
+/* ------------------------------------- up next preview */
+.pj-upnext { position: absolute; right: 14px; top: -13px; z-index: 8; display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 8px; border-radius: 99px;
+  background: linear-gradient(180deg, #2a2f48, #1b1e30); border: 2px solid #3c4159; box-shadow: 0 3px 8px rgb(0 0 0 / 0.4); pointer-events: none; }
+.pj-upnext > span { font-size: 0.6rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: #8fd3ff; }
+.pj-upnext > div { opacity: 0.9; }
+.pj-tray.has-next { padding-top: 26px !important; }
+.pj-upnext { height: 32px; }
+.pj-upnext { right: auto; left: 16px; top: -12px; }
+
+/* ------------------------------------- block polish: candy gloss + soft glow (classic-look skins) */
+.pj-root:not([data-skin="pixel"]):not([data-skin="tiki"]):not([data-skin="faces"]) .pj-cube.is-tex::after {
+  content: ""; position: absolute; left: 12%; right: 12%; top: 7%; height: 38%; border-radius: 45% 45% 35% 35% / 70% 70% 30% 30%;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.04)); pointer-events: none; mix-blend-mode: screen;
+}
+.pj-root:not([data-skin="pixel"]) .pj-cube.is-tex:not(.is-ghost) { filter: drop-shadow(0 2px 1px rgba(2, 7, 18, 0.5)) drop-shadow(0 0 5px rgb(255 255 255 / 0.08)); }
+/* A slow shine sweeps over the pieces waiting in the tray. */
+.pj-slot .pj-cube.is-tex::before {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: 22%;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.45) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat;
+  animation: pj-tray-shine 4.5s ease-in-out infinite;
+}
+@keyframes pj-tray-shine { 0%, 70% { background-position: -150% 0; } 100% { background-position: 150% 0; } }
+@media (prefers-reduced-motion: reduce) { .pj-slot .pj-cube.is-tex::before { animation: none; display: none; } }

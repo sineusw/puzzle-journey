@@ -84,6 +84,7 @@ function measure(grid: HTMLElement): Metrics | null {
 let lastFxId = 0;
 
 export function PlayArea() {
+  const hasNext = useGame((s) => Boolean(s.match.next?.length));
   const skin = useGame((s) => s.profile.skin);
   const board = useGame((s) => s.match.board);
   // Crowded board: the frame glows red so every drop feels like it counts.
@@ -441,7 +442,8 @@ export function PlayArea() {
         onPointerDown={visitorBusy ? () => useGame.getState().skipVisitor() : undefined}
       >
         {tutorial ? null : <TrayTip tray={tray} />}
-        <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}`} data-testid="tray">
+        {tutorial ? null : <UpNext />}
+        <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}${!tutorial && hasNext ? " has-next" : ""}`} data-testid="tray">
           {tray.map((piece, i) => (
             <TraySlot
               skin={skin}
@@ -646,6 +648,24 @@ const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
     </div>
   );
 });
+
+function pieceSpan(p: Piece): number {
+  return Math.max(...p.cells.map((c) => c[0]), ...p.cells.map((c) => c[1])) + 1;
+}
+
+/** Small "Up next" preview of the following set, so players can plan a move ahead. */
+function UpNext() {
+  const next = useGame((s) => s.match.next);
+  if (!next?.length) return null;
+  return (
+    <div className="pj-upnext" data-testid="up-next" aria-label="Up next">
+      <span>Next</span>
+      {next.map((p) => (
+        <PieceGrid key={p.id} piece={p} cell={Math.min(8, Math.floor(26 / pieceSpan(p)) - 1)} gap={1} />
+      ))}
+    </div>
+  );
+}
 
 const TraySlot = memo(function TraySlot({
   index,

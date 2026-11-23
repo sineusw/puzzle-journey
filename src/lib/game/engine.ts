@@ -88,6 +88,8 @@ export type Match = {
   easy?: number;
   board: Cell[][];
   tray: Array<Piece | null>;
+  /** The set dealt after this tray, shown as "Up next" so players can plan ahead. */
+  next?: Piece[] | null;
   score: number;
   combo: number;
   bestCombo: number;
@@ -291,6 +293,7 @@ export function sanitizeMatch(match: Match): Match {
     tray: (match.tray ?? [null, null, null]).map((p) =>
       p ? (p.special && p.special !== "stone" && p.cells.length > 1 ? specialPiece(p.special) : sanitizePiece(p)) : null,
     ),
+    next: Array.isArray(match.next) ? match.next.map((p) => sanitizePiece(p)) : null,
     goal: match.goal ? { ...match.goal } : null,
   };
 }
@@ -301,6 +304,7 @@ export function cloneMatch(m: Match): Match {
     features: cloneFeatures(m.features),
     board: cloneBoard(m.board),
     tray: m.tray.map((p) => (p ? clonePiece(p) : null)),
+    next: m.next ? m.next.map((p) => clonePiece(p)) : null,
     goal: m.goal ? { ...m.goal } : null,
   };
 }
@@ -1105,14 +1109,29 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
     if (setIsPlayable(match.board, small)) return small;
     return partial ?? small;
   };
-  const pieces = makeFitting();
   // When specials are unlocked, make sure they actually show up now and then:
-  // half the sets without one get one of the allowed kinds.
+  // some sets without one get one of the allowed kinds.
   const anySpecial = (f.specials.length > 0 || f.stones) && !(match.easy ?? 0);
-  if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
-    const i = Math.floor(rng() * pieces.length);
-    const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
-    if (special) pieces[i] = special === "stone" ? { ...pieces[i]!, special, specialAt: 0 } : specialPiece(special);
+  const sprinkle = (pieces: Piece[]): Piece[] => {
+    if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
+      const i = Math.floor(rng() * pieces.length);
+      const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
+      if (special) pieces[i] = special === "stone" ? { ...pieces[i]!, special, specialAt: 0 } : specialPiece(special);
+    }
+    return pieces;
+  };
+  const normal = !easy && !(match.easy ?? 0);
+  // Semi-predictable: the set shown as "Up next" is what you get, as long as it
+  // can still be played on the board you left. If it can't, you get a fair set instead.
+  const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
+  const pieces = queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting());
+  // Line up the following set: varied shapes, never three alike.
+  if (normal) {
+    let upNext = [make(), make(), make()];
+    for (let i = 0; i < 6 && new Set(upNext.map((p) => p.shape)).size < 2; i++) upNext = [make(), make(), make()];
+    match.next = sprinkle(upNext);
+  } else {
+    match.next = null;
   }
   match.tray = pieces;
   if ((match.easy ?? 0) > 0) match.easy = match.easy! - 1;
