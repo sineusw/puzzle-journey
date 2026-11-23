@@ -90,20 +90,20 @@ export function GameShell() {
         <nav className="pj-nav" aria-label="Main">
           {(
             [
-              ["home", "Home", Home],
+              ["lobby", "Home", Home],
               ["adventure", "Play", Gamepad2],
               ["challenges", "Challenges", Trophy],
               ["ranks", "Ranks", Crown],
               ["more", "More", MoreHorizontal],
             ] as const
           )
-            .filter(([id]) => (id === "challenges" ? reached >= FEATURE_AT.challenges : id === "ranks" ? reached >= FEATURE_AT.ranks : true))
+            .filter(([id]) => (id === "challenges" ? reached >= FEATURE_AT.challenges : true))
             .map(([id, label, Icon]) => (
             <button
               key={id}
               type="button"
               data-nav={id}
-              className={`pj-nav-btn ${tab === id ? "is-on" : ""}`}
+              className={`pj-nav-btn ${tab === id || (id === "adventure" && tab === "home") ? "is-on" : ""}`}
               onClick={() => setTab(id)}
             >
               <Icon className="pj-nav-svg" strokeWidth={2.4} />

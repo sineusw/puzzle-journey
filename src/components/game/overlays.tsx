@@ -1,3 +1,4 @@
+import { LobbyScreen } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Crown,
@@ -228,7 +229,8 @@ export function TabScreens() {
   const tab = useGame((s) => s.tab);
   if (tab === "home") return null;
   return (
-    <div className="pj-screen pj-tabscreen-in" key={tab}>
+    <div className={`pj-screen pj-tabscreen-in${tab === "lobby" ? " is-lobby" : ""}`} key={tab}>
+      {tab === "lobby" ? <LobbyScreen /> : null}
       {tab === "adventure" ? <AdventureScreen /> : null}
       {tab === "challenges" ? <ChallengeScreen /> : null}
       {tab === "skins" ? <SkinsScreen /> : null}
@@ -747,7 +749,7 @@ function WonSheet() {
   return (
     <>
       <Fireworks />
-      <div className="pj-sheet pj-result text-center" data-testid="won-sheet">
+      <div className="pj-sheet pj-result is-won text-center" data-testid="won-sheet">
         <div className="pj-result-stars" aria-label={`${stars} of 3 stars`}>
           {[1, 2, 3].map((n) => (
             <span
@@ -797,28 +799,24 @@ function WonSheet() {
         ) : profile.levelStreak === 1 ? (
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
         ) : null}
-        {nextOpen && nextId ? (
-          <button
-            type="button"
-            className="pj-btn pj-btn-primary mt-4 w-full"
-            onClick={() =>
-              match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId)
-            }
-          >
-            {match.mode === "classic" ? "Next level" : "Next island"}
+        <div className="pj-won-actions">
+          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => setTab("adventure")}>
+            Map
           </button>
-        ) : (
-          <button type="button" className="pj-btn pj-btn-primary mt-4 w-full" onClick={newGame}>
-            Play again
-          </button>
-        )}
-        <button
-          type="button"
-          className="pj-btn pj-btn-ghost mt-2 w-full"
-          onClick={() => setTab("adventure")}
-        >
-          Choose a mode
-        </button>
+          {nextOpen && nextId ? (
+            <button
+              type="button"
+              className="pj-btn pj-btn-primary pj-won-next"
+              onClick={() => (match.mode === "classic" ? startClassic(nextId) : startAdventure(nextId))}
+            >
+              {match.mode === "classic" ? "Next level ▶" : "Next island ▶"}
+            </button>
+          ) : (
+            <button type="button" className="pj-btn pj-btn-primary pj-won-next" onClick={newGame}>
+              Play again
+            </button>
+          )}
+        </div>
       </div>
     </>
   );

@@ -83,7 +83,7 @@ import {
   type VisitorId,
 } from "./visitors";
 
-export type Tab = "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
+export type Tab = "lobby" | "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
   | null
   | "shop"
@@ -403,7 +403,7 @@ function grantXp(profile: Profile, xp: number): { profile: Profile; leveled: num
 export const useGame = create<GameStore>((set, get) => ({
   ready: true,
   started: false,
-  tab: "home",
+  tab: "lobby",
   panel: null,
   profile: defaultProfile(),
   match: firstMatch(),
