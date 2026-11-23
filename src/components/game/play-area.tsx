@@ -37,10 +37,26 @@ type Drag = {
   startX: number;
   startY: number;
   lift: number;
+  /** Full lift height; `lift` eases up to it so the piece rises, not jumps. */
+  liftMax: number;
+  t0: number;
+  /** Drag gain: the piece travels a little further than the finger. */
+  gx: number;
+  gy: number;
   m: Metrics;
   moved: boolean;
   slot: DOMRect;
 };
+
+const LIFT_MS = 130;
+
+/** Move the dragged piece for a pointer at (cx, cy), with gain and eased lift. */
+function follow(d: Drag, cx: number, cy: number): void {
+  d.x = d.startX + (cx - d.startX) * d.gx;
+  d.y = d.startY + (cy - d.startY) * d.gy;
+  const t = Math.min(1, (performance.now() - d.t0) / LIFT_MS);
+  d.lift = d.liftMax * (1 - (1 - t) * (1 - t) * (1 - t));
+}
 
 /** What the board shows under a dragged piece. */
 type Preview = {
@@ -70,6 +86,8 @@ let lastFxId = 0;
 export function PlayArea() {
   const skin = useGame((s) => s.profile.skin);
   const board = useGame((s) => s.match.board);
+  // Crowded board: the frame glows red so every drop feels like it counts.
+  const danger = useMemo(() => board.flat().filter((c) => c.t !== "e").length >= 44, [board]);
   const tray = useGame((s) => s.match.tray);
   const seenShapes = useGame((s) => s.profile.seenShapes);
   const tutorial = useGame((s) => s.tutorial);
@@ -236,9 +254,8 @@ export function PlayArea() {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || e.pointerId !== d.pointerId) return;
-      d.x = e.clientX;
-      d.y = e.clientY;
-      if (!d.moved && Math.hypot(d.x - d.startX, d.y - d.startY) > 6) d.moved = true;
+      follow(d, e.clientX, e.clientY);
+      if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) d.moved = true;
       if (frameReq.current !== null) return;
       frameReq.current = requestAnimationFrame(() => {
         frameReq.current = null;
@@ -256,8 +273,8 @@ export function PlayArea() {
         cancelAnimationFrame(frameReq.current);
         frameReq.current = null;
       }
-      d.x = e.clientX;
-      d.y = e.clientY;
+      follow(d, e.clientX, e.clientY);
+      d.lift = d.liftMax;
       previewKey.current = "";
       updatePreview(d);
       const target = previewKey.current ? previewKey.current.split(",").map(Number) : null;
@@ -317,17 +334,30 @@ export function PlayArea() {
       y: e.clientY,
       startX: e.clientX,
       startY: e.clientY,
+      lift: 0,
       // Touch: hold the piece above the finger, its bottom edge clear of the fingertip.
-      lift: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
+      liftMax: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
+      t0: performance.now(),
+      gx: e.pointerType === "mouse" ? 1 : 1.12,
+      gy: e.pointerType === "mouse" ? 1 : 1.3,
       m,
       moved: false,
       slot: e.currentTarget.getBoundingClientRect(),
     };
+    // Ease the lift in even if the finger holds still.
+    const rise = () => {
+      const d = dragRef.current;
+      if (!d || d.lift >= d.liftMax) return;
+      follow(d, d.startX + (d.x - d.startX) / d.gx, d.startY + (d.y - d.startY) / d.gy);
+      placeGhost(d);
+      requestAnimationFrame(rise);
+    };
+    requestAnimationFrame(rise);
     previewKey.current = "";
     setDragIndex(index);
     useGame.getState().setPointerBusy(true);
     useGame.getState().selectPiece(index);
-  }, []);
+  }, [placeGhost]);
 
   // Position the ghost before it paints, then let it grow to board size.
   useLayoutEffect(() => {
@@ -389,7 +419,7 @@ export function PlayArea() {
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
       <div ref={rowRef} className="pj-board-row">
         {compact ? null : <SideRails side="l" />}
-        <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
+        <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}${danger && !over ? " is-danger" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
           <ComboMeter />
           <BoardGrid
             key={skin}
@@ -594,6 +624,16 @@ const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
   const dismissTip = useGame((s) => s.dismissTip);
   const kinds = tray.flatMap((p) => (p ? [p.special ?? "", p.starAt !== null ? "star" : ""] : [])).filter(Boolean);
   const sp = kinds.find((k) => TIP_TEXT[k] && !seen.includes(k));
+  // Any tap anywhere puts the tip away.
+  useEffect(() => {
+    if (!sp) return;
+    const off = () => dismissTip(sp);
+    const t = window.setTimeout(() => window.addEventListener("pointerdown", off, { once: true, capture: true }), 250);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", off, { capture: true });
+    };
+  }, [sp, dismissTip]);
   if (!sp || !TIP_TEXT[sp]) return null;
   const tip = TIP_TEXT[sp]!;
   return (
@@ -665,7 +705,12 @@ export function RunBanner() {
     setShown(banner.id);
     audio.feelMilestone();
     const t = window.setTimeout(() => setShown(null), 1600);
-    return () => window.clearTimeout(t);
+    const off = () => setShown(null);
+    window.addEventListener("pointerdown", off, { once: true, capture: true });
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", off, { capture: true });
+    };
   }, [banner, panel]);
   if (!banner || shown !== banner.id) return null;
   return (

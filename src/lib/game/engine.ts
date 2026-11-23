@@ -229,16 +229,12 @@ const SHAPES: Shape[] = [
   { id: "l4", cells: [[0, 0], [1, 0], [2, 0], [2, 1]], weight: 8 },
   { id: "j4", cells: [[0, 1], [1, 1], [2, 0], [2, 1]], weight: 8 },
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
-  { id: "t4", cells: [[0, 0], [0, 1], [0, 2], [1, 1]], weight: 8 },
-  { id: "t5", cells: [[0, 0], [0, 1], [0, 2], [1, 1], [2, 1]], weight: 3 },
   { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
   { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
-  { id: "u5", cells: [[0, 0], [0, 2], [1, 0], [1, 1], [1, 2]], weight: 4 },
   { id: "plus", cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]], weight: 3 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
   { id: "z5", cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], weight: 3 },
   { id: "diag2", cells: [[0, 0], [1, 1]], weight: 2 },
-  { id: "h3", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 2]], weight: 3 },
 ];
 
 const SHAPE_MAP = new Map(SHAPES.map((s) => [s.id, s]));
@@ -249,7 +245,7 @@ export function shapeCells(id: string): CellPos[] {
 }
 
 /** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
-export const UNUSUAL_SHAPES = ["diag2", "h3", "u5", "plus", "corner5", "z5", "t5", "i5", "o9"] as const;
+export const UNUSUAL_SHAPES = ["diag2", "plus", "corner5", "z5", "i5", "o9"] as const;
 
 let seq = 1;
 export function uid(prefix = "p"): string {
@@ -578,7 +574,7 @@ export function openingBoard(): Cell[][] {
 
 export function openingTray(): Array<Piece | null> {
   return [
-    namedPiece("t4", "pink", [[0, 1], [1, 0], [1, 1], [1, 2]]),
+    namedPiece("i3", "pink", [[0, 0], [0, 1], [0, 2]]),
     namedPiece("o4", "amber", [[0, 0], [0, 1], [1, 0], [1, 1]], null, false, "bomb", 0),
     namedPiece("l4", "cyan", [[0, 0], [1, 0], [1, 1], [1, 2]], null, false, "rocketH", 3),
   ];
@@ -1190,7 +1186,14 @@ export function newEndlessMatch(opts?: { showcase?: boolean }): Match {
 
 /** A level in Classic or Adventure. Stones are only placed when allowed. */
 /** A level's starting board: some blocks already placed, some holding gems. */
-export type Layout = { fill: number; gems: number; /** Share of gems placed up high, as lone blocks. */ high?: number };
+export type Layout = {
+  fill: number;
+  gems: number;
+  /** Share of gems placed up high, as lone blocks. */
+  high?: number;
+  /** Obstacle layers put on pre-placed blocks. */
+  overlays?: Array<{ kind: OverlayId; count: number }>;
+};
 
 const LAYOUT_COLORS: ColorId[] = ["cyan", "azure", "lime", "pink", "amber", "orange", "violet"];
 
@@ -1250,6 +1253,21 @@ export function applyLayout(board: Cell[][], layout: Layout, rng: () => number):
     if (cell.t === "b") {
       board[r]![c] = { ...cell, gm: 1 };
       placed++;
+    }
+  }
+  // Obstacles go on placed blocks (gem blocks too: they just take longer).
+  const blocks: Array<[number, number]> = [];
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "b" && !(board[r]![c] as { ov?: OverlayId[] }).ov) blocks.push([r, c]);
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [blocks[i], blocks[j]] = [blocks[j]!, blocks[i]!];
+  }
+  let bi = 0;
+  for (const o of layout.overlays ?? []) {
+    for (let n = 0; n < o.count && bi < blocks.length; n++, bi++) {
+      const [r, c] = blocks[bi]!;
+      const cell = board[r]![c]!;
+      if (cell.t === "b") board[r]![c] = { ...cell, ov: [o.kind] };
     }
   }
   for (let r = top - 1; r >= 0 && placed < layout.gems; r--) {

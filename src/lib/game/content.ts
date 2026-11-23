@@ -30,7 +30,15 @@ export type UnlockId =
   | "blast"
   | "nia"
   | "pip"
-  | "gems";
+  | "gems"
+  | "ice"
+  | "chains"
+  | "vines"
+  | "locks"
+  | "hammer"
+  | "reroll"
+  | "boom"
+  | "frost";
 
 export type UnlockInfo = {
   id: UnlockId;
@@ -42,6 +50,10 @@ export type UnlockInfo = {
   art: string;
   /** Icon overlay drawn on the tile art, for special blocks. */
   special?: "bomb" | "rocketV" | "blast";
+  /** Obstacle layer drawn on the tile art. */
+  overlay?: "ice" | "chain" | "vine" | "lock";
+  /** Booster this unlock adds to the bar under the board. */
+  power?: PowerId;
 };
 
 export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
@@ -55,6 +67,14 @@ export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
   blast: { id: "blast", kind: "block", name: "Board-wipe block", blurb: "Super rare! Put the golden block down and every block on the board disappears.", art: "/art/tiles/amber.webp", special: "blast" },
   nia: { id: "nia", kind: "visitor", name: "Nia the Explorer", blurb: "Finds a new path and slides blocks into new spots.", art: "/characters/nia-3d.webp" },
   gems: { id: "gems", kind: "block", name: "Gem blocks", blurb: "Some blocks hold sparkling gems. Clear the row or column they're in to collect them. Collect them all to win!", art: "/icons/gem.webp" },
+  ice: { id: "ice", kind: "block", name: "Ice blocks", blurb: "Frozen blocks need two clears: the first breaks the ice, the second clears the block.", art: "/art/tiles/azure.webp", overlay: "ice" },
+  chains: { id: "chains", kind: "block", name: "Chained blocks", blurb: "Chains hold a block in place. Clear its row or column once to snap the chain, then again to clear it.", art: "/art/tiles/pink.webp", overlay: "chain" },
+  vines: { id: "vines", kind: "block", name: "Vine blocks", blurb: "Jungle vines wrap a block. One clear cuts the vines, the next clears the block.", art: "/art/tiles/lime.webp", overlay: "vine" },
+  locks: { id: "locks", kind: "block", name: "Locked blocks", blurb: "A padlock keeps a block on the board for one extra clear. Break it open!", art: "/art/tiles/amber.webp", overlay: "lock" },
+  hammer: { id: "hammer", kind: "block", name: "Hammer booster", blurb: "Stuck? Tap the hammer under the board, then tap any block to smash it.", art: "/icons/hammer.webp", power: "hammer" },
+  reroll: { id: "reroll", kind: "block", name: "Reroll booster", blurb: "Don't like your pieces? Tap Reroll to swap all three for new ones.", art: "/icons/refresh.webp", power: "refresh" },
+  boom: { id: "boom", kind: "block", name: "Bomb booster", blurb: "Tap the bomb, then tap the board: a 3×3 area blows up.", art: "/icons/bomb.webp", power: "bomb" },
+  frost: { id: "frost", kind: "block", name: "Frost booster", blurb: "Frost freezes your combo so it won't break for your next two drops.", art: "/icons/frost.webp", power: "freeze" },
   pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb on a block. If it matches the blocks touching it, the whole group pops!", art: "/characters/pip-3d.webp" },
 };
 
@@ -75,6 +95,14 @@ export type AdventureLevel = {
 
 /** The rhythm of goals across each world's 15 islands; the last is the boss. */
 const WORLD_RHYTHM: Goal["type"][] = ["gems", "score", "gems", "lines", "gems", "combo", "gems", "score", "lines", "gems", "combo", "gems", "score", "lines", "gems"];
+
+/** Board obstacles and the island they first appear on. */
+const OBSTACLES: Array<["ice" | "chain" | "vine" | "lock", number]> = [
+  ["ice", 33],
+  ["chain", 57],
+  ["vine", 80],
+  ["lock", 105],
+];
 
 /** Every world is 15 islands. */
 export const WORLD_SIZE = 15;
@@ -164,9 +192,63 @@ function generatedLevel(id: number): AdventureLevel {
     stones: Math.min(8, 3 + Math.floor(w / 2)),
     reward: { coins: (150 + id * 2) * (boss ? 2 : 1), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
     introduces: id === 16 ? "gems" : undefined,
-    layout: { fill, gems: kind === "gems" ? goal.value : 0, high: Math.min(0.7, 0.2 + d * 0.5 + (boss ? 0.2 : 0)) },
+    layout: {
+      fill,
+      gems: kind === "gems" ? goal.value : 0,
+      high: Math.min(0.7, 0.2 + d * 0.5 + (boss ? 0.2 : 0)),
+      // Obstacles ramp up slowly after they're introduced, and not every island has them.
+      overlays: OBSTACLES.flatMap(([ov, at]) => {
+        if (id < at || (id > at + 2 && k % 3 === 2 && !boss)) return [];
+        const n = Math.min(6, 1 + Math.floor((id - at) / 14) + (boss ? 1 : 0));
+        return [{ kind: ov, count: id === at ? 3 : n }];
+      }),
+    },
     boss,
   };
+}
+
+/**
+ * When each new thing shows up. Early on something new every few islands,
+ * then spaced further apart so each one gets played with before the next.
+ */
+export const UNLOCK_SCHEDULE: Record<number, UnlockId> = {
+  3: "arrows",
+  5: "hammer",
+  7: "stars",
+  10: "bombs",
+  13: "milo",
+  16: "gems",
+  20: "stones",
+  24: "reroll",
+  28: "kai",
+  33: "ice",
+  38: "blast",
+  44: "boom",
+  50: "luna",
+  57: "chains",
+  64: "nia",
+  72: "frost",
+  80: "vines",
+  90: "pip",
+  105: "locks",
+};
+for (const lvl of ADVENTURE) lvl.introduces = UNLOCK_SCHEDULE[lvl.id];
+
+export function unlockLevel(id: UnlockId): number {
+  const hit = Object.entries(UNLOCK_SCHEDULE).find(([, u]) => u === id);
+  return hit ? Number(hit[0]) : Infinity;
+}
+
+/**
+ * Menus open up as the player progresses, so a first-time player sees just
+ * the board and Play. The number is the island (or Classic level) reached.
+ */
+export const FEATURE_AT = { map: 2, daily: 3, shop: 4, spin: 6, classic: 6, sandbox: 8, events: 9, challenges: 11, ranks: 14 } as const;
+export type FeatureId = keyof typeof FEATURE_AT;
+
+/** Boosters the player has reached (bar under the board shows only these). */
+export function unlockedPowers(reached: number): PowerId[] {
+  return (Object.values(UNLOCKS).filter((u) => u.power && unlockLevel(u.id) <= reached).map((u) => u.power!) as PowerId[]);
 }
 
 /** Everything unlocked by the time the player reaches `levelId`. */

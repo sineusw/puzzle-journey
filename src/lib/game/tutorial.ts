@@ -67,17 +67,6 @@ const BASICS: TutorialStep[] = [
     piece: piece("i3", [[0, 0], [1, 0], [2, 0]], "violet"),
     at: { r: 0, c: 0 },
   },
-  {
-    say: "Some blocks have holes!",
-    hint: "The hole stays empty, so this one fits around that block. Blocks never turn, so look before you drop.",
-    praise: "Perfect fit!",
-    board: board((put) => {
-      for (let c = 0; c < 8; c++) if (c < 2 || c > 4) put(7, c);
-      put(6, 3, "cyan");
-    }),
-    piece: piece("u5", [[0, 0], [0, 2], [1, 0], [1, 1], [1, 2]], "orange"),
-    at: { r: 6, c: 2 },
-  },
 ];
 
 const ARROWS: TutorialStep[] = [

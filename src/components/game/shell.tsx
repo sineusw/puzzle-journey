@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
 import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
-import { ADVENTURE, goalLabel, starMoves, xpForLevel, type StarMoves } from "@/lib/game/content";
+import { ADVENTURE, FEATURE_AT, goalLabel, starMoves, xpForLevel, type StarMoves } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
 import { formatInt } from "@/lib/utils";
@@ -21,6 +21,7 @@ export function GameShell() {
   const persist = useGame((s) => s.persist);
   const start = useGame((s) => s.start);
   const skin = useGame((s) => s.profile.skin);
+  const reached = useGame((s) => Math.max(s.profile.adventure.unlocked, s.profile.classic.unlocked));
   setTileSkin(skin);
   const tutorialOn = useGame((s) => s.tutorial !== null);
   const compactLayout = useCompactLayout();
@@ -95,7 +96,9 @@ export function GameShell() {
               ["ranks", "Ranks", Crown],
               ["more", "More", MoreHorizontal],
             ] as const
-          ).map(([id, label, Icon]) => (
+          )
+            .filter(([id]) => (id === "challenges" ? reached >= FEATURE_AT.challenges : id === "ranks" ? reached >= FEATURE_AT.ranks : true))
+            .map(([id, label, Icon]) => (
             <button
               key={id}
               type="button"

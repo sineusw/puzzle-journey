@@ -23,6 +23,9 @@ import {
   xpForLevel,
   starPar,
   starsFor,
+  unlockedPowers,
+  FEATURE_AT,
+  type FeatureId,
 } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
 import { VISITOR_IDS, VISITOR_META } from "@/lib/game/visitors";
@@ -32,15 +35,25 @@ import * as audio from "@/lib/game/audio";
 import { cheer } from "@/lib/game/voice";
 import { nameFor, useBoard } from "@/lib/game/leaderboard";
 import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
-import { SpecialFace } from "./tile-art";
+import { OverlayFace, SpecialFace } from "./tile-art";
 import { ShapeGallery, SPECIAL_WORDS, SpecialDemo } from "./explainers";
 import { ChallengeScreen, RanksScreen } from "./competition";
 import { Fireworks } from "./fireworks";
 import { lessonForUnlock } from "@/lib/game/tutorial";
 import { dailySet, rollover } from "@/lib/game/challenges";
 import { AdventureMap } from "./adventure-map";
-import { ContinueOptions, DailySheet, EventsSheet, HouseAd, QuestSheet, ShopSheet, SkinsScreen, SpinSheet } from "./store-ui";
+import {
+  ContinueOptions,
+  DailySheet,
+  EventsSheet,
+  HouseAd,
+  QuestSheet,
+  ShopSheet,
+  SkinsScreen,
+  SpinSheet,
+} from "./store-ui";
 import { normalizeLive } from "@/lib/game/liveops";
+import { useHouseAd } from "@/lib/game/ads";
 
 export function SideRails({ side }: { side: "l" | "r" }) {
   const setPanel = useGame((s) => s.setPanel);
@@ -48,46 +61,77 @@ export function SideRails({ side }: { side: "l" | "r" }) {
   const firstIsland = useGame((s) => s.profile.adventure.unlocked === 1);
   const setTab = useGame((s) => s.setTab);
   const spinReady = useGame((s) => !normalizeLive(s.profile.live).spin.free);
+  const reached = useGame((s) =>
+    Math.max(s.profile.adventure.unlocked, s.profile.classic.unlocked),
+  );
   // Red dot while today's challenges aren't all done.
   // Red dot while there's a reward to claim or today's set isn't done.
   const challengesLeft = useGame((s) => {
     const st = rollover(s.profile.challenges);
-    return st.done.some((id) => !(st.claimed ?? []).includes(id)) || dailySet(st.day).some((c) => !st.done.includes(c.id));
+    return (
+      st.done.some((id) => !(st.claimed ?? []).includes(id)) ||
+      dailySet(st.day).some((c) => !st.done.includes(c.id))
+    );
   });
+
+  const has = (f: FeatureId) => reached >= FEATURE_AT[f];
+  const fresh = (f: FeatureId) => reached >= FEATURE_AT[f] && reached <= FEATURE_AT[f] + 1;
+  const NewTag = ({ f }: { f: FeatureId }) =>
+    fresh(f) ? <span className="pj-new-tag">NEW</span> : null;
 
   if (side === "l") {
     return (
       <div className="pj-rails pj-rails-l">
-        <DailyRail nextAt={dailyNextAt} onOpen={() => setPanel("daily")} />
-        <button type="button" className="pj-rail relative" onClick={() => setPanel("spin")}>
-          {spinReady ? <span className="pj-badge" /> : null}
-          <span className="pj-spin-ico" aria-hidden="true" />
-          <span className="pj-rail-label">Spin</span>
-        </button>
-        <button type="button" className="pj-rail" onClick={() => setPanel("events")}>
-          <GameIcon name="events" />
-          <span className="pj-rail-label">Events</span>
-        </button>
+        {has("daily") ? <DailyRail nextAt={dailyNextAt} onOpen={() => setPanel("daily")} /> : null}
+        {has("spin") ? (
+          <button type="button" className="pj-rail relative" onClick={() => setPanel("spin")}>
+            {spinReady ? <span className="pj-badge" /> : null}
+            <NewTag f="spin" />
+            <span className="pj-spin-ico" aria-hidden="true" />
+            <span className="pj-rail-label">Spin</span>
+          </button>
+        ) : null}
+        {has("events") ? (
+          <button type="button" className="pj-rail relative" onClick={() => setPanel("events")}>
+            <NewTag f="events" />
+            <GameIcon name="events" />
+            <span className="pj-rail-label">Events</span>
+          </button>
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="pj-rails pj-rails-r">
-      <button type="button" className="pj-rail relative" onClick={() => setPanel("map")}>
-        {firstIsland ? <span className="pj-badge" /> : null}
-        <GameIcon name="map" />
-        <span className="pj-rail-label">Map</span>
-      </button>
-      <button type="button" className="pj-rail relative" data-testid="rail-challenges" onClick={() => setTab("challenges")}>
-        {challengesLeft ? <span className="pj-badge" /> : null}
-        <GameIcon name="quests" />
-        <span className="pj-rail-label">Challenges</span>
-      </button>
-      <button type="button" className="pj-rail" onClick={() => setPanel("shop")}>
-        <GameIcon name="shop" />
-        <span className="pj-rail-label">Shop</span>
-      </button>
+      {has("map") ? (
+        <button type="button" className="pj-rail relative" onClick={() => setPanel("map")}>
+          {firstIsland ? <span className="pj-badge" /> : null}
+          <NewTag f="map" />
+          <GameIcon name="map" />
+          <span className="pj-rail-label">Map</span>
+        </button>
+      ) : null}
+      {has("challenges") ? (
+        <button
+          type="button"
+          className="pj-rail relative"
+          data-testid="rail-challenges"
+          onClick={() => setTab("challenges")}
+        >
+          {challengesLeft ? <span className="pj-badge" /> : null}
+          <NewTag f="challenges" />
+          <GameIcon name="quests" />
+          <span className="pj-rail-label">Challenges</span>
+        </button>
+      ) : null}
+      {has("shop") ? (
+        <button type="button" className="pj-rail relative" onClick={() => setPanel("shop")}>
+          <NewTag f="shop" />
+          <GameIcon name="shop" />
+          <span className="pj-rail-label">Shop</span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -118,7 +162,11 @@ export function PowerBar() {
   const targeting = useGame((s) => s.targeting);
   const armPower = useGame((s) => s.armPower);
   const setPanel = useGame((s) => s.setPanel);
-  const items: Array<{
+  const reached = useGame((s) =>
+    Math.max(s.profile.adventure.unlocked, s.profile.classic.unlocked),
+  );
+  const open = unlockedPowers(reached);
+  const all: Array<{
     id: "hammer" | "refresh" | "bomb" | "freeze";
     label: string;
     icon: IconName;
@@ -128,6 +176,9 @@ export function PowerBar() {
     { id: "bomb", label: "Bomb", icon: "bomb" },
     { id: "freeze", label: "Frost", icon: "frost" },
   ];
+  // New players start with an empty bar; boosters appear as islands unlock them.
+  const items = all.filter((i) => open.includes(i.id));
+  if (!items.length) return <div className="pj-powers is-empty" aria-hidden="true" />;
   return (
     <div className="pj-powers">
       {items.map((item) => (
@@ -189,6 +240,18 @@ export function Overlays() {
           className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" || panel === "intro" ? "center" : ""}`}
           role="dialog"
           aria-modal="true"
+          onPointerDown={(e) => {
+            // Tap outside a menu or card to close it (results need a choice).
+            if (
+              e.target === e.currentTarget &&
+              panel !== "over" &&
+              panel !== "won" &&
+              !useHouseAd.getState().open
+            ) {
+              if (panel === "how") useGame.getState().start();
+              useGame.getState().setPanel(null);
+            }
+          }}
         >
           {panel === "shop" ? <ShopSheet /> : null}
           {panel === "quests" ? <QuestSheet /> : null}
@@ -213,7 +276,12 @@ function LevelUpSheet({ level, onClose }: { level: number; onClose: () => void }
     cheer("Level up!", { delayMs: 200, priority: true });
   }, [level]);
   return (
-    <div className="pj-modal center" role="dialog" aria-label="Level up">
+    <div
+      className="pj-modal center"
+      role="dialog"
+      aria-label="Level up"
+      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="pj-sheet pj-result text-center">
         <p className="text-sm font-extrabold tracking-widest text-gold uppercase">Level up</p>
         <h2 className="pj-result-title mt-1 font-display text-cream">Lv. {level}</h2>
@@ -376,10 +444,20 @@ function HowSheet() {
         Play the tutorial
       </button>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <button type="button" className="pj-btn pj-btn-ghost w-full" data-testid="practice-arrows" onClick={() => startTutorial("arrows")}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-ghost w-full"
+          data-testid="practice-arrows"
+          onClick={() => startTutorial("arrows")}
+        >
           Try arrows
         </button>
-        <button type="button" className="pj-btn pj-btn-ghost w-full" data-testid="practice-bombs" onClick={() => startTutorial("bombs")}>
+        <button
+          type="button"
+          className="pj-btn pj-btn-ghost w-full"
+          data-testid="practice-bombs"
+          onClick={() => startTutorial("bombs")}
+        >
           Try bombs
         </button>
       </div>
@@ -668,7 +746,8 @@ function WonSheet() {
         <p className="mx-auto mt-1 max-w-[30ch] text-sm text-cream/85">{sub}</p>
         {par ? (
           <p className="pj-star-hint" data-testid="star-hint">
-            Done in <b>{match.moves}</b> moves{stars < 3 ? <> · ★★★ takes {par} or fewer</> : <> · par was {par}</>}
+            Done in <b>{match.moves}</b> moves
+            {stars < 3 ? <> · ★★★ takes {par} or fewer</> : <> · par was {par}</>}
           </p>
         ) : null}
         <div className="pj-result-score tabular-nums">{formatInt(shown)}</div>
@@ -692,7 +771,12 @@ function WonSheet() {
         {profile.levelStreak >= 2 ? (
           <div className="pj-streak-warn mt-2">
             🔥 {profile.levelStreak} wins in a row! Next level starts with a free{" "}
-            {profile.levelStreak >= 6 ? "arrow, bomb and golden block" : profile.levelStreak >= 4 ? "arrow and bomb" : "arrow block"}.
+            {profile.levelStreak >= 6
+              ? "arrow, bomb and golden block"
+              : profile.levelStreak >= 4
+                ? "arrow and bomb"
+                : "arrow block"}
+            .
           </div>
         ) : profile.levelStreak === 1 ? (
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
@@ -742,6 +826,14 @@ function IntroSheet() {
           <SpecialDemo kind={info.special} />
         ) : info.kind === "visitor" ? (
           <img src={info.art} alt="" />
+        ) : info.power ? (
+          <img src={info.art} alt="" className="pj-intro-power" />
+        ) : info.overlay ? (
+          <span className="pj-intro-tile pj-cube" style={{ backgroundImage: `url(${info.art})` }}>
+            <span className="pj-cube-layers">
+              <OverlayFace kind={info.overlay} />
+            </span>
+          </span>
         ) : (
           <span className="pj-intro-tile" style={{ backgroundImage: `url(${info.art})` }}>
             {info.special ? <SpecialFace kind={info.special} /> : null}
@@ -808,30 +900,36 @@ function AdventureScreen() {
     },
     { id: "sandbox", label: "Sandbox", blurb: "Endless plain blocks. Chase your highest score." },
   ];
-  const active = modes.find((m) => m.id === mode)!;
+  const reachedMode = useGame((s) =>
+    Math.max(s.profile.adventure.unlocked, s.profile.classic.unlocked),
+  );
+  const shown = modes.filter((m) => m.id === "adventure" || reachedMode >= FEATURE_AT[m.id]);
+  const active = shown.find((m) => m.id === mode) ?? shown[0]!;
   return (
     <div>
       <h2 className="pj-store-title">Play</h2>
-      <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
-        {modes.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="tab"
-            aria-selected={mode === m.id}
-            data-testid={`mode-${m.id}`}
-            className={`pj-mode-tab ${mode === m.id ? "is-on" : ""}`}
-            onClick={() => setMode(m.id)}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      {shown.length > 1 ? (
+        <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
+          {shown.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === m.id}
+              data-testid={`mode-${m.id}`}
+              className={`pj-mode-tab ${mode === m.id ? "is-on" : ""}`}
+              onClick={() => setMode(m.id)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <p className="mt-2 text-sm text-muted">{active.blurb}</p>
       <div className="mt-3">
-        {mode === "adventure" ? (
+        {active.id === "adventure" ? (
           <AdventureMap />
-        ) : mode === "classic" ? (
+        ) : active.id === "classic" ? (
           <ClassicList />
         ) : (
           <SandboxCard />
@@ -840,7 +938,6 @@ function AdventureScreen() {
     </div>
   );
 }
-
 
 function SandboxCard() {
   const best = useGame((s) => s.profile.sandboxBest);
@@ -898,7 +995,6 @@ function ClassicList() {
     </div>
   );
 }
-
 
 function MoreScreen() {
   const profile = useGame((s) => s.profile);
