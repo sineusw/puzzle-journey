@@ -57,6 +57,8 @@ export type Goal =
 export type GameMode = "classic" | "adventure" | "sandbox" | "challenge";
 
 export type BlockSpecial = Exclude<SpecialId, "stone">;
+/** A power block the player can earn: a special, or a star color bomb. */
+export type BonusId = BlockSpecial | "star";
 
 /** What may appear in a match. Every generator and visitor obeys this. */
 export type Features = {
@@ -90,8 +92,11 @@ export type Match = {
   tray: Array<Piece | null>;
   /** The set dealt after this tray, shown as "Up next" so players can plan ahead. */
   next?: Piece[] | null;
-  /** Free special blocks (win-streak reward) held back until the board has blocks for them to hit. */
-  bonus?: Array<Exclude<SpecialId, "stone">>;
+  /**
+   * Earned power blocks (from big clears, combos, perfect clears, win streaks),
+   * dealt into the next tray once the board has blocks for them to hit.
+   */
+  bonus?: BonusId[];
   score: number;
   combo: number;
   bestCombo: number;
@@ -182,6 +187,8 @@ export type PlaceResult = {
   coins: number;
   /** The clear emptied the whole board. */
   perfect: boolean;
+  /** Power blocks this move earned (Candy Crush style), headed for the next tray. */
+  earned?: BonusId[];
   /** A star block that paid its bonus on this drop. */
   star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
@@ -484,6 +491,11 @@ export function makePiece(rng: () => number, forceShape?: string, features: Feat
     special,
     specialAt,
   };
+}
+
+/** A one-square star color bomb, earned with a combo milestone or a perfect clear. */
+export function starPiece(rng: () => number): Piece {
+  return { id: uid(), shape: "o1", cells: [[0, 0]], color: pickColor(rng), starAt: 0, gold: false, special: null, specialAt: null };
 }
 
 /** A one-square piece that is a special block (bomb, arrow or golden block). */
@@ -1125,25 +1137,24 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   };
   // When specials are unlocked, make sure they actually show up now and then:
   // some sets without one get one of the allowed kinds.
-  const anySpecial = (f.specials.length > 0 || f.stones) && !(match.easy ?? 0) && occ >= POWER_MIN_FILL;
+  // Power blocks are earned, never dealt at random; only stone obstacles ride in on pieces.
   const sprinkle = (pieces: Piece[]): Piece[] => {
-    if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
-      const i = Math.floor(rng() * pieces.length);
-      const special = rollSpecial(() => 0.76 + rng() * 0.24, f);
-      if (special) pieces[i] = special === "stone" ? { ...pieces[i]!, special, specialAt: 0 } : specialPiece(special);
+    const out = pieces.map(depower);
+    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.3) {
+      const i = Math.floor(rng() * out.length);
+      out[i] = { ...out[i]!, special: "stone", specialAt: 0 };
     }
-    return pieces;
+    return out;
   };
   const normal = !easy && !(match.easy ?? 0);
   // Semi-predictable: the set shown as "Up next" is what you get, as long as it
   // can still be played on the board you left. If it can't, you get a fair set instead.
   const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
-  let pieces = queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting());
-  if (occ < POWER_MIN_FILL) pieces = pieces.map(depower);
-  else if (match.bonus?.length) {
-    // Win-streak reward lands now that there are blocks to blow up.
-    match.bonus.slice(0, 3).forEach((sp, i) => (pieces[i] = specialPiece(sp)));
-    match.bonus = undefined;
+  const pieces = (queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting())).map(depower);
+  if (occ >= POWER_MIN_FILL && match.bonus?.length) {
+    // Earned power blocks land now that there are blocks for them to hit.
+    match.bonus.slice(0, 3).forEach((b, i) => (pieces[i] = b === "star" ? starPiece(rng) : specialPiece(b)));
+    match.bonus = match.bonus.length > 3 ? match.bonus.slice(3) : undefined;
   }
   // Line up the following set: varied shapes, never three alike.
   if (normal) {
@@ -1388,6 +1399,22 @@ export function placePiece(
   // A golden block empties the board by itself; that isn't a "perfect" clear.
   const perfect = Boolean(clear) && !clear?.blasts && boardIsEmpty(next.board);
   if (perfect) next.perfects += 1;
+  // Earned power blocks: the player makes specials by playing well.
+  const earned: BonusId[] = [];
+  if (clear) {
+    const f = next.features;
+    const hasArrow = f.specials.includes("rocketH") || f.specials.includes("rocketV");
+    const lines = clear.lines;
+    const comboMilestone = next.combo >= 5 && next.combo % 5 === 0 && next.combo !== match.combo;
+    if ((perfect || comboMilestone) && f.stars) earned.push("star");
+    if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
+    else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");
+    else if (lines >= 2 && hasArrow) {
+      const dir: BlockSpecial = clear.rows.length >= clear.cols.length ? "rocketH" : "rocketV";
+      earned.push(f.specials.includes(dir) ? dir : dir === "rocketH" ? "rocketV" : "rocketH");
+    }
+    if (earned.length) next.bonus = [...(next.bonus ?? []), ...earned].slice(0, 3);
+  }
   const comboForScore = Math.max(1, next.combo);
   const gained = scoreFor(piece, clear, comboForScore, perfect) + starBonus;
   next.score += gained;
@@ -1403,6 +1430,7 @@ export function placePiece(
     combo: next.combo,
     coins: coinsFor(clear, gained) + (perfect ? 20 : 0),
     perfect,
+    earned: earned.length ? earned : undefined,
     star:
       starBonus && piece.starAt !== null && piece.cells[piece.starAt]
         ? { r: row + piece.cells[piece.starAt]![0], c: col + piece.cells[piece.starAt]![1], gold: piece.gold, bonus: starBonus }

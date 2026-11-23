@@ -165,7 +165,7 @@ export class Fx {
       ctx.strokeStyle = r.color;
       ctx.lineWidth = r.width * (1 - t * 0.6);
       ctx.beginPath();
-      ctx.arc(r.x, r.y, r.r0 + (r.r1 - r.r0) * e, 0, Math.PI * 2);
+      ctx.arc(r.x, r.y, Math.max(0, r.r0 + (r.r1 - r.r0) * e), 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -205,7 +205,7 @@ export class Fx {
         ctx.globalAlpha = 0.55 * (1 - t);
         const r = p.size * (0.8 + t * 1.8);
         ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.arc(0, 0, Math.max(0, r), 0, Math.PI * 2);
         ctx.fill();
         break;
       }
@@ -259,7 +259,7 @@ export class Fx {
         ctx.fill();
         ctx.fillStyle = "rgba(255,255,255,0.45)";
         ctx.beginPath();
-        ctx.arc(-p.size * 0.3, -p.size * 0.3, p.size * 0.3, 0, Math.PI * 2);
+        ctx.arc(-p.size * 0.3, -p.size * 0.3, Math.max(0, p.size * 0.3), 0, Math.PI * 2);
         ctx.fill();
         break;
       }

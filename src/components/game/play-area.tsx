@@ -656,10 +656,12 @@ function pieceSpan(p: Piece): number {
 /** Small "Up next" preview of the following set, so players can plan a move ahead. */
 function UpNext() {
   const next = useGame((s) => s.match.next);
+  const bonus = useGame((s) => s.match.bonus);
   if (!next?.length) return null;
   return (
     <div className="pj-upnext" data-testid="up-next" aria-label="Up next">
       <span>Next</span>
+      {bonus?.length ? <b className="pj-upnext-bonus" title="Earned power blocks">+{bonus.length} ⚡</b> : null}
       {next.map((p) => (
         <PieceGrid key={p.id} piece={p} cell={Math.min(8, Math.floor(26 / pieceSpan(p)) - 1)} gap={1} />
       ))}
@@ -691,7 +693,7 @@ const TraySlot = memo(function TraySlot({
     <button
       type="button"
       data-testid={`tray-${index}`}
-      className={`pj-slot${selected ? " is-selected" : ""}${piece && !fits ? " is-dead" : ""}${lifted ? " is-lifted" : ""}`}
+      className={`pj-slot${piece && (piece.starAt !== null || (piece.special && piece.special !== "stone")) ? " is-power" : ""}${selected ? " is-selected" : ""}${piece && !fits ? " is-dead" : ""}${lifted ? " is-lifted" : ""}`}
       disabled={disabled}
       onPointerDown={(e) => onDown(index, e)}
       onClick={(e) => {

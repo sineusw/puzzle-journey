@@ -16,6 +16,7 @@ import {
   type Cell,
   type ColorId,
   type Match,
+  type BonusId,
   emptyBoard,
 
 } from "./engine";
@@ -716,6 +717,7 @@ export const useGame = create<GameStore>((set, get) => ({
         if (get().match === wonMatch && !get().panel) set({ panel: "won", match: { ...wonMatch, board: emptyBoard() } });
       }, 2100);
     }
+    if (result.earned && !result.match.won && !result.match.over) announceEarned(result.earned, result.perfect);
     persistSoon(get);
     if (result.match.over) void submitRanked(get, set);
     return true;
@@ -859,6 +861,10 @@ export const useGame = create<GameStore>((set, get) => ({
       newLevelMatch("adventure", level.id, level.goal, level.stones, adventureFeatures(level.id), level.layout),
       profile.levelStreak,
     );
+    // The island that teaches a power block hands out one free, once the board fills, so players see it work.
+    const teach: Partial<Record<string, BonusId>> = { stars: "star", arrows: "rocketH", bombs: "bomb", blast: "blast" };
+    const gift = level.introduces ? teach[level.introduces] : undefined;
+    if (gift) match.bonus = [gift, ...(match.bonus ?? [])].slice(0, 3);
     beginRun(get, set, match);
     streakBanner(set, profile.levelStreak);
     // A visitor this island introduces drops in early, and before anyone else.
@@ -1501,6 +1507,26 @@ function runFlagsFor(match: Match, profile: Profile, resume: boolean): RunFlags 
     newBest: resume && match.score >= best && best > 0,
     bestAtStart: best,
   };
+}
+
+const EARNED_INFO: Record<BonusId, { icon: string; name: string }> = {
+  rocketH: { icon: "➡️", name: "Arrow block" },
+  rocketV: { icon: "⬆️", name: "Arrow block" },
+  bomb: { icon: "💣", name: "Bomb block" },
+  blast: { icon: "🌟", name: "Golden block" },
+  star: { icon: "⭐", name: "Star color bomb" },
+};
+
+/** "You made a Bomb block!" — earned power blocks are the reward for big plays. */
+function announceEarned(earned: BonusId[], perfect: boolean): void {
+  const top = earned.includes("star") ? "star" : earned[0]!;
+  const info = EARNED_INFO[top];
+  const how = top === "star" ? (perfect ? "Perfect clear!" : "Combo ×5!") : top === "blast" ? "4 lines at once!" : top === "bomb" ? "3 lines at once!" : "2 lines at once!";
+  window.setTimeout(() => {
+    audio.feelMilestone();
+    notify({ icon: info.icon, title: `${how} You made ${/^[AEIOU]/.test(info.name) ? "an" : "a"} ${info.name}`, sub: "It comes in your tray. Use it!", tone: "win" });
+    if (top === "star") cheer(`You earned a star!`, { priority: true });
+  }, 450);
 }
 
 /** Shared reset for starting any run. */
