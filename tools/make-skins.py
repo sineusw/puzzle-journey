@@ -293,6 +293,119 @@ def skin_cosmic(rgb):  # Cosmic: galaxy swirl inside dark glass
     return t
 
 
+def skin_tiki(rgb):  # Tiki Wood: stained wood with grain and a carved frame
+    s = SIZE
+    stain = mix(hsv(rgb, 1.15, 0.95), (150, 100, 55), 0.15)
+    t = bevel_tile(shade(stain, 1.1), shade(stain, 0.8), shade(stain, 1.25), (60, 34, 16), gloss=0.15, radius=12)
+    rnd = random.Random(sum(rgb) * 11)
+    with Over(t) as d:
+        for k in range(9):
+            y = 14 + k * 10 + rnd.uniform(-2, 2)
+            pts = [(12 + x * 8, y + math.sin(x * 0.7 + k) * 2.2) for x in range(14)]
+            d.line(pts, fill=shade(stain, 0.62) + (150,), width=2)
+        d.rounded_rectangle([18, 15, s - 19, s - 28], radius=6, outline=shade(stain, 0.5) + (220,), width=3)
+        d.rounded_rectangle([20, 17, s - 21, s - 30], radius=5, outline=shade(stain, 1.35) + (120,), width=1)
+        for (x, y) in [(24, 21), (s - 25, 21), (24, s - 34), (s - 25, s - 34)]:
+            d.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(70, 50, 30, 255))
+            d.ellipse([x - 2, y - 2, x, y], fill=(220, 200, 160, 200))
+    return t
+
+
+def skin_jelly(rgb):  # Jelly: wobbly translucent jelly with bubbles
+    j = hsv(rgb, 1.15, 1.1)
+    t = bevel_tile(mix(j, (255, 255, 255), 0.25), j, mix(j, (255, 255, 255), 0.55), shade(j, 0.6), gloss=0.0, radius=34)
+    a = np.asarray(t).astype(float)
+    a[..., 3] *= 0.9
+    t = Image.fromarray(a.astype(np.uint8), "RGBA")
+    rnd = random.Random(sum(rgb) * 13)
+    with Over(t) as d:
+        d.ellipse([22, 14, 76, 40], fill=(255, 255, 255, 190))
+        d.ellipse([84, 22, 96, 32], fill=(255, 255, 255, 160))
+        for _ in range(5):
+            x, y, r = rnd.uniform(28, 100), rnd.uniform(50, 90), rnd.uniform(2.5, 5)
+            d.ellipse([x - r, y - r, x + r, y + r], outline=(255, 255, 255, 170), width=2)
+    return t
+
+
+def skin_pixel(rgb):  # Pixel: 8-bit block, drawn tiny and scaled up crisp
+    n = 16
+    c = hsv(rgb, 1.15, 1.05)
+    im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rectangle([1, 0, n - 2, n - 3], fill=c + (255,))
+    d.rectangle([0, 1, n - 1, n - 4], fill=c + (255,))
+    d.rectangle([1, n - 3, n - 2, n - 2], fill=shade(c, 0.55) + (255,))  # lip
+    d.line([(2, 1), (n - 3, 1)], fill=mix(c, (255, 255, 255), 0.6) + (255,))
+    d.line([(1, 2), (1, n - 5)], fill=mix(c, (255, 255, 255), 0.45) + (255,))
+    d.line([(n - 2, 2), (n - 2, n - 5)], fill=shade(c, 0.75) + (255,))
+    d.line([(2, n - 4), (n - 3, n - 4)], fill=shade(c, 0.75) + (255,))
+    d.rectangle([3, 3, 4, 4], fill=(255, 255, 255, 255))
+    d.point((5, 3), fill=(255, 255, 255, 200))
+    return im.resize((SIZE, SIZE), Image.NEAREST)
+
+
+def skin_chrome(rgb):  # Chrome: polished tinted metal with a hard reflection band
+    s = SIZE
+    c = hsv(rgb, 0.85, 1.0)
+    t = bevel_tile(c, c, mix(c, (255, 255, 255), 0.7), shade(c, 0.4), gloss=0.0, radius=14)
+    fm = Image.new("L", (s, s), 0)
+    fm.paste(rounded_mask(s - 20, 8), (10, 8))
+    yy = np.linspace(0, 1, s)[:, None]
+    band = np.clip(np.sin(yy * math.pi * 2.2 + 0.4), -1, 1)
+    light = 0.82 + 0.3 * band
+    col = np.array(c, float)[None, None, :] * light[..., None] + 255 * np.clip(band - 0.75, 0, 1)[..., None] * 3
+    col = np.repeat(col, s, axis=1)
+    layer = Image.fromarray(np.dstack([np.clip(col, 0, 255), np.asarray(fm)]).astype(np.uint8), "RGBA")
+    t.alpha_composite(layer)
+    with Over(t) as d:
+        d.polygon([(14, 60), (s - 14, 40), (s - 14, 48), (14, 68)], fill=(255, 255, 255, 120))
+        d.rounded_rectangle([10, 8, s - 11, s - 20], radius=8, outline=(255, 255, 255, 200), width=2)
+    return t
+
+
+def skin_holo(rgb):  # Holo: rainbow foil shimmer over the color
+    s = SIZE
+    c = hsv(rgb, 1.0, 1.05)
+    t = bevel_tile(mix(c, (255, 255, 255), 0.2), c, mix(c, (255, 255, 255), 0.6), shade(c, 0.55), gloss=0.35, radius=20)
+    fm = Image.new("L", (s, s), 0)
+    fm.paste(rounded_mask(s - 20, 14), (10, 8))
+    yy, xx = np.mgrid[0:s, 0:s].astype(float)
+    hue = ((xx + yy) / (2 * s) * 1.6) % 1
+    rgbh = np.zeros((s, s, 3))
+    for i in range(s):
+        for j in range(0, s, 2):
+            r, g, b = colorsys.hsv_to_rgb(hue[i, j], 0.55, 1)
+            rgbh[i, j:j + 2] = (r * 255, g * 255, b * 255)
+    stripes = (np.sin((xx - yy) / 6) + 1) / 2
+    alpha = (np.asarray(fm) / 255) * (22 + 58 * stripes)
+    t.alpha_composite(Image.fromarray(np.dstack([rgbh, alpha]).astype(np.uint8), "RGBA"))
+    sparkle(t, 4, seed=sum(rgb) * 17, size=(1.5, 3))
+    return t
+
+
+def skin_faces(rgb):  # Happy Blocks: candy blocks with cute faces
+    s = SIZE
+    c = hsv(rgb, 1.1, 1.08)
+    t = bevel_tile(mix(c, (255, 255, 255), 0.15), c, mix(c, (255, 255, 255), 0.5), shade(c, 0.62), gloss=0.5, radius=26)
+    mood = sum(rgb) % 3
+    with Over(t) as d:
+        ey = 54
+        for ex in (44, 84):
+            d.ellipse([ex - 8, ey - 10, ex + 8, ey + 10], fill=(30, 20, 40, 255))
+            d.ellipse([ex - 4, ey - 7, ex + 1, ey - 2], fill=(255, 255, 255, 255))
+        d.ellipse([28, 70, 42, 78], fill=(255, 120, 150, 140))
+        d.ellipse([86, 70, 100, 78], fill=(255, 120, 150, 140))
+        if mood == 0:
+            d.arc([50, 62, 78, 84], start=10, end=170, fill=(30, 20, 40, 255), width=4)
+        elif mood == 1:
+            d.ellipse([57, 68, 71, 82], fill=(30, 20, 40, 255))
+            d.ellipse([60, 74, 68, 81], fill=(255, 110, 130, 255))
+        else:
+            d.chord([50, 60, 78, 86], start=0, end=180, fill=(30, 20, 40, 255))
+            d.chord([56, 72, 72, 86], start=0, end=180, fill=(255, 110, 130, 255))
+    return t
+
+
 SKINS = {
     "ocean": skin_ocean,
     "candy": skin_candy,
@@ -301,6 +414,12 @@ SKINS = {
     "midnight": skin_midnight,
     "royal": skin_royal,
     "cosmic": skin_cosmic,
+    "tiki": skin_tiki,
+    "jelly": skin_jelly,
+    "pixel": skin_pixel,
+    "chrome": skin_chrome,
+    "holo": skin_holo,
+    "faces": skin_faces,
 }
 
 

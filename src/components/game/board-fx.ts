@@ -665,7 +665,7 @@ export class BoardFxRunner {
     el.className = `pj-banner ${kind}`;
     el.textContent = text;
     el.style.left = `${grid.left + grid.width / 2}px`;
-    el.style.top = `${grid.top + grid.height * 0.16}px`;
+    el.style.top = `${grid.top + 4}px`;
     this.layer.appendChild(el);
     el.animate(
       [
@@ -684,7 +684,7 @@ export class BoardFxRunner {
       const rays = document.createElement("div");
       rays.className = `pj-praise-rays${perfect ? " is-perfect" : ""}`;
       rays.style.left = `${grid.left + grid.width / 2}px`;
-      rays.style.top = `${grid.top + grid.height * 0.42}px`;
+      rays.style.top = `${grid.top + 4}px`;
       this.layer.appendChild(rays);
       rays.animate(
         [
@@ -698,18 +698,19 @@ export class BoardFxRunner {
     const el = document.createElement("div");
     el.className = `pj-praise ${perfect ? "is-perfect" : ""} ${mini ? "is-mini" : ""}`;
     el.textContent = text;
+    // Praise sits on the board's top edge so it never hides the blocks.
     el.style.left = `${grid.left + grid.width / 2}px`;
-    el.style.top = `${grid.top + grid.height * 0.42}px`;
+    el.style.top = `${grid.top + 4}px`;
     this.layer.appendChild(el);
     el.animate(
       [
         { transform: "translate(-50%, -50%) scale(0.3) rotate(-8deg)", opacity: 0 },
-        { transform: "translate(-50%, -50%) scale(1.18) rotate(2deg)", opacity: 1, offset: 0.22 },
-        { transform: "translate(-50%, -50%) scale(1) rotate(0)", opacity: 1, offset: 0.4 },
-        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, offset: 0.78 },
-        { transform: "translate(-50%, -70%) scale(0.92)", opacity: 0 },
+        { transform: "translate(-50%, -50%) scale(1.12) rotate(2deg)", opacity: 1, offset: 0.2 },
+        { transform: "translate(-50%, -50%) scale(1) rotate(0)", opacity: 1, offset: 0.35 },
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, offset: 0.75 },
+        { transform: "translate(-50%, -85%) scale(0.9)", opacity: 0 },
       ],
-      { duration: reduce ? 700 : perfect ? 1500 : 1100, easing: "ease-out" },
+      { duration: reduce ? 600 : perfect ? 1100 : 850, easing: "ease-out" },
     ).finished.then(() => el.remove(), () => el.remove());
   }
 
@@ -717,8 +718,9 @@ export class BoardFxRunner {
     const el = document.createElement("div");
     el.className = "pj-combo-badge";
     el.innerHTML = `<span>Combo</span><strong>${combo}</strong>`;
-    el.style.left = `${grid.left + grid.width / 2}px`;
-    el.style.top = `${grid.top + grid.height * 0.6}px`;
+    // Small, tucked in the board's top-right corner.
+    el.style.left = `${grid.right - 34}px`;
+    el.style.top = `${grid.top + 26}px`;
     this.layer.appendChild(el);
     el.animate(
       [

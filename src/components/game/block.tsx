@@ -43,7 +43,7 @@ const STAR_TEXTURE: Partial<Record<CubeColor, string>> = {
 
 /** Tile set of the equipped skin ("" = the base Island Gloss set). */
 let skinDir = "";
-const SKINNED = new Set(["ocean", "candy", "sunset", "frost", "midnight", "royal", "cosmic"]);
+const SKINNED = new Set(["ocean", "candy", "jelly", "tiki", "pixel", "faces", "sunset", "frost", "midnight", "chrome", "royal", "holo", "cosmic"]);
 export function setTileSkin(skin: string): void {
   skinDir = SKINNED.has(skin) ? `${skin}/` : "";
 }

@@ -69,7 +69,7 @@ export function GameShell() {
   }, [cancelTarget, selectPiece, setPanel]);
 
   return (
-    <div className="pj-root" data-skin={skin} data-tutorial={tutorialOn ? "" : undefined} data-compact={compactLayout ? "" : undefined}>
+    <div className="pj-root" data-tab={tab} data-skin={skin} data-tutorial={tutorialOn ? "" : undefined} data-compact={compactLayout ? "" : undefined}>
       <div className="pj-stars" />
       <NightIsle />
       <JungleAmbience />

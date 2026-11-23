@@ -231,7 +231,6 @@ const SHAPES: Shape[] = [
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
   { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
   { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
-  { id: "plus", cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]], weight: 3 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
   { id: "z5", cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], weight: 3 },
   { id: "diag2", cells: [[0, 0], [1, 1]], weight: 2 },
@@ -245,7 +244,7 @@ export function shapeCells(id: string): CellPos[] {
 }
 
 /** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
-export const UNUSUAL_SHAPES = ["diag2", "plus", "corner5", "z5", "i5", "o9"] as const;
+export const UNUSUAL_SHAPES = ["diag2", "corner5", "z5", "i5", "o9"] as const;
 
 let seq = 1;
 export function uid(prefix = "p"): string {

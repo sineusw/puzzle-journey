@@ -24,6 +24,7 @@ import {
   starPar,
   starsFor,
   unlockedPowers,
+  unlockLevel,
   FEATURE_AT,
   type FeatureId,
 } from "@/lib/game/content";
@@ -77,7 +78,7 @@ export function SideRails({ side }: { side: "l" | "r" }) {
   const has = (f: FeatureId) => reached >= FEATURE_AT[f];
   const fresh = (f: FeatureId) => reached >= FEATURE_AT[f] && reached <= FEATURE_AT[f] + 1;
   const NewTag = ({ f }: { f: FeatureId }) =>
-    fresh(f) ? <span className="pj-new-tag">NEW</span> : null;
+    fresh(f) ? <span className="pj-rail-new">NEW</span> : null;
 
   if (side === "l") {
     return (
@@ -176,32 +177,47 @@ export function PowerBar() {
     { id: "bomb", label: "Bomb", icon: "bomb" },
     { id: "freeze", label: "Frost", icon: "frost" },
   ];
-  // New players start with an empty bar; boosters appear as islands unlock them.
-  const items = all.filter((i) => open.includes(i.id));
-  if (!items.length) return <div className="pj-powers is-empty" aria-hidden="true" />;
+  // All four always show; locked ones say which island opens them.
+  const items = all;
+  const lockAt = (id: string) => unlockLevel(({ hammer: "hammer", refresh: "reroll", bomb: "boom", freeze: "frost" } as const)[id as "hammer"]);
   return (
     <div className="pj-powers">
       {items.map((item) => (
         <div key={item.id} className="pj-power-wrap">
-          <button
-            type="button"
-            data-testid={`power-${item.id}`}
-            data-id={item.id}
-            className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${powerups[item.id] <= 0 ? "is-empty" : ""}`}
-            onClick={() => armPower(item.id)}
-            aria-label={item.label}
-          >
-            <GameIcon name={item.icon} />
-            <span className="pj-count">{powerups[item.id]}</span>
-          </button>
-          <button
-            type="button"
-            className="pj-add"
-            onClick={() => setPanel("shop")}
-            aria-label={`Buy ${item.label}`}
-          >
-            +
-          </button>
+          {open.includes(item.id) ? (
+            <>
+              <button
+                type="button"
+                data-testid={`power-${item.id}`}
+                data-id={item.id}
+                className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${powerups[item.id] <= 0 ? "is-empty" : ""}`}
+                onClick={() => armPower(item.id)}
+                aria-label={item.label}
+              >
+                <GameIcon name={item.icon} />
+                <span className="pj-count">{powerups[item.id]}</span>
+              </button>
+              <button type="button" className="pj-add" onClick={() => setPanel("shop")} aria-label={`Buy ${item.label}`}>
+                +
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-testid={`power-${item.id}`}
+              className="pj-power is-locked"
+              onClick={() => {
+                useGame.getState().setToast(`${item.label} unlocks on island ${lockAt(item.id)}!`);
+                window.setTimeout(() => useGame.getState().setToast(null), 1600);
+              }}
+              aria-label={`${item.label}, unlocks on island ${lockAt(item.id)}`}
+            >
+              <GameIcon name={item.icon} />
+              <span className="pj-power-lock">
+                <Lock className="size-3" /> {lockAt(item.id)}
+              </span>
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -906,8 +922,7 @@ function AdventureScreen() {
   const shown = modes.filter((m) => m.id === "adventure" || reachedMode >= FEATURE_AT[m.id]);
   const active = shown.find((m) => m.id === mode) ?? shown[0]!;
   return (
-    <div>
-      <h2 className="pj-store-title">Play</h2>
+    <div className={active.id === "adventure" ? "pj-play is-map" : "pj-play"}>
       {shown.length > 1 ? (
         <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
           {shown.map((m) => (
@@ -925,8 +940,8 @@ function AdventureScreen() {
           ))}
         </div>
       ) : null}
-      <p className="mt-2 text-sm text-muted">{active.blurb}</p>
-      <div className="mt-3">
+      {active.id === "adventure" ? null : <p className="mt-2 text-sm text-muted">{active.blurb}</p>}
+      <div className={active.id === "adventure" ? "pj-play-body" : "mt-3"}>
         {active.id === "adventure" ? (
           <AdventureMap />
         ) : active.id === "classic" ? (

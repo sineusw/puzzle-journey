@@ -5,8 +5,8 @@ import { useGame } from "@/lib/game/store";
 import { SpecialFace } from "./tile-art";
 
 /** X position (0–100%) of each island along the winding path. */
-const LANE = [50, 76, 62, 30, 22, 46, 74, 80, 54, 26, 20, 44, 72, 78, 50];
-const STEP = 112;
+const LANE = [50, 74, 64, 34, 24, 44, 70, 76, 56, 30, 24, 46, 70, 74, 50];
+const STEP = 132;
 /** Extra room above each new world's banner. */
 const WORLD_GAP = 56;
 const yOf = (i: number) => 60 + i * STEP + Math.floor(i / WORLD_SIZE) * WORLD_GAP;
@@ -28,11 +28,25 @@ export function AdventureMap() {
   const current = Math.min(unlocked, ADVENTURE.length);
   const [sel, setSel] = useState(current);
   const wrap = useRef<HTMLDivElement>(null);
+  // Only islands near the view are drawn, so scrolling stays smooth with 300 of them.
+  const [view, setView] = useState({ top: 0, h: 700 });
+  const raf = useRef<number | null>(null);
+  const onScroll = () => {
+    if (raf.current !== null) return;
+    raf.current = requestAnimationFrame(() => {
+      raf.current = null;
+      const box = wrap.current;
+      if (box) setView({ top: box.scrollTop, h: box.clientHeight });
+    });
+  };
   const total = Object.values(stars).reduce((a, b) => a + b, 0);
 
   useEffect(() => {
     const box = wrap.current;
-    if (box) box.scrollTop = Math.max(0, yOf(current - 1) - box.clientHeight / 2);
+    if (box) {
+      box.scrollTop = Math.max(0, yOf(current - 1) - box.clientHeight / 2);
+      setView({ top: box.scrollTop, h: box.clientHeight });
+    }
   }, [current]);
 
   const level = ADVENTURE.find((l) => l.id === sel) ?? ADVENTURE[0]!;
@@ -54,7 +68,7 @@ export function AdventureMap() {
         </span>
         <span>{worldOf(current).name}</span>
       </div>
-      <div ref={wrap} className="pj-advmap">
+      <div ref={wrap} className="pj-advmap" onScroll={onScroll}>
         <div className="pj-advmap-inner" style={{ height: h }}>
           <svg className="pj-advmap-path" viewBox={`0 0 100 ${h}`} preserveAspectRatio="none" aria-hidden="true">
             <path d={path.join(" ")} className="is-bg" vectorEffect="non-scaling-stroke" />
@@ -66,6 +80,7 @@ export function AdventureMap() {
           </svg>
           {ADVENTURE.map((l, i) => {
             const p = pts[i]!;
+            if (p.y < view.top - 500 || p.y > view.top + view.h + 500) return null;
             const isLocked = l.id > unlocked;
             const isCurrent = l.id === current;
             const s = stars[String(l.id)] ?? 0;
@@ -102,21 +117,39 @@ export function AdventureMap() {
           })}
         </div>
       </div>
-      <div className="pj-advcard">
-        <div className="min-w-0 flex-1">
-          <div className="pj-advcard-name">
-            {level.id}. {level.name}
-            {level.introduces ? <span className="pj-new-chip ml-1.5">New: {UNLOCKS[level.introduces].name}</span> : null}
+      <div className="pj-advcard" style={{ ["--c1" as string]: BIOME[worldOf(level.id).index % BIOME.length]![0], ["--c2" as string]: BIOME[worldOf(level.id).index % BIOME.length]![1] }}>
+        <div className="pj-advcard-top">
+          <span className="pj-advcard-num">{level.id}</span>
+          <div className="min-w-0 flex-1">
+            <div className="pj-advcard-world">{worldOf(level.id).name}</div>
+            <div className="pj-advcard-name">{level.name}</div>
           </div>
-          <div className="pj-advcard-goal">{goalLabel(level.goal)}</div>
-          <div className="pj-advcard-reward">
-            <img src="/icons/coin.webp" alt="" /> {level.reward.coins}
-            <img src="/icons/gem.webp" alt="" /> {level.reward.gems}
+          <span className="pj-advcard-stars" aria-label={`${stars[String(level.id)] ?? 0} stars`}>
+            {[1, 2, 3].map((n) => (
+              <Star key={n} className={n <= (stars[String(level.id)] ?? 0) ? "is-on" : ""} fill={n <= (stars[String(level.id)] ?? 0) ? "currentColor" : "none"} />
+            ))}
+          </span>
+        </div>
+        <div className="pj-advcard-row">
+          <div className="pj-advcard-goal">
+            <span className="pj-advcard-label">Goal</span>
+            <span className="pj-advcard-goaltext">
+              {level.goal.type === "gems" ? <img src="/icons/gem.webp" alt="" /> : null}
+              {goalLabel(level.goal)}
+            </span>
+          </div>
+          <div className="pj-advcard-goal">
+            <span className="pj-advcard-label">Reward</span>
+            <span className="pj-advcard-reward">
+              <img src="/icons/coin.webp" alt="" /> {level.reward.coins}
+              <img src="/icons/gem.webp" alt="" /> {level.reward.gems}
+            </span>
           </div>
         </div>
+        {level.introduces ? <div className="pj-new-chip pj-advcard-new">✨ New here: {UNLOCKS[level.introduces].name}</div> : null}
         <button type="button" className="pj-advcard-play" disabled={locked} onClick={() => startAdventure(level.id)}>
           {locked ? <Lock className="size-5" /> : <Play className="size-6" fill="currentColor" />}
-          <span>{locked ? "Locked" : (stars[String(level.id)] ?? 0) ? "Replay" : "Play"}</span>
+          <span>{locked ? `Beat island ${level.id - 1} to unlock` : (stars[String(level.id)] ?? 0) ? "Play again" : "Play"}</span>
         </button>
       </div>
     </div>

@@ -212,22 +212,22 @@ function generatedLevel(id: number): AdventureLevel {
  * then spaced further apart so each one gets played with before the next.
  */
 export const UNLOCK_SCHEDULE: Record<number, UnlockId> = {
+  2: "hammer",
   3: "arrows",
-  5: "hammer",
+  4: "reroll",
   7: "stars",
+  8: "boom",
   10: "bombs",
+  12: "frost",
   13: "milo",
   16: "gems",
   20: "stones",
-  24: "reroll",
   28: "kai",
   33: "ice",
   38: "blast",
-  44: "boom",
   50: "luna",
   57: "chains",
   64: "nia",
-  72: "frost",
   80: "vines",
   90: "pip",
   105: "locks",
@@ -339,7 +339,7 @@ export const QUESTS: QuestDef[] = [
   { id: "powers", title: "Tool time", blurb: "Use 3 power-ups.", target: 3, coins: 30, gems: 2 },
 ];
 
-export type SkinId = "classic" | "ocean" | "candy" | "sunset" | "frost" | "midnight" | "royal" | "cosmic";
+export type SkinId = "classic" | "ocean" | "candy" | "jelly" | "tiki" | "pixel" | "faces" | "sunset" | "frost" | "midnight" | "chrome" | "royal" | "holo" | "cosmic";
 
 export type Rarity = "Common" | "Rare" | "Epic" | "Legendary";
 
@@ -348,10 +348,16 @@ export const SKINS: Array<{ id: SkinId; name: string; blurb: string; rarity: Rar
   { id: "classic", name: "Island Gloss", blurb: "The original candy blocks.", rarity: "Common", coins: 0, usd: 0 },
   { id: "ocean", name: "Sea Glass", blurb: "Frosted glass washed up from the tide pools.", rarity: "Rare", coins: 2500, usd: 0.99 },
   { id: "candy", name: "Candy Pop", blurb: "Pastel sweets with sugar sprinkles.", rarity: "Rare", coins: 3000, usd: 0.99 },
+  { id: "jelly", name: "Jelly Wobble", blurb: "Squishy see-through jelly full of bubbles.", rarity: "Rare", coins: 3500, usd: 0.99 },
+  { id: "tiki", name: "Tiki Wood", blurb: "Hand-carved island wood, nailed and stained.", rarity: "Epic", coins: 4500, usd: 1.99 },
+  { id: "pixel", name: "Retro Pixel", blurb: "Old-school 8-bit blocks.", rarity: "Epic", coins: 5000, usd: 1.99 },
+  { id: "faces", name: "Happy Blocks", blurb: "Every block has a cute little face.", rarity: "Epic", coins: 5500, usd: 1.99 },
   { id: "frost", name: "Frost Bite", blurb: "Ice-cold crystal blocks.", rarity: "Epic", coins: 5000, usd: 1.99 },
   { id: "sunset", name: "Lava Glow", blurb: "Molten rock straight from the volcano.", rarity: "Epic", coins: 6000, usd: 1.99 },
   { id: "midnight", name: "Neon Night", blurb: "Glowing neon tubes after dark.", rarity: "Epic", coins: 7500, usd: 2.99 },
+  { id: "chrome", name: "Chrome", blurb: "Polished metal with a mirror shine.", rarity: "Legendary", coins: 10000, usd: 2.99 },
   { id: "royal", name: "Royal Gems", blurb: "Cut jewels set in solid gold.", rarity: "Legendary", coins: 12000, usd: 3.99 },
+  { id: "holo", name: "Holo Foil", blurb: "Rainbow foil that shimmers like a rare card.", rarity: "Legendary", coins: 13500, usd: 3.99 },
   { id: "cosmic", name: "Cosmic", blurb: "A galaxy swirling inside every block.", rarity: "Legendary", coins: 15000, usd: 4.99 },
 ];
 
