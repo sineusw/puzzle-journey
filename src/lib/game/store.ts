@@ -17,7 +17,7 @@ import {
   type ColorId,
   type Match,
   emptyBoard,
-  specialPiece,
+
 } from "./engine";
 import {
   ADVENTURE,
@@ -1510,17 +1510,17 @@ function runFlagsFor(match: Match, profile: Profile, resume: boolean): RunFlags 
  */
 export function withStreakBoosters(match: Match, streak: number): Match {
   if (streak < 2) return match;
-  const tray = [...match.tray];
-  tray[0] = specialPiece(streak % 2 ? "rocketV" : "rocketH");
-  if (streak >= 4) tray[1] = specialPiece("bomb");
-  if (streak >= 6) tray[2] = specialPiece("blast");
-  return { ...match, tray };
+  // Held until the board has blocks for them to hit (see POWER_MIN_FILL).
+  const bonus: NonNullable<Match["bonus"]> = [streak % 2 ? "rocketV" : "rocketH"];
+  if (streak >= 4) bonus.push("bomb");
+  if (streak >= 6) bonus.push("blast");
+  return { ...match, bonus };
 }
 
 function streakBanner(set: (partial: Partial<GameStore>) => void, streak: number): void {
   if (streak < 2) return;
   const gift = streak >= 6 ? "arrow, bomb and golden block" : streak >= 4 ? "arrow and bomb" : "arrow block";
-  set({ runBanner: { id: Date.now(), title: `🔥 ${streak} wins in a row!`, sub: `Free ${gift} to start. Don't lose your streak!` } });
+  set({ runBanner: { id: Date.now(), title: `🔥 ${streak} wins in a row!`, sub: `Free ${gift} once the board fills up. Don't lose your streak!` } });
 }
 
 function beginRun(get: () => GameStore, set: (partial: Partial<GameStore>) => void, match: Match): void {

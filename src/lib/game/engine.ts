@@ -90,6 +90,8 @@ export type Match = {
   tray: Array<Piece | null>;
   /** The set dealt after this tray, shown as "Up next" so players can plan ahead. */
   next?: Piece[] | null;
+  /** Free special blocks (win-streak reward) held back until the board has blocks for them to hit. */
+  bonus?: Array<Exclude<SpecialId, "stone">>;
   score: number;
   combo: number;
   bestCombo: number;
@@ -1078,6 +1080,18 @@ export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 6000): 
   return visit(board, pieces);
 }
 
+/**
+ * Power blocks (arrows, bombs, star color-bombs) only show up once the board
+ * holds enough blocks for them to visibly do something: 16+ of the 64 cells.
+ */
+export const POWER_MIN_FILL = 0.25;
+
+/** The same piece with its power stripped (stones are obstacles and stay). */
+function depower(p: Piece): Piece {
+  if (p.special && p.special !== "stone") return { ...p, special: null, specialAt: null, starAt: null, gold: false, color: p.color };
+  return p.starAt !== null ? { ...p, starAt: null, gold: false } : p;
+}
+
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const f = match.features;
   const occ = occupancy(match.board);
@@ -1111,7 +1125,7 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   };
   // When specials are unlocked, make sure they actually show up now and then:
   // some sets without one get one of the allowed kinds.
-  const anySpecial = (f.specials.length > 0 || f.stones) && !(match.easy ?? 0);
+  const anySpecial = (f.specials.length > 0 || f.stones) && !(match.easy ?? 0) && occ >= POWER_MIN_FILL;
   const sprinkle = (pieces: Piece[]): Piece[] => {
     if (anySpecial && !pieces.some((p) => p.special) && rng() < 0.3) {
       const i = Math.floor(rng() * pieces.length);
@@ -1124,7 +1138,13 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   // Semi-predictable: the set shown as "Up next" is what you get, as long as it
   // can still be played on the board you left. If it can't, you get a fair set instead.
   const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
-  const pieces = queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting());
+  let pieces = queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting());
+  if (occ < POWER_MIN_FILL) pieces = pieces.map(depower);
+  else if (match.bonus?.length) {
+    // Win-streak reward lands now that there are blocks to blow up.
+    match.bonus.slice(0, 3).forEach((sp, i) => (pieces[i] = specialPiece(sp)));
+    match.bonus = undefined;
+  }
   // Line up the following set: varied shapes, never three alike.
   if (normal) {
     let upNext = [make(), make(), make()];

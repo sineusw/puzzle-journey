@@ -255,7 +255,7 @@ export function Overlays() {
       ) : null}
       {panel ? (
         <div
-          className={`pj-modal ${panel === "how" || panel === "over" || panel === "won" || panel === "intro" ? "center" : ""}`}
+          className="pj-modal center"
           role="dialog"
           aria-modal="true"
           onPointerDown={(e) => {
@@ -788,7 +788,7 @@ function WonSheet() {
         ) : null}
         {profile.levelStreak >= 2 ? (
           <div className="pj-streak-warn mt-2">
-            🔥 {profile.levelStreak} wins in a row! Next level starts with a free{" "}
+            🔥 {profile.levelStreak} wins in a row! Next level gives you a free{" "}
             {profile.levelStreak >= 6
               ? "arrow, bomb and golden block"
               : profile.levelStreak >= 4
