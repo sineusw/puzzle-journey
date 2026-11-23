@@ -135,6 +135,12 @@ export function worldOf(levelId: number): { index: number; name: string } {
 }
 
 /** Island Adventure: starts with plain blocks and adds one thing at a time. */
+/**
+ * Difficulty comes in waves across each world: a couple of easy wins, a harder
+ * island, then a bonus island (easy, bigger reward); the boss is the peak.
+ */
+export const WAVE = [0.85, 0.9, 1.15, 0.8, 1, 0.9, 1.15, 0.8, 0.95, 1.1, 0.85, 1.2, 0.8, 1.05, 1.15];
+
 export const ADVENTURE: AdventureLevel[] = [
   { id: 1, name: "Shore", blurb: "Score 400 to leave the beach.", goal: { type: "score", value: 400 }, stones: 0, reward: { coins: 40, gems: 4 } },
   { id: 2, name: "Palms", blurb: "Clear 6 lines under the palms.", goal: { type: "lines", value: 6 }, stones: 0, reward: { coins: 50, gems: 5 }, introduces: "stars" },
@@ -159,6 +165,8 @@ export const ADVENTURE: AdventureLevel[] = [
 function generatedLevel(id: number): AdventureLevel {
   const w = Math.floor((id - 1) / WORLD_SIZE);
   const k = (id - 1) % WORLD_SIZE;
+  const wave = WAVE[k]!;
+  const bonusIsle = wave <= 0.8;
   const d = Math.min(1, (id - 16) / 285);
   const boss = k === WORLD_SIZE - 1;
   const kind = WORLD_RHYTHM[k]!;
@@ -171,11 +179,11 @@ function generatedLevel(id: number): AdventureLevel {
     goal = { type: "gems", value: n };
     blurb = `Collect ${n} gems.`;
   } else if (kind === "score") {
-    const v = Math.round((2000 + (id - 15) * 18) / 50) * 50;
+    const v = Math.round(((2000 + (id - 15) * 18) * wave) / 50) * 50;
     goal = { type: "score", value: v };
     blurb = `Score ${v.toLocaleString("en-US")}.`;
   } else if (kind === "lines") {
-    const v = Math.min(40, 12 + Math.floor((id - 15) / 12));
+    const v = Math.min(40, Math.round((12 + Math.floor((id - 15) / 12)) * wave));
     goal = { type: "lines", value: v };
     blurb = `Clear ${v} lines.`;
   } else {
@@ -183,14 +191,14 @@ function generatedLevel(id: number): AdventureLevel {
     goal = { type: "combo", value: v };
     blurb = `Reach a x${v} combo.`;
   }
-  const fill = Math.min(0.85, 0.2 + d * 0.5 + (k % 3) * 0.05 + (boss ? 0.1 : 0));
+  const fill = Math.max(0.1, Math.min(0.85, 0.2 + d * 0.5 + (wave - 1) * 0.4 + (boss ? 0.1 : 0)));
   return {
     id,
-    name: boss ? `${short} Boss` : `${short} ${k + 1}`,
+    name: boss ? `${short} Boss` : bonusIsle ? `${short} Bonus` : `${short} ${k + 1}`,
     blurb,
     goal,
     stones: Math.min(8, 3 + Math.floor(w / 2)),
-    reward: { coins: (150 + id * 2) * (boss ? 2 : 1), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
+    reward: { coins: Math.round((150 + id * 2) * (boss ? 2 : bonusIsle ? 1.5 : 1)), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
     introduces: id === 16 ? "gems" : undefined,
     layout: {
       fill,

@@ -541,6 +541,22 @@ const BoardGrid = memo(function BoardGrid({
 }) {
   const tintUrl = preview ? colorTextureUrl(preview.color) : null;
   const hide = useMemo(() => new Set(hidden), [hidden]);
+  // A row or column one block from full: its last gap glows so the player can see the clear.
+  const almost = useMemo(() => {
+    const out = new Set<string>();
+    const n = board.length;
+    for (let i = 0; i < n; i++) {
+      const rowGaps: number[] = [];
+      const colGaps: number[] = [];
+      for (let j = 0; j < n; j++) {
+        if (board[i]![j]!.t === "e") rowGaps.push(j);
+        if (board[j]![i]!.t === "e") colGaps.push(j);
+      }
+      if (rowGaps.length === 1) out.add(`${i}-${rowGaps[0]}`);
+      if (colGaps.length === 1) out.add(`${colGaps[0]}-${i}`);
+    }
+    return out;
+  }, [board]);
   return (
     <div ref={gridRef} className="pj-grid" data-testid="board" onClick={onClick}>
       {board.flatMap((row, r) =>
@@ -557,6 +573,7 @@ const BoardGrid = memo(function BoardGrid({
               target={targeting}
               guide={Boolean(guide?.has(key))}
               hidden={hide.has(key)}
+              almost={!preview && almost.has(key)}
             />
           );
         }),
@@ -574,10 +591,11 @@ type CellProps = {
   target: boolean;
   guide: boolean;
   hidden: boolean;
+  almost?: boolean;
 };
 
 const BoardCell = memo(
-  function BoardCell({ k, cell, shadow, tint, target, guide, hidden }: CellProps) {
+  function BoardCell({ k, cell, shadow, tint, target, guide, hidden, almost }: CellProps) {
     const [r, c] = k.split("-").map(Number) as [number, number];
     const col = colorOf(cell);
     const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
@@ -588,7 +606,7 @@ const BoardCell = memo(
         type="button"
         data-cell={k}
         data-testid={`cell-${k}`}
-        className={`pj-well${target ? " is-target" : ""}${tint ? " is-clear" : ""}${guide ? " is-guide" : ""}`}
+        className={`pj-well${target ? " is-target" : ""}${tint ? " is-clear" : ""}${guide ? " is-guide" : ""}${almost ? " is-almost" : ""}`}
         aria-label={`Row ${r + 1} column ${c + 1}`}
       >
         {col && !hidden ? (
@@ -609,7 +627,7 @@ const BoardCell = memo(
       </button>
     );
   },
-  (a, b) => a.face === b.face && a.shadow === b.shadow && a.tint === b.tint && a.target === b.target && a.guide === b.guide && a.hidden === b.hidden && a.k === b.k,
+  (a, b) => a.face === b.face && a.shadow === b.shadow && a.tint === b.tint && a.target === b.target && a.guide === b.guide && a.hidden === b.hidden && a.almost === b.almost && a.k === b.k,
 );
 
 /* ------------------------------------------------------------------- tray */

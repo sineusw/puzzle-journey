@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
 import { normalizeLive } from "@/lib/game/liveops";
-import { useGame } from "@/lib/game/store";
+import { CHEST_SIZE, useGame } from "@/lib/game/store";
 import type { BoardRow } from "@/lib/game/ranked-service";
 import { GameIcon } from "./icons";
 
@@ -79,6 +79,7 @@ export function LobbyScreen() {
           <Play fill="currentColor" className="size-7" />
           {inProgress ? "Continue" : "Play"}
         </button>
+        <ChestBar />
         <div className="pj-lobby-chips">
           {profile.levelStreak >= 1 ? <span>🔥 {profile.levelStreak} win streak</span> : <span>🔥 Win 2 in a row for a free booster</span>}
           {profile.daily.streak >= 1 ? <span>📅 Day {profile.daily.streak}</span> : null}
@@ -125,4 +126,50 @@ export function LobbyScreen() {
       </button>
     </div>
   );
+}
+
+/** Treasure chest progress: every win fills a slot; the last one opens it. */
+export function ChestBar() {
+  const chest = useGame((s) => s.profile.chest ?? 0);
+  const opened = useGame((s) => s.chestOpened);
+  const panel = useGame((s) => s.panel);
+  if (opened && panel === "won") {
+    return (
+      <div className="pj-chest is-open" data-testid="chest-open">
+        <span className="pj-chest-ico">🎁</span>
+        <b>Chest opened!</b>
+        <span>+{opened.coins} coins · +{opened.gems} gems · +1 hammer · +1 bomb</span>
+      </div>
+    );
+  }
+  return (
+    <div className="pj-chest" aria-label={`Treasure chest ${chest} of ${CHEST_SIZE}`}>
+      <span className="pj-chest-ico">🧰</span>
+      <div className="pj-chest-slots">
+        {Array.from({ length: CHEST_SIZE }, (_, i) => (
+          <i key={i} className={i < chest ? "is-on" : ""} />
+        ))}
+      </div>
+      <span>{CHEST_SIZE - chest === 1 ? "1 win to open!" : `${CHEST_SIZE - chest} wins to open`}</span>
+    </div>
+  );
+}
+
+/** Share a run: the phone's share sheet, or copy to the clipboard. */
+export async function shareRun(score: number, combo: number, levelId: number | null): Promise<void> {
+  const url = typeof location !== "undefined" ? location.origin : "";
+  const brag = combo >= 3 ? ` with a x${combo} combo` : "";
+  const where = levelId ? ` on island ${levelId}` : "";
+  const text = `I scored ${score.toLocaleString("en-US")}${brag}${where} in Block Journey 🌴 Can you beat me?`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Block Journey", text, url });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    useGame.setState({ toast: "Copied! Paste it anywhere to challenge a friend." });
+    window.setTimeout(() => useGame.setState({ toast: null }), 2000);
+  } catch {
+    // Share sheet closed: nothing to do.
+  }
 }

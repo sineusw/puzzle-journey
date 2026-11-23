@@ -49,6 +49,10 @@ export type Profile = {
   /** Shop, skins, calendar, events, weekly quests, passes. */
   live: Live;
   seenHowTo: boolean;
+  /** Islands won toward the next treasure chest (opens at CHEST_SIZE). */
+  chest: number;
+  /** Last time the player was in the game (for the welcome-back gift). */
+  lastActive: number;
   match: Match | null;
 };
 
@@ -86,6 +90,8 @@ export function defaultProfile(): Profile {
     challenges: emptyChallenges(),
     card: emptyCard(),
     levelStreak: 0,
+    chest: 0,
+    lastActive: 0,
     skin: "classic",
     live: emptyLive(),
     seenHowTo: false,
@@ -128,6 +134,8 @@ function migrate(raw: Profile): Profile {
     challenges: normalizeChallenges(raw.challenges),
     card: raw.card?.best ? fixCard({ ...emptyCard(), ...raw.card, best: { ...emptyCard().best, ...raw.card.best } }) : emptyCard(),
     levelStreak: raw.levelStreak ?? 0,
+    chest: raw.chest ?? 0,
+    lastActive: raw.lastActive ?? 0,
     live: normalizeLive(raw.live),
     // Version 3 introduced game modes. Keep currency and progress, but start
     // the player on a fresh run so an old special-filled board doesn't carry
@@ -147,7 +155,7 @@ function migrate(raw: Profile): Profile {
 }
 
 /** Counters that must be whole, non-negative numbers. */
-const COUNTERS = ["coins", "gems", "xp", "highScore", "bestCombo", "games", "sandboxBest", "levelStreak"] as const;
+const COUNTERS = ["coins", "gems", "xp", "highScore", "bestCombo", "games", "sandboxBest", "levelStreak", "chest", "lastActive"] as const;
 
 /** Read a save blob; null if it is missing or not a usable save. */
 export function parseSave(blob: string | null): Profile | null {

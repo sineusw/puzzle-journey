@@ -84,6 +84,8 @@ import {
   type VisitorId,
 } from "./visitors";
 
+export const CHEST_SIZE = 5;
+
 export type Tab = "lobby" | "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
   | null
@@ -210,6 +212,8 @@ type GameStore = {
   pointerBusy: boolean;
   visitorLast: VisitorId | null;
   visitorNextAt: number;
+  /** The treasure chest that opened on the last win, for the results screen. */
+  chestOpened: { coins: number; gems: number } | null;
   visitorSeen: Partial<Record<VisitorId, number>>;
   /** Visitor just introduced by this island: arrives first, and early. */
   visitorFeatured: VisitorId | null;
@@ -428,12 +432,20 @@ export const useGame = create<GameStore>((set, get) => ({
   pointerBusy: false,
   visitorLast: null,
   visitorNextAt: 8,
+  chestOpened: null,
   visitorSeen: {},
   visitorFeatured: null,
 
   hydrate: () => {
     const loaded = ensureMatch(loadProfile());
-    const profile = settleProfileChallenges(loaded);
+    let profile = settleProfileChallenges(loaded);
+    // Welcome back: 4+ hours away earns a free bomb booster.
+    const away = profile.lastActive > 0 ? Date.now() - profile.lastActive : 0;
+    if (away >= 4 * 3600_000 && profile.tutorialDone) {
+      profile = { ...profile, powerups: { ...profile.powerups, bomb: profile.powerups.bomb + 1 } };
+      window.setTimeout(() => notify({ icon: "🎁", title: "Welcome back!", sub: "Here's a free bomb booster.", tone: "win" }), 1200);
+    }
+    profile = { ...profile, lastActive: Date.now() };
     audio.setMuted(profile.settings.sfx, profile.settings.music);
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
@@ -458,7 +470,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   persist: () => {
     const { profile, match, tutorial } = get();
-    saveProfile({ ...profile, match: tutorial ? tutorial.saved : match });
+    saveProfile({ ...profile, lastActive: Date.now(), match: tutorial ? tutorial.saved : match });
   },
 
   startTutorial: (lesson, welcome = false) => {
@@ -666,6 +678,23 @@ export const useGame = create<GameStore>((set, get) => ({
     if (placedPiece && !nextProfile.seenShapes.includes(placedPiece.shape)) {
       nextProfile = { ...nextProfile, seenShapes: [...nextProfile.seenShapes, placedPiece.shape] };
     }
+    // Treasure chest: every island or level won fills it; at CHEST_SIZE it opens.
+    let chestOpened: { coins: number; gems: number } | null = null;
+    if (result.match.won && (result.match.mode === "adventure" || result.match.mode === "classic")) {
+      const filled = (nextProfile.chest ?? 0) + 1;
+      if (filled >= CHEST_SIZE) {
+        chestOpened = { coins: 300, gems: 25 };
+        nextProfile = {
+          ...nextProfile,
+          chest: 0,
+          coins: nextProfile.coins + chestOpened.coins,
+          gems: nextProfile.gems + chestOpened.gems,
+          powerups: { ...nextProfile.powerups, hammer: nextProfile.powerups.hammer + 1, bomb: nextProfile.powerups.bomb + 1 },
+        };
+      } else {
+        nextProfile = { ...nextProfile, chest: filled };
+      }
+    }
     const fx: BoardFx = {
       id: fxSeq++,
       landed,
@@ -708,6 +737,7 @@ export const useGame = create<GameStore>((set, get) => ({
       runStats: rs,
       lastResult,
       levelUpTo: leveled.leveled,
+      chestOpened,
       panel: result.match.won ? null : result.match.over ? "over" : get().panel,
     });
     if (result.match.won) {

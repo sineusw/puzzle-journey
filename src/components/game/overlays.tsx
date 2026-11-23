@@ -1,4 +1,4 @@
-import { LobbyScreen } from "./lobby";
+import { LobbyScreen, ChestBar, shareRun } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Crown,
@@ -653,7 +653,7 @@ function OverSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="pj-sheet pj-result text-center" data-testid="over-sheet">
+    <div className="pj-sheet pj-result is-won text-center" data-testid="over-sheet">
       <p className="text-xs font-extrabold tracking-widest text-gold uppercase">
         {modeName(match.mode)}
       </p>
@@ -670,16 +670,20 @@ function OverSheet() {
       <RunStats />
       <IqAndAwards delay={700} />
       <ContinueOptions />
-      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" onClick={newGame}>
-        {match.levelId ? "Try again" : "Play again"}
-      </button>
-      <button
-        type="button"
-        className="pj-btn pj-btn-ghost mt-2 w-full"
-        onClick={() => setTab("adventure")}
-      >
-        Choose a mode
-      </button>
+      <div className="pj-won-actions">
+        {beatBest ? (
+          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => shareRun(match.score, match.bestCombo, match.levelId)}>
+            Share
+          </button>
+        ) : (
+          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => setTab("adventure")}>
+            Map
+          </button>
+        )}
+        <button type="button" className="pj-btn pj-btn-primary pj-won-next" onClick={newGame}>
+          {match.levelId ? "Try again ↻" : "Play again ↻"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -774,6 +778,7 @@ function WonSheet() {
         </p>
         <RunStats />
         <IqAndAwards delay={900 + stars * 450} />
+        <ChestBar />
         {reward ? (
           <p className="pj-result-reward">
             <GameIcon name="coin" className="inline size-5" /> +{reward.coins}
@@ -800,8 +805,8 @@ function WonSheet() {
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
         ) : null}
         <div className="pj-won-actions">
-          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => setTab("adventure")}>
-            Map
+          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => shareRun(match.score, match.bestCombo, match.levelId)}>
+            Share
           </button>
           {nextOpen && nextId ? (
             <button
