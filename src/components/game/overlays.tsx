@@ -38,6 +38,7 @@ import { formatInt } from "@/lib/utils";
 import { GameIcon, type IconName } from "./icons";
 import * as audio from "@/lib/game/audio";
 import { cheer } from "@/lib/game/voice";
+import { PiggySheet, RaceSheet, WinHooks } from "./hooks-ui";
 import { nameFor, useBoard } from "@/lib/game/leaderboard";
 import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
 import { OverlayFace, SpecialFace } from "./tile-art";
@@ -293,6 +294,8 @@ export function Overlays() {
           {panel === "won" ? <WonSheet /> : null}
           {panel === "intro" ? <IntroSheet /> : null}
           {panel === "spin" ? <SpinSheet /> : null}
+          {panel === "race" ? <RaceSheet /> : null}
+          {panel === "piggy" ? <PiggySheet /> : null}
           {panel === "coins" || panel === "gems" ? <CurrencySheet first={panel} /> : null}
           {panel === "level" ? <LevelSheet /> : null}
           {panel === "reset" ? <ResetSheet /> : null}
@@ -840,6 +843,7 @@ function WonSheet() {
         ) : profile.levelStreak === 1 ? (
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
         ) : null}
+        <WinHooks />
         <div className="pj-won-actions">
           <button
             type="button"

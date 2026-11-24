@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { HooksRow } from "./hooks-ui";
 import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
 import { dailyNumber } from "@/lib/game/engine";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
@@ -98,6 +99,8 @@ export function LobbyScreen() {
           {profile.daily.streak >= 1 ? <span>📅 Day {profile.daily.streak}</span> : null}
         </div>
       </div>
+
+      {reached >= 3 ? <HooksRow /> : null}
 
       <div className="pj-lobby-tiles" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)`, ["--n" as string]: shown.length }}>
         {shown.map((t) => {

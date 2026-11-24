@@ -1,4 +1,5 @@
 import { UndoResetBar } from "./hud-sheets";
+import { IntroSplash } from "./intro";
 import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
 import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
@@ -71,6 +72,7 @@ export function GameShell() {
 
   return (
     <div className="pj-root" data-tab={tab} data-skin={skin} data-tutorial={tutorialOn ? "" : undefined} data-compact={compactLayout ? "" : undefined}>
+      <IntroSplash />
       <div className="pj-stars" />
       <NightIsle />
       <JungleAmbience />

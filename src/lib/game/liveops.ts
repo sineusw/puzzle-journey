@@ -92,6 +92,8 @@ export const SHOP: ShopItem[] = [
 export function moneyPrice(sku: string): { usd: number; name: string; grant: Grant } | null {
   const item = SHOP.find((i) => i.id === sku);
   if (item?.usd) return { usd: item.usd, name: item.name + (item.qty ? ` ${item.qty}` : ""), grant: item.grant };
+  // Piggy bank: the coins inside are paid out when the purchase completes.
+  if (sku === "piggy") return { usd: PIGGY_USD, name: "Piggy Bank", grant: {} };
   if (sku.startsWith("skin:")) {
     const skin = SKINS.find((s) => s.id === sku.slice(5));
     if (skin?.usd) return { usd: skin.usd, name: `${skin.name} block skin`, grant: { skin: skin.id } };
@@ -124,6 +126,12 @@ export type Live = {
   ads: { day: string; n: number };
   /** Lucky spin: free spin used today, extra (video) spins used today. */
   spin: { day: string; free: boolean; extra: number };
+  /** Bonus spins earned by winning (one every SPIN_EVERY wins) and wins toward the next. */
+  earned: { spins: number; wins: number };
+  /** Piggy bank: Jungle Coins saved up while playing, broken open with a purchase. */
+  piggy: number;
+  /** Weekly island race: this week's wins and last week's result waiting to be claimed. */
+  race: { week: string; wins: number; seed: number; reward: { week: string; rank: number } | null };
 };
 
 export function dayKey(d = new Date()): string {
@@ -149,6 +157,9 @@ export function emptyLive(): Live {
     questChest: { day: dayKey(), claimed: false },
     ads: { day: dayKey(), n: 0 },
     spin: { day: dayKey(), free: false, extra: 0 },
+    earned: { spins: 0, wins: 0 },
+    piggy: 0,
+    race: { week: weekKey(), wins: 0, seed: Math.floor(Math.random() * 1e9), reward: null },
   };
 }
 
@@ -165,7 +176,16 @@ export function normalizeLive(raw: Partial<Live> | undefined, now = new Date()):
     questChest: { ...base.questChest, ...raw?.questChest },
     ads: { ...base.ads, ...raw?.ads },
     spin: { ...base.spin, ...raw?.spin },
+    earned: { ...base.earned, ...raw?.earned },
+    piggy: Math.max(0, Math.min(PIGGY_CAP, Number(raw?.piggy) || 0)),
+    race: { ...base.race, ...raw?.race },
   };
+  if (l.race.week !== weekKey(now)) {
+    // Race week over: lock in the final place so its prize can be claimed.
+    const prev = l.race;
+    const rank = prev.wins > 0 ? raceRank(prev, weekEnd(prev.week)) : 99;
+    l.race = { week: weekKey(now), wins: 0, seed: Math.floor(Math.random() * 1e9), reward: rank <= 3 ? { week: prev.week, rank } : null };
+  }
   if (l.spin.day !== dayKey(now)) l.spin = { day: dayKey(now), free: false, extra: 0 };
   const ev = currentEvent(now).def.id;
   if (l.event.id !== ev) l.event = { id: ev, pts: 0, claimed: [] };
@@ -309,4 +329,75 @@ export function grantText(g: Grant): string {
   return grantParts(g)
     .map((p) => (p.icon.includes("coin") ? `${p.text} Jungle Coins` : p.icon.includes("gem") ? `${p.text} gems` : p.text))
     .join(", ");
+}
+
+
+/* ------------------------------------------------------- earned spins */
+
+/** Every this many level wins earns a bonus spin of the Lucky Wheel. */
+export const SPIN_EVERY = 3;
+
+/* ----------------------------------------------------------- piggy bank */
+
+export const PIGGY_CAP = 8000;
+/** The piggy can be broken once it holds at least this many coins. */
+export const PIGGY_MIN = 1500;
+export const PIGGY_USD = 1.99;
+/** Coins dropped in the piggy for a level win (more for stars). */
+export function piggyDrop(stars: number): number {
+  return 90 + stars * 40;
+}
+
+/* ---------------------------------------------------------- island race */
+
+export const RACE_SIZE = 20;
+export const RACE_PRIZES: Grant[] = [
+  { coins: 3000, gems: 120, powers: { bomb: 2 } },
+  { coins: 1500, gems: 60, powers: { hammer: 2 } },
+  { coins: 800, gems: 30 },
+];
+const RACER_NAMES = [
+  "CocoLoco", "TikiTom", "MangoMia", "Jungle Jay", "PalmPilot", "Reef Rae", "Lagoon Leo", "Tucan Tia", "BananaBo",
+  "Kiki", "Vine Vince", "Sandy", "Island Ike", "Papaya Pam", "Drift Dee", "Monkey Max", "Shell Shay", "Tide Ty", "Luau Lou",
+  "Bongo", "Nala", "Zuri", "Koa", "Mahina", "Rio", "Sunny", "Kai B.", "Lani", "Pono",
+];
+const AVATARS = ["🐒", "🦜", "🐢", "🦩", "🐸", "🦀", "🐬", "🦎", "🐯", "🦥", "🐙", "🐨"];
+
+function rng32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function weekStart(week: string): Date {
+  const [y, m, d] = week.slice(1).split("-").map(Number);
+  return new Date(y!, m! - 1, d!);
+}
+export function weekEnd(week: string): Date {
+  const s = weekStart(week);
+  return new Date(s.getFullYear(), s.getMonth(), s.getDate() + 7);
+}
+
+export type Racer = { name: string; avatar: string; wins: number; me: boolean };
+
+/** Everyone in this week's race, best first. Rivals win at their own steady pace through the week. */
+export function raceStandings(race: Live["race"], now = new Date()): Racer[] {
+  const r = rng32(race.seed);
+  const start = weekStart(race.week).getTime();
+  const days = Math.max(0, Math.min(7, (now.getTime() - start) / 86_400_000));
+  const names = [...RACER_NAMES].sort(() => r() - 0.5);
+  const rivals: Racer[] = Array.from({ length: RACE_SIZE - 1 }, (_, i) => {
+    const pace = 0.6 + r() * (i < 3 ? 7.5 : 4.5); // a few fast racers keep the top spots exciting
+    const wobble = Math.sin(days * (1 + r()) + r() * 6) * 0.6;
+    return { name: names[i % names.length]!, avatar: AVATARS[Math.floor(r() * AVATARS.length)]!, wins: Math.max(0, Math.floor(days * pace + wobble)), me: false };
+  });
+  return [...rivals, { name: "You", avatar: "⭐", wins: race.wins, me: true }].sort((a, b) => b.wins - a.wins || (a.me ? -1 : b.me ? 1 : 0));
+}
+
+export function raceRank(race: Live["race"], now = new Date()): number {
+  return raceStandings(race, now).findIndex((x) => x.me) + 1;
 }

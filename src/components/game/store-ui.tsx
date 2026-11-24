@@ -542,7 +542,7 @@ export function SpinSheet() {
   const [won, setWon] = useState<number | null>(null);
   const n = SPIN_PRIZES.length;
   const seg = 360 / n;
-  const go = async (how: "free" | "video") => {
+  const go = async (how: "free" | "video" | "earned") => {
     if (spinning) return;
     setWon(null);
     const idx = await spinWheel(how);
@@ -581,7 +581,11 @@ export function SpinSheet() {
           <RewardChips grant={SPIN_PRIZES[won]!.grant} />
         </div>
       ) : null}
-      {!live.spin.free ? (
+      {live.earned.spins > 0 ? (
+        <button type="button" className="pj-btn pj-btn-primary w-full pj-spin-earned" disabled={spinning} onClick={() => void go("earned")}>
+          🎡 Bonus spin! ({live.earned.spins})
+        </button>
+      ) : !live.spin.free ? (
         <button type="button" className="pj-btn pj-btn-primary w-full" disabled={spinning} onClick={() => void go("free")}>
           Free spin!
         </button>
@@ -614,6 +618,7 @@ export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
   const continueWith = useGame((s) => s.continueWith);
   const newGame = useGame((s) => s.newGame);
   const cost = coinContinueCost(coinUses);
+  const streak = useGame((s) => (s.match.mode === "adventure" || s.match.mode === "classic" ? s.profile.levelStreak : 0));
   const left = goal ? Math.max(0, goal.value - progress) : 0;
   useEffect(() => {
     audioFx.feelRoundOver();
@@ -635,6 +640,7 @@ export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
           <span style={{ width: `${Math.round(Math.min(1, progress / goal.value) * 100)}%` }} />
         </div>
       ) : null}
+      {streak >= 2 ? <div className="pj-oom-streak">🔥 Your {streak}-win streak ends if you stop now!</div> : null}
       <div className="pj-oom-actions">
         <button type="button" className="pj-oom-btn is-video" disabled={used || busy} onClick={() => void continueWith("video")}>
           <Play className="size-6" fill="currentColor" />

@@ -48,7 +48,7 @@ import {
   saveProfile,
   type Profile,
 } from "./save";
-import { isNative, nativeBuy, nativeRestore } from "./native";
+import { askForReminders, clearReminders, isNative, nativeBuy, nativeRestore, scheduleReminders, type Reminder } from "./native";
 import * as audio from "./audio";
 import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
@@ -64,6 +64,11 @@ import {
   QUEST_CHEST,
   SHOP,
   SPIN_EXTRA_PER_DAY,
+  SPIN_EVERY,
+  PIGGY_CAP,
+  PIGGY_MIN,
+  piggyDrop,
+  RACE_PRIZES,
   SPIN_PRIZES,
   rollSpin,
   WEEKLY,
@@ -97,6 +102,8 @@ let resetBackup: Profile | null = null;
 export type Tab = "lobby" | "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
   | null
+  | "race"
+  | "piggy"
   | "shop"
   | "quests"
   | "daily"
@@ -266,7 +273,11 @@ type GameStore = {
   claimWeekly: (id: string) => void;
   claimQuestChest: () => void;
   /** Spin the lucky wheel (free once a day, or by video). Returns the prize index. */
-  spinWheel: (how: "free" | "video") => Promise<number | null>;
+  spinWheel: (how: "free" | "video" | "earned") => Promise<number | null>;
+  /** Collect last week's island race prize. */
+  claimRace: () => void;
+  /** Break the piggy bank open (a purchase). */
+  breakPiggy: () => void;
   /** Free coins for watching a video. */
   watchForCoins: () => Promise<void>;
   /** Keep a lost run going: by video (once per run), Continue Pass, or gems. */
@@ -468,6 +479,13 @@ export const useGame = create<GameStore>((set, get) => ({
     profile = { ...profile, lastActive: Date.now() };
     audio.setMuted(profile.settings.sfx, profile.settings.music);
     audio.bootAudio();
+    if (typeof document !== "undefined" && !remindersBound) {
+      remindersBound = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") void scheduleReminders(buildReminders(get().profile));
+        else void clearReminders();
+      });
+    }
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
     void connectBoard(profile.card);
@@ -731,6 +749,25 @@ export const useGame = create<GameStore>((set, get) => ({
       } else {
         nextProfile = { ...nextProfile, chest: filled };
       }
+      if (!remindersAsked) {
+        remindersAsked = true;
+        window.setTimeout(() => void askForReminders(), 2500);
+      }
+      // Hooks that bring players back: a bonus spin every few wins, coins in the
+      // piggy bank, and a win on the board in this week's island race.
+      const l = normalizeLive(nextProfile.live);
+      const wins = l.earned.wins + 1;
+      const spinEarned = wins >= SPIN_EVERY;
+      const stars = starsFor(result.match.goal, result.match.moves, result.match.mode, result.match.levelId);
+      nextProfile = {
+        ...nextProfile,
+        live: {
+          ...l,
+          earned: { spins: l.earned.spins + (spinEarned ? 1 : 0), wins: spinEarned ? 0 : wins },
+          piggy: Math.min(PIGGY_CAP, l.piggy + piggyDrop(stars)),
+          race: { ...l.race, wins: l.race.wins + 1 },
+        },
+      };
     }
     const fx: BoardFx = {
       id: fxSeq++,
@@ -1185,6 +1222,11 @@ export const useGame = create<GameStore>((set, get) => ({
     const price = moneyPrice(sku);
     if (!price) return;
     let p = applyGrant(profile, price.grant);
+    if (sku === "piggy") {
+      const l = normalizeLive(p.live);
+      p = { ...p, coins: p.coins + l.piggy, live: { ...l, piggy: 0 } };
+      price.grant = { coins: l.piggy };
+    }
     const item = SHOP.find((i) => i.id === sku);
     p = {
       ...p,
@@ -1268,6 +1310,7 @@ export const useGame = create<GameStore>((set, get) => ({
   spinWheel: async (how) => {
     const live = normalizeLive(get().profile.live);
     if (how === "free" && live.spin.free) return null;
+    if (how === "earned" && live.earned.spins <= 0) return null;
     if (how === "video") {
       if (live.spin.extra >= SPIN_EXTRA_PER_DAY || get().videoBusy) return null;
       set({ videoBusy: true });
@@ -1279,10 +1322,39 @@ export const useGame = create<GameStore>((set, get) => ({
     const prize = SPIN_PRIZES[idx]!;
     const { profile } = get();
     const l = normalizeLive(profile.live);
+    if (how === "earned") {
+      set({ profile: applyGrant({ ...profile, live: { ...l, earned: { ...l.earned, spins: l.earned.spins - 1 } } }, prize.grant) });
+      persistSoon(get);
+      return idx;
+    }
     const spin = how === "free" ? { ...l.spin, free: true } : { ...l.spin, extra: l.spin.extra + 1 };
     set({ profile: applyGrant({ ...profile, live: { ...l, spin } }, prize.grant) });
     persistSoon(get);
     return idx;
+  },
+
+  claimRace: () => {
+    const { profile } = get();
+    const l = normalizeLive(profile.live);
+    const reward = l.race.reward;
+    if (!reward) return;
+    const prize = RACE_PRIZES[reward.rank - 1];
+    if (!prize) return;
+    audio.feelCoins(8);
+    audio.feelMilestone();
+    set({ profile: applyGrant({ ...profile, live: { ...l, race: { ...l.race, reward: null } } }, prize), toast: `Race prize: ${grantText(prize)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 2600);
+  },
+
+  breakPiggy: () => {
+    const l = normalizeLive(get().profile.live);
+    if (l.piggy < PIGGY_MIN) {
+      set({ toast: `Fill it to ${PIGGY_MIN.toLocaleString()} Jungle Coins to break it open.` });
+      window.setTimeout(() => set({ toast: null }), 2200);
+      return;
+    }
+    void get().buyMoney("piggy");
   },
 
   watchForCoins: async () => {
@@ -1531,6 +1603,23 @@ export const useGame = create<GameStore>((set, get) => ({
  * A run just ended: score it (Puzzle IQ), fold it into the player's card,
  * work out percentile and awards, and post the card to the leaderboard.
  */
+let remindersBound = false;
+let remindersAsked = false;
+
+/** Friendly nudges for when the player is away (only what's actually waiting for them). */
+function buildReminders(p: Profile): Reminder[] {
+  const out: Reminder[] = [];
+  const now = Date.now();
+  const l = normalizeLive(p.live);
+  if (p.daily.nextAt > now) out.push({ id: 101, title: "🎁 Your daily gift is ready!", body: "Free Jungle Coins are waiting on the island.", at: new Date(p.daily.nextAt) });
+  if (l.earned.spins > 0) out.push({ id: 102, title: "🎡 You have a bonus spin!", body: "Spin the Lucky Wheel. The jackpot is 100 gems.", at: new Date(now + 3 * 3600_000) });
+  if (p.levelStreak >= 2) out.push({ id: 103, title: `🔥 Keep your ${p.levelStreak}-win streak alive!`, body: "Win one island today to keep your free boosters coming.", at: new Date(now + 20 * 3600_000) });
+  out.push({ id: 104, title: "🏁 The Island Race is heating up", body: "Your rivals are winning islands. Jump back in and climb!", at: new Date(now + 26 * 3600_000) });
+  if (l.piggy >= PIGGY_MIN) out.push({ id: 105, title: "🐷 Your piggy bank is ready to break", body: `${l.piggy.toLocaleString("en-US")} Jungle Coins saved up inside.`, at: new Date(now + 48 * 3600_000) });
+  out.push({ id: 106, title: "🌴 The jungle misses you", body: "A new island is waiting. Can you get 3 stars?", at: new Date(now + 72 * 3600_000) });
+  return out;
+}
+
 function finishRun(rs: RunStats, match: Match, profile: Profile): { profile: Profile; result: RunResult } {
   const run: RunStats = { ...rs, endedAt: Date.now(), won: match.won, spacesLeft: match.board.flat().filter((c) => c.t === "e").length };
   const iq = puzzleIq(run);
