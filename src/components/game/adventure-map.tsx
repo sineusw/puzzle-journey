@@ -3,6 +3,7 @@ import { Lock, Play, Star } from "lucide-react";
 import { ADVENTURE, UNLOCKS, WORLD_SIZE, goalLabel, worldOf } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
 import { SpecialFace } from "./tile-art";
+import * as audio from "@/lib/game/audio";
 
 const BIOME: Array<[string, string]> = [
   ["#ffc93c", "#b8641a"],
@@ -72,8 +73,26 @@ export function AdventureMap() {
   const theme = THEME[page % THEME.length]!;
   const doneUpTo = Math.max(0, Math.min(isles.length, current - page * WORLD_SIZE));
   const [c1, c2] = BIOME[page % BIOME.length]!;
+  // Juice: which way the world slid in, and a burst on the island just tapped.
+  const [dir, setDir] = useState<0 | 1 | -1>(0);
+  const [tap, setTap] = useState<{ id: number; n: number; bad: boolean } | null>(null);
+  const tapIsle = (id: number, isLocked: boolean) => {
+    setTap((t) => ({ id, n: (t?.n ?? 0) + 1, bad: isLocked }));
+    if (isLocked) audio.feelNope();
+    else {
+      audio.sfxUi();
+      audio.vibrate(12);
+    }
+    if (sel === id && !isLocked) startAdventure(id);
+    else setSel(id);
+  };
   const flip = (d: number) => {
     const next = Math.max(0, Math.min(worlds - 1, page + d));
+    if (next !== page) {
+      setDir(d > 0 ? 1 : -1);
+      audio.sfxUi();
+      audio.vibrate(18);
+    }
     setPage(next);
     const first = ADVENTURE[next * WORLD_SIZE];
     if (first) setSel(Math.min(Math.max(first.id, Math.min(current, first.id + WORLD_SIZE - 1)), first.id + WORLD_SIZE - 1));
@@ -93,7 +112,8 @@ export function AdventureMap() {
         <button type="button" className="pj-world-arrow" onClick={() => flip(1)} disabled={page >= worlds - 1} aria-label="Next world">›</button>
       </div>
       <div
-        className={`pj-advmap is-paged is-scene fx-${theme.fx}`}
+        key={page}
+        className={`pj-advmap is-paged is-scene fx-${theme.fx}${dir > 0 ? " slide-l" : dir < 0 ? " slide-r" : ""}`}
         style={{ ["--c1" as string]: c1, ["--c2" as string]: c2, ["--sky1" as string]: theme.sky[0], ["--sky2" as string]: theme.sky[1], ["--sky3" as string]: theme.sky[2] }}
       >
         <div className="pj-scene-waves" aria-hidden="true" />
@@ -120,6 +140,7 @@ export function AdventureMap() {
           <path d={path.join(" ")} className="is-bg" vectorEffect="non-scaling-stroke" />
           {doneUpTo > 1 ? <path d={path.slice(0, doneUpTo).join(" ")} className="is-done" vectorEffect="non-scaling-stroke" /> : null}
         </svg>
+        <div className="pj-scene-shine" aria-hidden="true" />
         {isles.map((l, k) => {
           const p = pts[k]!;
           const isLocked = l.id > unlocked;
@@ -132,9 +153,9 @@ export function AdventureMap() {
               type="button"
               data-node={l.id}
               data-testid={`adv-${l.id}`}
-              className={`pj-node${l.boss ? " is-boss" : ""}${isLocked ? " is-locked" : ""}${isCurrent ? " is-current" : ""}${sel === l.id ? " is-sel" : ""}`}
-              style={{ left: `${p.x}%`, top: `${p.y}%`, ["--c1" as string]: c1, ["--c2" as string]: c2 }}
-              onClick={() => (sel === l.id && !isLocked ? startAdventure(l.id) : setSel(l.id))}
+              className={`pj-node is-pop${tap?.id === l.id ? (tap.bad ? " is-nope" : " is-tapped") : ""}${l.boss ? " is-boss" : ""}${isLocked ? " is-locked" : ""}${isCurrent ? " is-current" : ""}${sel === l.id ? " is-sel" : ""}`}
+              style={{ left: `${p.x}%`, top: `${p.y}%`, ["--c1" as string]: c1, ["--c2" as string]: c2, ["--i" as string]: k }}
+              onClick={() => tapIsle(l.id, isLocked)}
               aria-label={`Island ${l.id}, ${l.name}${isLocked ? ", locked" : ""}`}
             >
               {l.boss ? <span className="pj-node-crown" aria-hidden="true">👑</span> : null}
@@ -149,14 +170,22 @@ export function AdventureMap() {
                   <Star key={n} className={n <= s ? "is-on" : ""} fill={n <= s ? "currentColor" : "none"} />
                 ))}
               </span>
+              {isCurrent ? <span className="pj-node-rays" aria-hidden="true" /> : null}
               {isCurrent ? <span className="pj-node-ring" aria-hidden="true" /> : null}
+              {tap?.id === l.id && !tap.bad ? (
+                <span key={tap.n} className="pj-node-burst" aria-hidden="true">
+                  {Array.from({ length: 10 }, (_, j) => (
+                    <i key={j} style={{ ["--a" as string]: `${j * 36}deg` }} />
+                  ))}
+                </span>
+              ) : null}
               {isCurrent ? <span className="pj-node-you">▶ PLAY</span> : null}
               {l.boss ? <span className="pj-node-flag" aria-hidden="true">🚩</span> : null}
             </button>
           );
         })}
       </div>
-      <div className="pj-advcard" style={{ ["--c1" as string]: BIOME[worldOf(level.id).index % BIOME.length]![0], ["--c2" as string]: BIOME[worldOf(level.id).index % BIOME.length]![1] }}>
+      <div key={level.id} className="pj-advcard is-swap" style={{ ["--c1" as string]: BIOME[worldOf(level.id).index % BIOME.length]![0], ["--c2" as string]: BIOME[worldOf(level.id).index % BIOME.length]![1] }}>
         <div className="pj-advcard-top">
           <span className="pj-advcard-num">{level.id}</span>
           <div className="min-w-0 flex-1">
