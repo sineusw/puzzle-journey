@@ -133,6 +133,13 @@ export function PlayArea() {
   const live = useRef({ board, tray, over, selected, targeting, visitorBusy });
   live.current = { board, tray, over, selected, targeting, visitorBusy };
 
+  // A new round (level, mode) gets one fresh measurement; then the size is locked again.
+  const refit = useRef<() => void>(() => {});
+  const runKey = useGame((s) => s.runStats.startedAt);
+  useEffect(() => {
+    refit.current();
+  }, [runKey]);
+
   // Size the board to the largest square that fits the space left for it.
   // Done in JS so every browser (Safari included) gets the same result.
   useLayoutEffect(() => {
@@ -150,9 +157,19 @@ export function PlayArea() {
       const size = Math.max(160, Math.floor(Math.min(w, h, max)));
       // Only resize for real layout changes (rotation, window size), not for
       // banners and pop-ups coming and going, so the board never "breathes".
+      // The size settles during the first moments after the screen opens (taking the
+      // smallest fit seen, so nothing overflows), then is locked: banners, pop-ups and
+      // toasts can never make the board grow and shrink mid-game.
       const prev = parseFloat(frame.style.getPropertyValue("--bs")) || 0;
-      if (prev && Math.abs(prev - size) < 64) return;
+      if (prev && performance.now() > settleUntil) return;
+      if (prev && size >= prev) return;
       frame.style.setProperty("--bs", `${size}px`);
+    };
+    let settleUntil = performance.now() + 1200;
+    refit.current = () => {
+      frame.style.removeProperty("--bs");
+      settleUntil = performance.now() + 1200;
+      fit();
     };
     fit();
     let lastW = window.innerWidth;
@@ -162,6 +179,7 @@ export function PlayArea() {
       lastW = window.innerWidth;
       lastH = window.innerHeight;
       frame.style.removeProperty("--bs");
+      settleUntil = performance.now() + 1200;
       fit();
     };
     window.addEventListener("resize", onWin);

@@ -417,10 +417,10 @@ const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "h3", "d
  * How often bulky shapes appear, by how full the board is. A documented,
  * fixed curve based only on the board: the fuller it gets, the more the
  * deal leans on small, easy-to-read pieces.
- *   under 35% full → normal mix · 35–55% → bulky ×0.6 · over 55% → bulky ×0.3
+ *   under 35% full → bulky ×0.6 · 35–55% → bulky ×0.35 · over 55% → bulky ×0.15
  */
 export function bulkyFactor(occupancy: number): number {
-  return occupancy < 0.35 ? 1 : occupancy < 0.55 ? 0.6 : 0.3;
+  return occupancy < 0.35 ? 0.6 : occupancy < 0.55 ? 0.35 : 0.15;
 }
 
 function pickShape(rng: () => number, occupancy = 0): Shape {
@@ -1105,6 +1105,46 @@ function depower(p: Piece): Piece {
   return p.starAt !== null ? { ...p, starAt: null, gold: false } : p;
 }
 
+/** Can these cells be dropped somewhere that completes at least one row or column? */
+export function clearsALine(board: Cell[][], cells: CellPos[]): boolean {
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (!canPlace(board, cells, r, c)) continue;
+      const hit = new Set(cells.map(([dr, dc]) => (r + dr) * SIZE + (c + dc)));
+      const full = (rr: number, cc: number) => hit.has(rr * SIZE + cc) || !isEmpty(board[rr]![cc]!);
+      for (const [dr] of cells) {
+        let ok = true;
+        for (let k = 0; k < SIZE && ok; k++) ok = full(r + dr, k);
+        if (ok) return true;
+      }
+      for (const [, dc] of cells) {
+        let ok = true;
+        for (let k = 0; k < SIZE && ok; k++) ok = full(k, c + dc);
+        if (ok) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * A "clutch" piece: a small, friendly shape (already turned the right way) that
+ * finishes a line on this board, or null when none does. Keeps the game feeling
+ * fair and lets players chain clears instead of slowly drowning.
+ */
+function clutchPiece(board: Cell[][], rng: () => number, f: Features, occ: number): Piece | null {
+  const FRIENDLY = ["i3", "i3v", "i4", "i2", "i2v", "l3", "o4", "o1", "i5", "l4", "t4"].filter((id) => SHAPE_MAP.has(id));
+  const order = [...FRIENDLY].sort(() => rng() - 0.5);
+  for (const id of order) {
+    const base = makePiece(rng, id, f, occ);
+    for (let t = 0; t < 4; t++) {
+      const cells = rotateN(SHAPE_MAP.get(id)!.cells, t);
+      if (clearsALine(board, cells)) return { ...base, cells };
+    }
+  }
+  return null;
+}
+
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const f = match.features;
   const occ = occupancy(match.board);
@@ -1152,6 +1192,15 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   // can still be played on the board you left. If it can't, you get a fair set instead.
   const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
   const pieces = (queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting())).map(depower);
+  // Fair and fun: if nothing in the tray can finish a line, most of the time the
+  // last piece becomes one that can (only if the set stays playable).
+  if (normal && occ > 0.2 && !pieces.some((p) => clearsALine(match.board, p.cells)) && rng() < 0.75) {
+    const clutch = clutchPiece(match.board, rng, f, occ);
+    if (clutch) {
+      const trial = [...pieces.slice(0, 2), clutch];
+      if (setIsPlayable(match.board, trial)) pieces[2] = clutch;
+    }
+  }
   if (occ >= POWER_MIN_FILL && match.bonus?.length) {
     // Earned power blocks land now that there are blocks for them to hit.
     match.bonus.slice(0, 3).forEach((b, i) => (pieces[i] = b === "star" ? starPiece(rng) : specialPiece(b)));
