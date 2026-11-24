@@ -1,3 +1,4 @@
+import { isNative } from "@/lib/game/native";
 import { LobbyScreen, ChestBar, shareRun, shareDaily } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -374,6 +375,14 @@ function SettingsSheet() {
       <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={startSandbox}>
         New Sandbox run
       </button>
+      {isNative() ? (
+        <button type="button" className="pj-btn pj-btn-ghost w-full" onClick={() => void useGame.getState().restorePurchases()}>
+          Restore purchases
+        </button>
+      ) : null}
+      <a className="pj-btn pj-btn-ghost w-full text-center" href="https://puzzle-journey-ruby.vercel.app/privacy" target="_blank" rel="noreferrer">
+        Privacy policy
+      </a>
       <button
         type="button"
         className="pj-btn pj-btn-ghost w-full text-danger"

@@ -1,0 +1,11 @@
+{
+  "appId": "com.pettygamesstudios.blockjourney",
+  "appName": "Block Journey",
+  "webDir": "www",
+  "ios": { "contentInset": "never", "backgroundColor": "#0b1a2e", "scrollEnabled": false },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#0b1a2e", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "overlaysWebView": true }
+  }
+}

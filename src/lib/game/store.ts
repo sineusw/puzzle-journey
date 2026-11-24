@@ -45,6 +45,7 @@ import {
   saveProfile,
   type Profile,
 } from "./save";
+import { isNative, nativeBuy, nativeRestore } from "./native";
 import * as audio from "./audio";
 import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
@@ -246,6 +247,7 @@ type GameStore = {
   buyItem: (itemId: string) => void;
   /** Buy a shop item or skin ("skin:<id>") with real money. */
   buyMoney: (sku: string) => Promise<void>;
+  restorePurchases: () => Promise<void>;
   /** Pay out a confirmed real-money checkout. */
   grantPaid: (sku: string, sessionId: string) => void;
   buySkin: (skin: SkinId) => void;
@@ -1106,11 +1108,42 @@ export const useGame = create<GameStore>((set, get) => ({
     if (!moneyPrice(sku)) return;
     audio.sfxUi();
     get().persist();
+    if (isNative()) {
+      // iPhone app: Apple In-App Purchase instead of Stripe.
+      try {
+        const txn = await nativeBuy(sku);
+        get().grantPaid(sku, txn);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        set({ toast: msg === "canceled" ? "Purchase canceled. No charge was made." : msg || "Purchase failed." });
+        window.setTimeout(() => set({ toast: null }), 2600);
+      }
+      return;
+    }
     const res = await startCheckout(sku);
     if (!res.ok) {
       set({ toast: res.message });
       window.setTimeout(() => set({ toast: null }), 2600);
     }
+  },
+
+  restorePurchases: async () => {
+    try {
+      const skus = await nativeRestore();
+      let p = get().profile;
+      for (const sku of skus) {
+        const price = moneyPrice(sku);
+        const item = SHOP.find((i) => i.id === sku);
+        if (!price) continue;
+        if (price.grant.skin && !p.live.ownedSkins.includes(price.grant.skin)) p = applyGrant(p, { skin: price.grant.skin });
+        else if (item?.once && !p.live.bought.includes(item.id)) p = { ...applyGrant(p, price.grant), live: { ...p.live, bought: [...p.live.bought, item.id] } };
+      }
+      set({ profile: p, toast: "Purchases restored." });
+      get().persist();
+    } catch {
+      set({ toast: "Couldn't restore purchases. Try again." });
+    }
+    window.setTimeout(() => set({ toast: null }), 2200);
   },
 
   grantPaid: (sku, sessionId) => {
