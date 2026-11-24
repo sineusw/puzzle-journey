@@ -706,7 +706,7 @@ export const useGame = create<GameStore>((set, get) => ({
       combo: result.combo,
       praise: clear ? praiseFor(clear.lines, result.perfect) : null,
       perfect: result.perfect,
-      shake: Boolean(clear && profile.settings.shake && (clear.lines >= 2 || clear.bombs || clear.blasts || result.perfect)),
+      shake: Boolean(clear && profile.settings.shake && (clear.lines >= 1 || clear.bombs || clear.rockets || clear.blasts || result.perfect)),
       placedCells: placedPiece?.cells.length ?? 1,
       special: clear?.blasts ? "blast" : clear?.bombs ? "bomb" : clear?.rockets ? "rocket" : null,
       milestone,

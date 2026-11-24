@@ -142,7 +142,8 @@ export class BoardFxRunner {
           const x = box.left + box.width / 2;
           const y = box.top + box.height / 2;
           this.fx.burst("sparkle", x, y, { count: 4, color: ["#ffffff", color], speed: 200, size: 5 });
-          this.fx.burst("debris", x, y, { count: 3, color, speed: 300, size: box.width * 0.15 });
+          // Shatter: the block breaks into tumbling colored shards.
+          this.fx.burst("debris", x, y, { count: 7, color: [color, color, "#ffffff"], speed: 340, size: box.width * 0.17 });
         }, delay + 110);
       }
       this.layer.appendChild(batch);
@@ -188,6 +189,9 @@ export class BoardFxRunner {
     if (e.cleared.length && !reduce) {
       const tint = e.landed[0] ? this.colorAt(e.cleared) : "#ffffff";
       this.flash(gridBox, lines >= 2 || e.special ? 0.75 : 0.45, e.special === "bomb" ? "#ffb04a" : e.special === "rocket" ? "#9af7ff" : "#ffffff");
+      // A light beam sweeps across every cleared row and column.
+      for (const r of e.rows) this.beam(gridBox, "row", r, cell, reduce);
+      for (const c of e.cols) this.beam(gridBox, "col", c, cell, reduce);
       for (const r of e.rows) this.fx.ring(gridBox.left + gridBox.width / 2, gridBox.top + (r + 0.5) * cell, { color: tint, from: cell * 0.4, to: gridBox.width * 0.7, ms: 650, width: 9 });
       for (const c of e.cols) this.fx.ring(gridBox.left + (c + 0.5) * cell, gridBox.top + gridBox.height / 2, { color: tint, from: cell * 0.4, to: gridBox.width * 0.7, ms: 650, width: 9 });
       if (lines >= 2 || e.perfect) {
