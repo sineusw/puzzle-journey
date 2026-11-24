@@ -1,3 +1,4 @@
+import { CurrencySheet, LevelSheet, ResetSheet } from "./hud-sheets";
 import { isNative } from "@/lib/game/native";
 import { LobbyScreen, ChestBar, shareRun, shareDaily } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
@@ -283,6 +284,9 @@ export function Overlays() {
           {panel === "won" ? <WonSheet /> : null}
           {panel === "intro" ? <IntroSheet /> : null}
           {panel === "spin" ? <SpinSheet /> : null}
+          {panel === "coins" || panel === "gems" ? <CurrencySheet first={panel} /> : null}
+          {panel === "level" ? <LevelSheet /> : null}
+          {panel === "reset" ? <ResetSheet /> : null}
         </div>
       ) : null}
     </>
@@ -341,7 +345,6 @@ function SettingsSheet() {
   const toggleSetting = useGame((s) => s.toggleSetting);
   const setPanel = useGame((s) => s.setPanel);
   const startSandbox = useGame((s) => s.startSandbox);
-  const resetProgress = useGame((s) => s.resetProgress);
   return (
     <Sheet title="Settings">
       <ToggleRow
@@ -386,7 +389,7 @@ function SettingsSheet() {
       <button
         type="button"
         className="pj-btn pj-btn-ghost w-full text-danger"
-        onClick={resetProgress}
+        onClick={() => useGame.getState().setPanel("reset")}
       >
         Reset progress
       </button>
@@ -543,6 +546,7 @@ function IqAndAwards({ delay }: { delay: number }) {
   const iq = result?.iq ?? 100;
   const shownIq = useCountUp(iq - 70, 900, delay);
   const label = iqLabel(iq, result?.pct ?? null, result?.versus ?? "your games");
+  const bestIq = useGame((s) => s.profile.card?.best?.iq ?? 0);
   const awards = result?.awards ?? [];
   useEffect(() => {
     if (!result) return;
@@ -571,8 +575,16 @@ function IqAndAwards({ delay }: { delay: number }) {
   return (
     <div className="pj-iq-block">
       <div className="pj-iq" data-testid="puzzle-iq">
-        <div className="pj-iq-label">Puzzle IQ</div>
+        <div className="pj-iq-label">Your IQ</div>
         <div className="pj-iq-value tabular-nums">{70 + shownIq}</div>
+        <div className="pj-iq-scale">
+          <span>
+            Max <b>160</b>
+          </span>
+          <span>
+            Your best <b>{Math.max(bestIq, iq)}</b>
+          </span>
+        </div>
         <div className="pj-iq-headline">{label.headline}</div>
         <div className="pj-iq-note">{label.note}</div>
       </div>
@@ -964,7 +976,7 @@ function AdventureScreen() {
           ))}
         </div>
       ) : null}
-      {active.id === "adventure" ? null : <p className="mt-2 text-sm text-muted">{active.blurb}</p>}
+      {null}
       <div className={active.id === "adventure" ? "pj-play-body" : "mt-3"}>
         {active.id === "adventure" ? (
           <AdventureMap />
@@ -978,20 +990,32 @@ function AdventureScreen() {
   );
 }
 
+const CLASSIC_HUES = ["#ff5d73", "#ff9f43", "#ffd23f", "#3ddc97", "#4cc9f0", "#b388ff"];
+
 function SandboxCard() {
   const best = useGame((s) => s.profile.sandboxBest);
+  const combo = useGame((s) => s.profile.bestCombo);
+  const runs = useGame((s) => s.profile.games);
   const startSandbox = useGame((s) => s.startSandbox);
   return (
-    <div className="pj-card text-center">
-      <div className="text-xs text-muted">Your best</div>
-      <div className="mt-1 font-display text-4xl tabular-nums">{formatInt(best)}</div>
-      <button
-        type="button"
-        data-testid="sandbox-play"
-        className="pj-btn pj-btn-primary mt-4 w-full"
-        onClick={startSandbox}
-      >
-        Play Sandbox
+    <div className="pj-sandbox-hero">
+      <div className="pj-lobby-floaters" aria-hidden="true">
+        {CLASSIC_HUES.map((c, i) => (
+          <i key={c} style={{ ["--c" as string]: c, ["--i" as string]: i }} />
+        ))}
+      </div>
+      <div className="pj-sandbox-title font-display">Endless<br />Sandbox</div>
+      <p className="pj-sandbox-sub">No goals, no limits. Just you, the blocks and your high score.</p>
+      <div className="pj-sandbox-best">
+        <span>👑 Your best</span>
+        <b className="tabular-nums">{formatInt(best)}</b>
+      </div>
+      <div className="pj-sandbox-chips">
+        <span>🔥 Best combo x{combo}</span>
+        <span>🎮 {runs} runs</span>
+      </div>
+      <button type="button" data-testid="sandbox-play" className="pj-lobby-play pj-sandbox-play" onClick={startSandbox}>
+        ▶ {best > 0 ? `Beat ${formatInt(best)}` : "Play"}
       </button>
     </div>
   );
@@ -1000,37 +1024,52 @@ function SandboxCard() {
 function ClassicList() {
   const profile = useGame((s) => s.profile);
   const startClassic = useGame((s) => s.startClassic);
+  const unlocked = Math.min(profile.classic.unlocked, CLASSIC.length);
+  const starsWon = Object.values(profile.classic.stars).reduce((a, b) => a + b, 0);
   return (
-    <div className="pj-classic-grid">
-      {CLASSIC.map((lvl) => {
-        const locked = lvl.id > profile.classic.unlocked;
-        const stars = profile.classic.stars[String(lvl.id)] ?? 0;
-        return (
-          <button
-            key={lvl.id}
-            type="button"
-            data-testid={`classic-${lvl.id}`}
-            className={`pj-classic-cell ${locked ? "is-locked" : ""}`}
-            disabled={locked}
-            onClick={() => startClassic(lvl.id)}
-            aria-label={`Classic level ${lvl.id}. ${goalLabel(lvl.goal)}.${locked ? " Locked." : ""}`}
-          >
-            <span className="font-display text-xl tabular-nums">
-              {locked ? <Lock className="mx-auto size-4" /> : lvl.id}
-            </span>
-            <span className="pj-classic-goal">{goalLabel(lvl.goal)}</span>
-            <span className="flex justify-center gap-0.5" aria-hidden="true">
-              {[1, 2, 3].map((n) => (
-                <Star
-                  key={n}
-                  className={`size-2.5 ${n <= stars ? "text-gold" : "text-muted/40"}`}
-                  fill={n <= stars ? "currentColor" : "none"}
-                />
-              ))}
-            </span>
-          </button>
-        );
-      })}
+    <div className="pj-classic">
+      <div className="pj-classic-head">
+        <div>
+          <div className="font-display pj-classic-title">Classic</div>
+          <div className="pj-classic-sub">Pure blocks. No specials, no visitors.</div>
+        </div>
+        <div className="pj-classic-stars">
+          <Star className="size-4" fill="currentColor" /> {starsWon}/{CLASSIC.length * 3}
+        </div>
+      </div>
+      <div className="pj-lobby-bar pj-classic-bar" aria-hidden="true">
+        <span style={{ width: `${((unlocked - 1) / CLASSIC.length) * 100}%` }} />
+      </div>
+      <button type="button" className="pj-lobby-play pj-classic-go" onClick={() => startClassic(unlocked)}>
+        ▶ Level {unlocked}
+      </button>
+      <div className="pj-classic-grid is-jazzy">
+        {CLASSIC.map((lvl, i) => {
+          const locked = lvl.id > profile.classic.unlocked;
+          const stars = profile.classic.stars[String(lvl.id)] ?? 0;
+          const isNext = lvl.id === unlocked;
+          return (
+            <button
+              key={lvl.id}
+              type="button"
+              data-testid={`classic-${lvl.id}`}
+              className={`pj-classic-cell ${locked ? "is-locked" : ""}${isNext ? " is-next" : ""}${stars === 3 ? " is-perfect" : ""}`}
+              style={{ ["--h" as string]: CLASSIC_HUES[Math.floor(i / 5) % CLASSIC_HUES.length] }}
+              disabled={locked}
+              onClick={() => startClassic(lvl.id)}
+              aria-label={`Classic level ${lvl.id}. ${goalLabel(lvl.goal)}.${locked ? " Locked." : ""}`}
+            >
+              <span className="font-display pj-classic-num tabular-nums">{locked ? <Lock className="mx-auto size-4" /> : lvl.id}</span>
+              <span className="pj-classic-goal">{goalLabel(lvl.goal)}</span>
+              <span className="flex justify-center gap-0.5" aria-hidden="true">
+                {[1, 2, 3].map((n) => (
+                  <Star key={n} className={`size-3 ${n <= stars ? "text-gold" : "text-white/30"}`} fill={n <= stars ? "currentColor" : "none"} />
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

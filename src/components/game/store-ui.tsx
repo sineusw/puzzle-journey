@@ -1,3 +1,4 @@
+import { celebrateClaim } from "./claim-fx";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, Clock, Lock, Play, X } from "lucide-react";
 import { CONTINUE_COST, QUESTS, SKINS, type SkinId } from "@/lib/game/content";
@@ -46,7 +47,7 @@ function countdown(ms: number): string {
   return `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
-function ShopSheetFrame({ title, sub, children, wide }: { title: string; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
+export function ShopSheetFrame({ title, sub, children, wide }: { title: string; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
   const setPanel = useGame((s) => s.setPanel);
   return (
     <div className={`pj-sheet pj-store-sheet${wide ? " is-wide" : ""}`}>
@@ -208,7 +209,7 @@ function OfferCard({ item }: { item: ShopItem }) {
   );
 }
 
-function ItemCard({ item }: { item: ShopItem }) {
+export function ItemCard({ item }: { item: ShopItem }) {
   const buyItem = useGame((s) => s.buyItem);
   const buyMoney = useGame((s) => s.buyMoney);
   return (
@@ -350,7 +351,7 @@ export function DailySheet() {
         })}
       </div>
       {ready ? <RewardChips grant={DAILY_REWARDS[live.calendar.claimed]!} /> : null}
-      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" disabled={!ready} onClick={claimCalendar}>
+      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" disabled={!ready} onClick={(e) => { celebrateClaim(e, true); claimCalendar(); }}>
         {ready ? `Claim day ${live.calendar.claimed + 1}` : "Come back tomorrow"}
       </button>
       <div className="pj-gift-row">
@@ -359,7 +360,7 @@ export function DailySheet() {
           <b>Free gift</b>
           <small>{giftReady ? "Ready to open!" : `Next gift in ${countdown(profile.daily.nextAt - now)}`}</small>
         </div>
-        <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!giftReady} onClick={claimDaily}>
+        <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!giftReady} onClick={(e) => { celebrateClaim(e); claimDaily(); }}>
           {giftReady ? "Open" : <Clock className="size-4" />}
         </button>
       </div>
@@ -410,7 +411,7 @@ export function EventsSheet() {
                 {def.token} {t.pts}
               </div>
               <RewardChips grant={t.grant} small />
-              <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!can} onClick={() => claimEventTier(i)}>
+              <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!can} onClick={(e) => { celebrateClaim(e, true); claimEventTier(i); }}>
                 {got ? <Check className="size-4" /> : can ? "Claim" : <Lock className="size-4" />}
               </button>
             </div>
@@ -465,7 +466,7 @@ export function QuestSheet() {
               </div>
               <RewardChips grant={QUEST_CHEST} small />
             </div>
-            <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!chestReady} onClick={claimQuestChest}>
+            <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!chestReady} onClick={(e) => { celebrateClaim(e, true); claimQuestChest(); }}>
               {live.questChest.claimed ? <Check className="size-4" /> : chestReady ? "Open" : `${doneCount}/${QUESTS.length}`}
             </button>
           </div>
@@ -517,7 +518,7 @@ function QuestRow(p: { title: string; blurb: string; value: number; target: numb
           <div className="text-xs text-muted">{p.blurb}</div>
           <RewardChips grant={p.grant} small />
         </div>
-        <button type="button" className="pj-btn pj-btn-primary shrink-0 text-sm" disabled={p.state !== "ready"} onClick={p.onClaim}>
+        <button type="button" className="pj-btn pj-btn-primary shrink-0 text-sm" disabled={p.state !== "ready"} onClick={(e) => { celebrateClaim(e); p.onClaim(); }}>
           {p.state === "done" ? <Check className="size-4" /> : p.state === "ready" ? "Claim" : `${formatInt(Math.min(p.value, p.target))}/${formatInt(p.target)}`}
         </button>
       </div>

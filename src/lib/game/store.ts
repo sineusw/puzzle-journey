@@ -88,6 +88,8 @@ import {
 } from "./visitors";
 
 export const CHEST_SIZE = 5;
+const RESET_BACKUP_KEY = "puzzle-journey-reset-backup";
+let resetBackup: Profile | null = null;
 
 export type Tab = "lobby" | "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
@@ -103,7 +105,11 @@ export type Panel =
   | "won"
   | "levelup"
   | "intro"
-  | "spin";
+  | "spin"
+  | "coins"
+  | "gems"
+  | "level"
+  | "reset";
 
 export type FlashCell = { r: number; c: number; cell: Cell };
 export type LandedCell = { r: number; c: number };
@@ -270,6 +276,9 @@ type GameStore = {
   /** Mark a one-time tip (e.g. a special block's explanation) as read. */
   dismissTip: (key: string) => void;
   resetProgress: () => void;
+  undoReset: () => void;
+  /** A reset just happened and can still be undone. */
+  canUndoReset: boolean;
   dismissLevelUp: () => void;
   setToast: (msg: string | null) => void;
   setPointerBusy: (busy: boolean) => void;
@@ -1365,11 +1374,44 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   resetProgress: () => {
+    // Keep a copy so the player can undo the reset.
+    const { profile, match: oldMatch } = get();
+    try {
+      localStorage.setItem(RESET_BACKUP_KEY, JSON.stringify({ ...profile, match: oldMatch }));
+    } catch {
+      /* storage full or blocked: undo just won't be offered after a reload */
+    }
+    resetBackup = { ...profile, match: oldMatch };
     const fresh = defaultProfile();
     const match = firstMatch();
-    set({ profile: fresh, match, panel: "how", selected: 0, tab: "home" });
+    set({ profile: fresh, match, panel: null, selected: 0, tab: "lobby", canUndoReset: true });
     saveProfile({ ...fresh, match });
   },
+
+  undoReset: () => {
+    let backup = resetBackup;
+    if (!backup) {
+      try {
+        const raw = localStorage.getItem(RESET_BACKUP_KEY);
+        if (raw) backup = JSON.parse(raw);
+      } catch {
+        backup = null;
+      }
+    }
+    if (!backup) return;
+    const restored = ensureMatch(backup as Profile);
+    set({ profile: restored, match: sanitizeMatch(restored.match ?? firstMatch()), canUndoReset: false, toast: "Progress restored!" });
+    saveProfile(restored);
+    resetBackup = null;
+    try {
+      localStorage.removeItem(RESET_BACKUP_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  canUndoReset: false,
 
   dismissLevelUp: () => set({ levelUpTo: null }),
 
@@ -1609,7 +1651,7 @@ const EARNED_INFO: Record<BonusId, { icon: string; name: string }> = {
 function announceEarned(earned: BonusId[], perfect: boolean): void {
   const top = earned.includes("star") ? "star" : earned[0]!;
   const info = EARNED_INFO[top];
-  const how = top === "star" ? (perfect ? "Perfect clear!" : "Combo ×5!") : top === "blast" ? "4 lines at once!" : top === "bomb" ? "3 lines at once!" : "2 lines at once!";
+  const how = top === "star" ? (perfect ? "Perfect clear!" : "Combo ×10!") : top === "blast" ? "4 lines at once!" : top === "bomb" ? "3 lines at once!" : "2 lines at once!";
   window.setTimeout(() => {
     audio.feelMilestone();
     notify({ icon: info.icon, title: `${how} You made ${/^[AEIOU]/.test(info.name) ? "an" : "a"} ${info.name}`, sub: "It comes in your tray. Use it!", tone: "win" });

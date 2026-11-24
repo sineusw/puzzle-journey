@@ -309,11 +309,7 @@ export class BoardFxRunner {
       audio.feelNewBest();
       cheer("New best score!", { delayMs: 400, priority: true });
     }
-    if (e.perfect) {
-      for (let i = 0; i < 3; i++) {
-        window.setTimeout(() => this.fx.burst("confetti", gridBox.left + gridBox.width * (0.2 + 0.3 * i), gridBox.top + gridBox.height * 0.4, { count: 22, speed: 380 }), i * 120);
-      }
-    }
+    if (e.perfect) this.megaPerfect(gridBox, reduce);
     if (e.finale) this.finale(e.finale.bonus, gridBox, reduce);
     if (e.shake && !reduce) {
       const k = e.perfect || e.special === "blast" ? 12 : lines >= 3 || e.special === "bomb" ? 9 : 6;
@@ -332,8 +328,66 @@ export class BoardFxRunner {
   }
 
   /** Level won: a big banner, then every block left on the board bursts. */
+  /** Perfect clear: go all out, every time. */
+  private megaPerfect(gridBox: DOMRect, reduce: boolean): void {
+    this.banner(gridBox, "PERFECT CLEAR!", "is-best", reduce);
+    audio.vibrate([40, 60, 40, 60, 40, 60, 60, 80, 80]);
+    if (reduce) return;
+    const W = window.innerWidth;
+    const rainbow = ["#ff5f9e", "#ffc93c", "#6fe05a", "#5fd2ff", "#c26bff", "#ff8a3a"];
+    const cx = gridBox.left + gridBox.width / 2;
+    const cy = gridBox.top + gridBox.height / 2;
+    // Rainbow shock rings.
+    rainbow.forEach((col, i) => window.setTimeout(() => this.fx.ring(cx, cy, { color: col, from: 20, to: gridBox.width * 1.3, ms: 800, width: 12 }), i * 110));
+    // Confetti rain across the whole screen.
+    for (let i = 0; i < 8; i++) window.setTimeout(() => this.fx.burst("confetti", (W * (i + 0.5)) / 8, 0, { count: 26, speed: 300 }), i * 90);
+    // Two waves of fireworks.
+    for (let i = 0; i < 10; i++) window.setTimeout(() => this.firework(gridBox.left + gridBox.width * Math.random(), gridBox.top + gridBox.height * (0.05 + Math.random() * 0.6)), 150 + i * 180);
+    // The screen flashes through the rainbow.
+    rainbow.forEach((col, i) => window.setTimeout(() => this.screenGlow(col), i * 260));
+    // The board frame pulses.
+    this.frame.animate(
+      [{ scale: "1" }, { scale: "1.06" }, { scale: "0.98" }, { scale: "1.03" }, { scale: "1" }],
+      { duration: 900, easing: "ease-out" },
+    );
+  }
+
   private finale(bonus: number, gridBox: DOMRect, reduce: boolean): void {
-    const start = 520;
+    // First a rainbow wave rolls across the leftover blocks and the locked tray, with a buzz per beat.
+    const wave = reduce ? 0 : 900;
+    const start = 520 + wave;
+    if (!reduce) {
+      const cells = Array.from(this.grid.querySelectorAll<HTMLElement>("[data-cell] .pj-cube")).filter((el) => !el.classList.contains("is-ghost"));
+      cells.forEach((cube) => {
+        const [r, c] = cube.closest<HTMLElement>("[data-cell]")!.dataset.cell!.split("-").map(Number) as [number, number];
+        cube.animate(
+          [
+            { transform: "translateY(0) rotate(0) scale(1)", filter: "hue-rotate(0deg) brightness(1)" },
+            { transform: "translateY(-14px) rotate(180deg) scale(1.15)", filter: "hue-rotate(180deg) brightness(1.6)", offset: 0.5 },
+            { transform: "translateY(0) rotate(360deg) scale(1)", filter: "hue-rotate(360deg) brightness(1)" },
+          ],
+          { duration: 520, delay: 300 + (r + c) * 45, easing: "ease-in-out" },
+        );
+      });
+      for (let i = 0; i < 8; i++) window.setTimeout(() => audio.vibrate(i % 2 ? 8 : 14), 320 + i * 90);
+      const tray = Array.from(document.querySelectorAll<HTMLElement>(".pj-slot .pj-cube"));
+      tray.forEach((cube, i) => {
+        cube.animate(
+          [
+            { transform: "translateY(0) scale(1) rotate(0)", filter: "brightness(1) drop-shadow(0 0 0 #ffd257)" },
+            { transform: "translateY(-26px) scale(1.3) rotate(-12deg)", filter: "brightness(1.8) drop-shadow(0 0 10px #ffd257)", offset: 0.45 },
+            { transform: "translateY(-40px) scale(0) rotate(30deg)", filter: "brightness(2.5) drop-shadow(0 0 16px #fff)", opacity: 0 },
+          ],
+          { duration: 700, delay: 400 + i * 30, easing: "ease-in", fill: "forwards" },
+        );
+        if (i % 2 === 0) {
+          window.setTimeout(() => {
+            const b = cube.getBoundingClientRect();
+            this.fx.burst("sparkle", b.left + b.width / 2, b.top, { count: 5, color: ["#ffffff", "#ffd257", "#ff8ad8"], speed: 220, size: 5 });
+          }, 700 + i * 30);
+        }
+      });
+    }
     window.setTimeout(() => {
       this.banner(gridBox, "LEVEL COMPLETE!", "is-best", reduce);
       audio.feelLevelComplete();

@@ -10,7 +10,7 @@ function Page() {
       <p>Need help with Block Journey? Email <a href="mailto:sineusw@gmail.com" style={{ color: "#ffd23f" }}>sineusw@gmail.com</a> and we'll get back to you within 2 business days.</p>
       <h2 style={{ marginTop: 24 }}>Common questions</h2>
       <p><b>I bought something on a new phone and it's missing.</b> Open Settings in the game and tap Restore purchases (skins and one-time offers). Coins, gems and boosters are used up when bought and can't be restored.</p>
-      <p><b>How do I make power blocks?</b> Clear 2 lines at once for an arrow, 3 for a bomb, 4 for a golden block. A x5 combo or emptying the board earns a star color bomb.</p>
+      <p><b>How do I make power blocks?</b> Clear 2 lines at once for an arrow, 3 for a bomb, 4 for a golden block. A x10 combo or emptying the board earns a star color bomb.</p>
       <p><b>How do I reset my progress?</b> Settings → Reset progress. This can't be undone.</p>
     </main>
   );

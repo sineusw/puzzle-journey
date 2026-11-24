@@ -57,7 +57,7 @@ export type UnlockInfo = {
 };
 
 export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
-  stars: { id: "stars", kind: "block", name: "Star blocks", blurb: "Earn a star by emptying the whole board or hitting a x5 combo. Drop it anywhere and every block of its color pops!", art: "/art/tiles/star-blue.webp" },
+  stars: { id: "stars", kind: "block", name: "Star blocks", blurb: "Stars are rare: empty the whole board or hit a x10 combo to earn one. Drop it anywhere and every block of its color pops!", art: "/art/tiles/star-blue.webp" },
   arrows: { id: "arrows", kind: "block", name: "Arrow blocks", blurb: "Clear 2 lines at once to make an arrow block. Drop it anywhere: ZAP! Every block in its line disappears.", art: "/art/tiles/cyan.webp", special: "rocketV" },
   bombs: { id: "bombs", kind: "block", name: "Bomb blocks", blurb: "Clear 3 lines at once to make a bomb block. Drop it anywhere: BOOM! The blocks all around it disappear.", art: "/art/tiles/violet.webp", special: "bomb" },
   milo: { id: "milo", kind: "visitor", name: "Milo the Monkey", blurb: "Swings in, grabs a block and hops it somewhere new.", art: "/characters/milo-3d.webp" },
@@ -395,7 +395,17 @@ export type StarMoves = { three: number; two: number };
  * lines level are about equally hard to 3-star. Anything else falls back to
  * a formula.
  */
+/** Stars come easier than the bot calibration: 3 stars with 35% more moves, 2 stars with 50% more. */
+function generous(m: StarMoves): StarMoves {
+  const three = Math.round(m.three * 1.35);
+  return { three, two: Math.max(three + 3, Math.round(m.two * 1.5)) };
+}
+
 export function starMoves(goal: Goal, mode?: string | null, levelId?: number | null): StarMoves {
+  return generous(rawStarMoves(goal, mode, levelId));
+}
+
+function rawStarMoves(goal: Goal, mode?: string | null, levelId?: number | null): StarMoves {
   const fixed = (mode === "adventure" || mode === "classic") && levelId ? STAR_TABLE[mode][levelId] : undefined;
   if (fixed) return fixed;
   // Calibrated from bot runs (tools/simulate.ts) so generated islands earn

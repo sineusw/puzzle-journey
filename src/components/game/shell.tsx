@@ -1,3 +1,4 @@
+import { UndoResetBar } from "./hud-sheets";
 import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
 import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
@@ -116,6 +117,7 @@ export function GameShell() {
       <Overlays />
       <TutorialScreens />
       <NoticeHost />
+      <UndoResetBar />
       {/* Phones turned sideways would squeeze the board to tiny cells. */}
       <div className="pj-rotate" role="alert">
         <div className="pj-rotate-card">
@@ -140,27 +142,27 @@ function Hud() {
   const xpPct = Math.min(100, Math.round((xp / xpForLevel(level)) * 100));
   return (
     <header className="pj-hud">
-      <div className="pj-chip pj-chip-wide">
+      <button type="button" className="pj-chip pj-chip-wide" onClick={() => setPanel("level")} aria-label={`Level ${level}, see progress`}>
         <PalmBadge />
         <span className="tabular-nums pj-lv">Lv. {level}</span>
         <div className="pj-xp" aria-hidden="true">
           <span style={{ width: `${xpPct}%` }} />
         </div>
-      </div>
-      <div className="pj-chip">
+      </button>
+      <button type="button" className="pj-chip" onClick={() => setPanel("coins")} aria-label="Get coins">
         <GameIcon name="coin" className="pj-chip-ico" />
         <Counter value={coins} />
-        <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get coins">
+        <span className="pj-plus" aria-hidden="true">
           +
-        </button>
-      </div>
-      <div className="pj-chip">
+        </span>
+      </button>
+      <button type="button" className="pj-chip" onClick={() => setPanel("gems")} aria-label="Get gems">
         <GameIcon name="gem" className="pj-chip-ico" />
         <Counter value={gems} />
-        <button type="button" className="pj-plus" onClick={() => setPanel("shop")} aria-label="Get gems">
+        <span className="pj-plus" aria-hidden="true">
           +
-        </button>
-      </div>
+        </span>
+      </button>
       <div className="pj-chip pj-audio">
         <button
           type="button"

@@ -148,12 +148,29 @@ export function PlayArea() {
       const h = row.clientHeight;
       const max = parseFloat(getComputedStyle(frame).getPropertyValue("--pj-board-max")) || 480;
       const size = Math.max(160, Math.floor(Math.min(w, h, max)));
+      // Only resize for real layout changes (rotation, window size), not for
+      // banners and pop-ups coming and going, so the board never "breathes".
+      const prev = parseFloat(frame.style.getPropertyValue("--bs")) || 0;
+      if (prev && Math.abs(prev - size) < 28 && size < prev) return;
       frame.style.setProperty("--bs", `${size}px`);
     };
     fit();
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+    const onWin = () => {
+      if (Math.abs(window.innerWidth - lastW) < 2 && Math.abs(window.innerHeight - lastH) < 40) return;
+      lastW = window.innerWidth;
+      lastH = window.innerHeight;
+      frame.style.removeProperty("--bs");
+      fit();
+    };
+    window.addEventListener("resize", onWin);
     const ro = new ResizeObserver(fit);
     ro.observe(row);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onWin);
+    };
   }, []);
 
   // Board effects layer.
@@ -319,7 +336,8 @@ export function PlayArea() {
   const onPieceDown = useCallback((index: number, e: PE<HTMLButtonElement>) => {
     const { tray: t, over: o, visitorBusy: busy } = live.current;
     const piece = t[index];
-    if (o || busy || dropping.current || !piece || !gridRef.current) return;
+    // After a win the tray is locked: the pieces are part of the celebration.
+    if (o || busy || dropping.current || !piece || !gridRef.current || useGame.getState().match.won) return;
     const m = measure(gridRef.current);
     if (!m) return;
     e.preventDefault();
@@ -716,7 +734,7 @@ const TraySlot = memo(function TraySlot({
       onPointerDown={(e) => onDown(index, e)}
       onClick={(e) => {
         if (e.detail !== 0 || !piece) return;
-        useGame.getState().selectPiece(index);
+        if (!useGame.getState().match.won) useGame.getState().selectPiece(index);
       }}
       aria-label={piece ? `Next block ${index + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${index + 1}`}
     >

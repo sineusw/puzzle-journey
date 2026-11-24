@@ -1,8 +1,8 @@
+import { haptic, isNative } from "./native";
 type Bus = { ctx: AudioContext; master: GainNode; sfx: GainNode; music: GainNode; room: GainNode };
 
 let bus: Bus | null = null;
 let musicTimer: number | null = null;
-let track: HTMLAudioElement | null = null;
 let unlocked = false;
 let wantMusic = true;
 
@@ -92,17 +92,34 @@ function noise(dur: number, gain: number, dest: GainNode, when = 0, hp = 400): v
 export function unlockAudio(): void {
   const b = ensure();
   if (!b) return;
-  if (b.ctx.state === "suspended") void b.ctx.resume();
+  // iOS can leave the context "suspended" or "interrupted" (after a call, Siri,
+  // another app's audio, or the screen dimming); any state but running needs a resume.
+  if (b.ctx.state !== "running") void b.ctx.resume();
   unlocked = true;
   if (wantMusic) startMusic();
+  if (!gestureBound && typeof window !== "undefined") {
+    gestureBound = true;
+    // Every tap re-wakes audio, so sound never stays off after an interruption.
+    const wake = () => {
+      const bb = bus;
+      if (!bb) return;
+      if (bb.ctx.state !== "running") void bb.ctx.resume();
+      if (wantMusic && unlocked && !musicSrc) startMusic();
+    };
+    window.addEventListener("pointerdown", wake, { passive: true });
+    b.ctx.addEventListener("statechange", () => {
+      if (b.ctx.state === "running" && wantMusic && unlocked && !musicSrc) startMusic();
+    });
+  }
 }
+let gestureBound = false;
 
 export function setMuted(sfxOn: boolean, musicOn: boolean): void {
   const b = ensure();
   if (!b) return;
   wantMusic = musicOn;
   b.sfx.gain.setTargetAtTime(sfxOn ? 0.78 : 0, b.ctx.currentTime, 0.04);
-  b.music.gain.setTargetAtTime(musicOn ? 0.22 : 0, b.ctx.currentTime, 0.08);
+  b.music.gain.setTargetAtTime(musicOn ? 0.3 : 0, b.ctx.currentTime, 0.08);
   if (musicOn) startMusic();
   else stopMusic();
 }
@@ -229,43 +246,77 @@ export function sfxCoin(): void {
 }
 
 export function sfxUi(): void {
+  vibrate(8);
   const b = ensure();
   if (!b) return;
   tone(700 + Math.random() * 40, 0.07, "sine", 0.065, b.sfx);
   tone(1050, 0.065, "triangle", 0.022, b.sfx, 0.018);
 }
 
-function ensureTrack(): HTMLAudioElement | null {
-  if (typeof window === "undefined") return null;
-  if (track) return track;
-  // Ogg where it plays (smaller); MP3 everywhere else (older iOS Safari has no Ogg).
+
+/*
+ * Background music plays through the same AudioContext as the sound effects
+ * (a decoded, looping buffer), not an <audio> element. On iPhone an <audio>
+ * element and Web Audio fight over the audio session: the track would stop
+ * after a while and effects would cut in and out.
+ */
+let musicSrc: AudioBufferSourceNode | null = null;
+let musicBuf: AudioBuffer | null = null;
+let musicLoading = false;
+
+function loadMusic(b: Bus): void {
+  if (musicBuf || musicLoading) return;
+  musicLoading = true;
   const probe = document.createElement("audio");
-  const ogg = probe.canPlayType('audio/ogg; codecs="vorbis"') !== "";
-  const el = new Audio(ogg ? "/music/island-small.ogg" : "/music/island.mp3");
-  el.loop = true;
-  el.preload = "auto";
-  el.volume = 0.34;
-  track = el;
-  return el;
+  const url = probe.canPlayType('audio/ogg; codecs="vorbis"') !== "" ? "/music/island-small.ogg" : "/music/island.mp3";
+  fetch(url)
+    .then((r) => r.arrayBuffer())
+    .then((data) => new Promise<AudioBuffer>((res, rej) => b.ctx.decodeAudioData(data, res, rej)))
+    .then((buf) => {
+      musicBuf = buf;
+      musicLoading = false;
+      if (wantMusic && unlocked) startMusic();
+    })
+    .catch(() => {
+      musicLoading = false;
+      startFallbackMusic();
+    });
 }
 
 function startMusic(): void {
   if (!unlocked || !wantMusic) return;
-  const el = ensureTrack();
-  if (el) {
-    el.volume = 0.34;
-    const play = el.play();
-    if (play && typeof play.catch === "function") play.catch(() => startFallbackMusic());
-    stopFallbackMusic();
+  const b = ensure();
+  if (!b) return;
+  if (!musicBuf) {
+    loadMusic(b);
     return;
   }
-  startFallbackMusic();
+  if (musicSrc) return;
+  stopFallbackMusic();
+  const src = b.ctx.createBufferSource();
+  src.buffer = musicBuf;
+  src.loop = true;
+  src.connect(b.music);
+  b.music.gain.setTargetAtTime(0.3, b.ctx.currentTime, 0.2);
+  src.onended = () => {
+    if (musicSrc === src) musicSrc = null;
+    // A loop only "ends" if the system stopped it: start it again.
+    if (wantMusic && unlocked) window.setTimeout(startMusic, 300);
+  };
+  src.start();
+  musicSrc = src;
 }
 
 function stopMusic(): void {
-  if (track) {
-    track.pause();
-    track.currentTime = 0;
+  if (musicSrc) {
+    const src = musicSrc;
+    musicSrc = null;
+    src.onended = null;
+    try {
+      src.stop();
+    } catch {
+      /* already stopped */
+    }
   }
   stopFallbackMusic();
 }
@@ -347,10 +398,8 @@ export function bindAudioLifecycle(): () => void {
   const onVis = () => {
     if (document.visibilityState === "visible") {
       const b = ensure();
-      if (b && b.ctx.state === "suspended") void b.ctx.resume();
-      if (wantMusic && unlocked) void track?.play().catch(() => undefined);
-    } else {
-      track?.pause();
+      if (b && b.ctx.state !== "running") void b.ctx.resume();
+      if (wantMusic && unlocked && !musicSrc) startMusic();
     }
   };
   document.addEventListener("visibilitychange", onVis);
@@ -490,8 +539,25 @@ function thock(pitch: number, when: number, gain = 0.22): void {
   };
 }
 
-function vibrate(pattern: number | number[]): void {
+/**
+ * Vibration: the iPhone app uses the Taptic Engine (Capacitor Haptics); the
+ * web uses navigator.vibrate where it exists (Android). Patterns are
+ * [buzz, pause, buzz, ...] in ms; longer buzzes feel heavier.
+ */
+export function vibrate(pattern: number | number[]): void {
   try {
+    const p = Array.isArray(pattern) ? pattern : [pattern];
+    if (isNative()) {
+      let t = 0;
+      p.forEach((ms, i) => {
+        if (i % 2 === 0) {
+          const style = ms >= 30 ? "HEAVY" : ms >= 14 ? "MEDIUM" : "LIGHT";
+          window.setTimeout(() => haptic(style), t);
+        }
+        t += ms;
+      });
+      return;
+    }
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(pattern);
   } catch {
     /* not supported */
@@ -507,12 +573,14 @@ export function feelPickup(): void {
 
 /** The dragged piece snapped to a new cell: a tiny tactile tick. */
 export function feelSnap(row: number): void {
+  vibrate(4);
   if (!ensure()) return;
   mallet(note(10 + (7 - Math.max(0, Math.min(7, row))) % 5), 0, 0.022, 0.05);
 }
 
 /** The piece is over a spot that would clear lines: an inviting shimmer. */
 export function feelWouldClear(lines: number): void {
+  vibrate(lines >= 2 ? [12, 40, 12] : 12);
   if (!ensure()) return;
   bell(note(7 + Math.min(lines, 4)), 0, 0.03, 0.5);
 }
@@ -527,6 +595,7 @@ export function feelPlace(cells: number): void {
 
 /** Drop that didn't fit: a gentle, muted bump (not a harsh buzzer). */
 export function feelNope(): void {
+  vibrate([8, 50, 8]);
   if (!ensure()) return;
   thock(120, 0, 0.12);
   mallet(note(0) / 2, 0.02, 0.05, 0.16);
@@ -558,6 +627,7 @@ export function feelClear(delays: number[], lines: number, combo: number): void 
 
 /** Combo stinger: a quick rising run that gets longer with the streak. */
 export function feelCombo(combo: number): void {
+  vibrate(Array.from({ length: Math.min(6, combo) }, (_, i) => (i % 2 ? 35 : 16 + i * 4)));
   if (!ensure()) return;
   const n = Math.min(2 + combo, 7);
   const base = Math.min(combo + 2, 8);
@@ -566,6 +636,7 @@ export function feelCombo(combo: number): void {
 
 /** Praise jingle, escalating with the size of the clear. */
 export function feelPraise(tier: number): void {
+  vibrate(tier >= 3 ? [30, 40, 30, 40, 40] : tier >= 2 ? [20, 40, 24] : 16);
   if (!ensure()) return;
   const runs = [
     [5, 7],
@@ -595,12 +666,14 @@ export function feelComboWarning(): void {
 
 /** Goal milestone (halfway / almost there). */
 export function feelMilestone(): void {
+  vibrate([18, 50, 30]);
   if (!ensure()) return;
   [3, 5, 8].forEach((n, i) => bell(note(n), i * 0.08, 0.05, 0.8));
 }
 
 /** Beat your best score mid-run. */
 export function feelNewBest(): void {
+  vibrate([20, 40, 20, 40, 20, 40, 40]);
   if (!ensure()) return;
   [0, 4, 7, 12].forEach((n, i) => mallet(note(n + 2), i * 0.09, 0.12, 0.5));
   bell(note(14), 0.42, 0.08, 1.4);
@@ -639,6 +712,7 @@ export function feelLevelComplete(): void {
 
 /** Out of moves: warm and encouraging, not a failure buzzer. */
 export function feelRoundOver(): void {
+  vibrate([40, 80, 30]);
   if (!ensure()) return;
   [[7, 0], [5, 0.16], [4, 0.32], [5, 0.56]].forEach(([n, t]) => mallet(note(n!), t!, 0.1, 0.6));
   bell(note(7), 0.6, 0.05, 1.4);
@@ -646,6 +720,7 @@ export function feelRoundOver(): void {
 
 /** Coins landing in the purse. */
 export function feelCoins(n: number): void {
+  vibrate(Array.from({ length: Math.min(8, Math.max(2, n)) * 2 - 1 }, (_, i) => (i % 2 ? 45 : 8)));
   if (!ensure()) return;
   for (let i = 0; i < Math.min(n, 6); i++) bell(note(10 + (i % 3)), i * 0.07, 0.035, 0.4);
 }
@@ -665,15 +740,12 @@ function drum(pitch: number, when: number, gain = 0.2): void {
 let duckTimer: number | null = null;
 /** Lower the background music while a visitor's theme plays. */
 function duckMusic(ms: number): void {
-  const el = track;
   const b = bus;
-  if (el && !el.paused) el.volume = 0.1;
   if (b) b.music.gain.setTargetAtTime(wantMusic ? 0.06 : 0, b.ctx.currentTime, 0.08);
   if (duckTimer !== null) window.clearTimeout(duckTimer);
   duckTimer = window.setTimeout(() => {
     duckTimer = null;
-    if (track && wantMusic) track.volume = 0.34;
-    if (bus) bus.music.gain.setTargetAtTime(wantMusic ? 0.22 : 0, bus.ctx.currentTime, 0.3);
+    if (bus) bus.music.gain.setTargetAtTime(wantMusic ? 0.3 : 0, bus.ctx.currentTime, 0.3);
   }, ms);
 }
 

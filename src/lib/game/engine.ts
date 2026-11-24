@@ -1410,7 +1410,8 @@ export function placePiece(
     const f = next.features;
     const hasArrow = f.specials.includes("rocketH") || f.specials.includes("rocketV");
     const lines = clear.lines;
-    const comboMilestone = next.combo >= 5 && next.combo % 5 === 0 && next.combo !== match.combo;
+    // The star is rare: only a perfect clear or a x10 combo (x20, x30...) makes one.
+    const comboMilestone = next.combo >= 10 && next.combo % 10 === 0 && next.combo !== match.combo;
     if ((perfect || comboMilestone) && f.stars) earned.push("star");
     if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
     else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");

@@ -83,9 +83,9 @@ export const SHOP: ShopItem[] = [
   { id: "coins1", section: "coins", name: "Pile of Coins", blurb: "", art: ["/icons/coin.webp"], qty: "1,200", gems: 60, usd: 0.99, grant: { coins: 1200 } },
   { id: "coins2", section: "coins", name: "Bag of Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp"], qty: "6,500", gems: 300, usd: 4.99, grant: { coins: 6500 }, tag: "Popular" },
   { id: "coins3", section: "coins", name: "Chest of Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp", "/icons/coin.webp"], qty: "15,000", gems: 650, usd: 9.99, grant: { coins: 15000 }, tag: "Best value" },
-  { id: "gems1", section: "gems", name: "Handful of Gems", blurb: "", art: ["/icons/gem.webp"], qty: "120", usd: 1.99, grant: { gems: 120 } },
-  { id: "gems2", section: "gems", name: "Pouch of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp"], qty: "650", usd: 9.99, grant: { gems: 650 }, tag: "Popular" },
-  { id: "gems3", section: "gems", name: "Vault of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp", "/icons/gem.webp"], qty: "1,500", usd: 19.99, grant: { gems: 1500 }, tag: "Best value" },
+  { id: "gems1", section: "gems", name: "Handful of Gems", blurb: "", art: ["/icons/gem.webp"], qty: "120", coins: 3000, usd: 1.99, grant: { gems: 120 } },
+  { id: "gems2", section: "gems", name: "Pouch of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp"], qty: "650", coins: 16000, usd: 9.99, grant: { gems: 650 }, tag: "Popular" },
+  { id: "gems3", section: "gems", name: "Vault of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp", "/icons/gem.webp"], qty: "1,500", coins: 36000, usd: 19.99, grant: { gems: 1500 }, tag: "Best value" },
 ];
 
 /** Everything that can be paid for with real money: shop items and skins. */

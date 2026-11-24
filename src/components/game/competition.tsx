@@ -1,3 +1,4 @@
+import { celebrateClaim } from "./claim-fx";
 /**
  * Challenges and Leaderboard screens: built to feel like a competition.
  * Challenges fill up while you play; the board shows a podium, medals,
@@ -138,6 +139,7 @@ function ChallengeCard({ c, value, done, claimed }: { c: ChallengeDef; value: nu
           data-testid={`claim-${c.id}`}
           onClick={(e) => {
             flyCoins(e.currentTarget);
+            celebrateClaim(e, true);
             claim(c.id);
           }}
         >
@@ -283,7 +285,7 @@ function rivalLine(board: BoardState, cats: Category[], today: string): string |
   return best?.text ?? null;
 }
 
-function Podium({ cat, board, today }: { cat: Category; board: BoardState; today: string }) {
+export function Podium({ cat, board, today }: { cat: Category; board: BoardState; today: string }) {
   const r = rank(cat, board.cards, today).slice(0, 3);
   const order = [r[1], r[0], r[2]];
   return (
@@ -399,32 +401,17 @@ export function RanksScreen() {
   const cats = all.filter((c) => c.scope === scope);
   const players = Object.keys(board.cards).length;
   const crowns = all.filter((c) => rank(c, board.cards, today)[0]?.id === board.myId).length;
-  const rival = players > 1 ? rivalLine(board, all, today) : null;
-  // Featured category rotates daily, among ones with entries.
-  const withEntries = cats.filter((c) => rank(c, board.cards, today).length > 0);
-  const featured = withEntries.length ? withEntries[Number(today.replace(/-/g, "")) % withEntries.length]! : null;
   return (
     <div data-testid="ranks">
-      <div className="pj-comp-hero">
-        <div>
-          <h2 className="font-display text-2xl">Leaderboard</h2>
-          <p className="text-sm text-muted">
-            {board.mode === "shared"
-              ? `${players} ${players === 1 ? "player" : "players"} competing${board.canPost ? "" : " · ask the owner for edit access to post"}`
-              : "Your records. Play on the shared game page to compete with friends."}
-          </p>
-        </div>
-        <div className="pj-crowns" aria-label={`You lead ${crowns} categories`}>
-          <strong>👑 {crowns}</strong>
-          <span>crowns</span>
-        </div>
+      <div className="pj-comp-hero is-simple">
+        <h2 className="font-display text-2xl">Leaderboard</h2>
+        <p className="pj-lb-help">
+          Each card is one skill. You see the <b>top 3</b> and <b>your spot</b>. Lead a card to win its 👑 crown
+          {crowns ? ` (you hold ${crowns})` : ""}.
+        </p>
       </div>
 
       <VerifiedBoard />
-
-      <div className="pj-standing">
-        {rival ? <p>⚔️ {rival}</p> : players > 1 ? <p>👑 You lead every category you’ve played. Defend your crowns!</p> : <p>🏝️ You’re the only one here so far. Invite a friend and race for the crowns.</p>}
-      </div>
 
       <div className="pj-modes mt-3" role="tablist" aria-label="Leaderboard period">
         {(
@@ -440,7 +427,6 @@ export function RanksScreen() {
       </div>
       {scope === "today" ? <p className="pj-timer mt-2">⏳ Today’s boards reset in {span(untilMidnight(now))}</p> : null}
 
-      {featured ? <Podium cat={featured} board={board} today={today} /> : null}
 
       <div className="mt-3 space-y-2">
         {cats.map((cat) => {
