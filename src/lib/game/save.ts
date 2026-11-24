@@ -53,6 +53,10 @@ export type Profile = {
   chest: number;
   /** Last time the player was in the game (for the welcome-back gift). */
   lastActive: number;
+  /** Daily puzzle: last day solved, current streak, and moves used that day. */
+  puzzleDay: number;
+  puzzleStreak: number;
+  puzzleMoves: number;
   match: Match | null;
 };
 
@@ -92,6 +96,9 @@ export function defaultProfile(): Profile {
     levelStreak: 0,
     chest: 0,
     lastActive: 0,
+    puzzleDay: 0,
+    puzzleStreak: 0,
+    puzzleMoves: 0,
     skin: "classic",
     live: emptyLive(),
     seenHowTo: false,
@@ -136,6 +143,9 @@ function migrate(raw: Profile): Profile {
     levelStreak: raw.levelStreak ?? 0,
     chest: raw.chest ?? 0,
     lastActive: raw.lastActive ?? 0,
+    puzzleDay: raw.puzzleDay ?? 0,
+    puzzleStreak: raw.puzzleStreak ?? 0,
+    puzzleMoves: raw.puzzleMoves ?? 0,
     live: normalizeLive(raw.live),
     // Version 3 introduced game modes. Keep currency and progress, but start
     // the player on a fresh run so an old special-filled board doesn't carry
@@ -155,7 +165,7 @@ function migrate(raw: Profile): Profile {
 }
 
 /** Counters that must be whole, non-negative numbers. */
-const COUNTERS = ["coins", "gems", "xp", "highScore", "bestCombo", "games", "sandboxBest", "levelStreak", "chest", "lastActive"] as const;
+const COUNTERS = ["coins", "gems", "xp", "highScore", "bestCombo", "games", "sandboxBest", "levelStreak", "chest", "lastActive", "puzzleDay", "puzzleStreak", "puzzleMoves"] as const;
 
 /** Read a save blob; null if it is missing or not a usable save. */
 export function parseSave(blob: string | null): Profile | null {

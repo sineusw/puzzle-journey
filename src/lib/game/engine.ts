@@ -92,6 +92,10 @@ export type Match = {
   tray: Array<Piece | null>;
   /** The set dealt after this tray, shown as "Up next" so players can plan ahead. */
   next?: Piece[] | null;
+  /** Daily puzzle day number (same board and deals for everyone that day). */
+  daily?: number;
+  /** Gems placed on the board at the start (a gem goal can need fewer than this). */
+  gemsTotal?: number;
   /**
    * Earned power blocks (from big clears, combos, perfect clears, win streaks),
    * dealt into the next tray once the board has blocks for them to hit.
@@ -1027,7 +1031,7 @@ function updateGoal(match: Match): void {
     // Gems are collected by clearing the blocks that hold them.
     let left = 0;
     for (const row of match.board) for (const cell of row) if (cell.t === "b" && cell.gm) left++;
-    match.goalProgress = Math.max(0, match.goal.value - left);
+    match.goalProgress = Math.max(0, Math.min(match.goal.value, (match.gemsTotal ?? match.goal.value) - left));
   }
   else match.goalProgress = match.bestCombo;
   match.won = match.goalProgress >= match.goal.value;
@@ -1346,6 +1350,7 @@ export function newLevelMatch(
   match.mode = mode;
   match.levelId = levelId;
   match.goal = goal;
+  if (goal.type === "gems") match.gemsTotal = board.flat().filter((c) => c.t === "b" && c.gm).length;
   fillTray(match, rng, levelId <= 2);
   updateGoal(match);
   return match;
@@ -1584,4 +1589,43 @@ export function cellColor(cell: Cell): ColorId | "stone" | "crate" | "wall" | nu
 
 export function pieceFits(match: Match, piece: Piece): boolean {
   return canPlaceAnywhere(match.board, piece.cells);
+}
+
+/** Day 1 of the daily puzzle. */
+export const DAILY_EPOCH = Date.UTC(2026, 10, 24);
+
+/** Today's daily puzzle number (local calendar day). */
+export function dailyNumber(now = new Date()): number {
+  const local = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(1, Math.floor((local - DAILY_EPOCH) / 86_400_000) + 1);
+}
+
+/** The daily puzzle's goal: a weekly rhythm of lines, score and combo days. */
+export function dailyGoal(day: number): Goal {
+  const kind = day % 3;
+  if (kind === 0) return { type: "combo", value: 4 };
+  if (kind === 1) return { type: "lines", value: 8 };
+  return { type: "score", value: 1500 };
+}
+
+/**
+ * The daily puzzle: one board for everyone. The starting blocks, stones and
+ * every tray dealt come from the day number, so friends can compare results.
+ */
+export function newDailyMatch(day: number): Match {
+  const rng = mulberry32(day * 7919 + 1301);
+  const features = cloneFeatures(PLAIN_FEATURES);
+  features.stones = true;
+  const board = emptyBoard();
+  applyLayout(board, { fill: 0.18 + (day % 4) * 0.03, gems: 0 }, rng);
+  sprinkleStones(board, 2 + (day % 3), rng);
+  const match = blankMatch(features);
+  match.board = board;
+  match.mode = "challenge";
+  match.daily = day;
+  match.seed = (day * 2654435761) >>> 0;
+  match.goal = dailyGoal(day);
+  fillTray(match, dealRng(match), false);
+  updateGoal(match);
+  return match;
 }

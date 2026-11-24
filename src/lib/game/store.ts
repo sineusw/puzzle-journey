@@ -17,6 +17,8 @@ import {
   type ColorId,
   type Match,
   type BonusId,
+  newDailyMatch,
+  dailyNumber,
   emptyBoard,
 
 } from "./engine";
@@ -234,6 +236,7 @@ type GameStore = {
   startSandbox: () => void;
   /** Start a Sandbox run dealt from a server seed; its score is verified when it ends. */
   startRanked: () => Promise<boolean>;
+  startDaily: () => void;
   startChallenge: (id: string) => void;
   continueRun: () => void;
   claimDaily: () => void;
@@ -634,6 +637,22 @@ export const useGame = create<GameStore>((set, get) => ({
             },
           };
         }
+      } else if (result.match.mode === "challenge" && result.match.daily) {
+        // Daily puzzle: first solve of the day pays out and extends the streak.
+        const day = result.match.daily;
+        if (nextProfile.puzzleDay !== day) {
+          const streak = nextProfile.puzzleDay === day - 1 ? nextProfile.puzzleStreak + 1 : 1;
+          nextProfile = {
+            ...nextProfile,
+            puzzleDay: day,
+            puzzleStreak: streak,
+            puzzleMoves: result.match.moves,
+            coins: nextProfile.coins + 100 + Math.min(10, streak) * 10,
+            gems: nextProfile.gems + 5,
+          };
+        } else {
+          nextProfile = { ...nextProfile, puzzleMoves: Math.min(nextProfile.puzzleMoves || 999, result.match.moves) };
+        }
       } else if (result.match.mode === "challenge") {
         const ch = CHALLENGES.find((c) => c.goal.type === result.match.goal?.type && c.goal.value === result.match.goal.value);
         nextProfile = {
@@ -845,6 +864,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const id = match.levelId;
     if (match.mode === "adventure" && id) return get().startAdventure(id);
     if (match.mode === "classic" && id) return get().startClassic(id);
+    if (match.mode === "challenge" && match.daily) return get().startDaily();
     if (match.mode === "challenge") {
       const ch = CHALLENGES.find((c) => c.goal.type === match.goal?.type && c.goal.value === match.goal?.value);
       if (ch) return get().startChallenge(ch.id);
@@ -920,6 +940,11 @@ export const useGame = create<GameStore>((set, get) => ({
     audio.sfxUi();
     beginRun(get, set, withStreakBoosters(newLevelMatch("classic", level.id, level.goal, 0, PLAIN_FEATURES), get().profile.levelStreak));
     streakBanner(set, get().profile.levelStreak);
+  },
+
+  startDaily: () => {
+    audio.sfxUi();
+    beginRun(get, set, newDailyMatch(dailyNumber()));
   },
 
   startChallenge: (id) => {

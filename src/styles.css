@@ -3973,7 +3973,7 @@ svg.pj-sp { display: block; max-width: none; }
 @keyframes pj-lobby-pulse { 50% { transform: scale(1.04); filter: brightness(1.08); } }
 .pj-lobby-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 10px; }
 .pj-lobby-chips span { font-size: 0.75rem; font-weight: 800; padding: 4px 10px; border-radius: 99px; color: #ffcf8a; background: rgb(255 140 40 / 0.14); border: 1px solid rgb(255 160 60 / 0.35); }
-.pj-lobby-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(100%, 380px); }
+.pj-lobby-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(100%, 380px); max-width: calc(var(--n, 5) * 76px); }
 .pj-lobby-tile { position: relative; display: grid; justify-items: center; gap: 3px; padding: 8px 2px 6px; border-radius: 16px; font-size: 0.62rem; letter-spacing: -0.01em; font-weight: 800; color: var(--color-cream); white-space: nowrap;
   background: linear-gradient(180deg, rgb(60 100 170 / 0.85), rgb(26 48 90 / 0.9)); border: 2px solid rgb(255 255 255 / 0.14); box-shadow: 0 4px 0 rgb(0 0 0 / 0.35); }
 .pj-lobby-tile:active { transform: translateY(3px); box-shadow: 0 1px 0 rgb(0 0 0 / 0.35); }
@@ -4046,3 +4046,4 @@ svg.pj-sp { display: block; max-width: none; }
 .pj-chest.is-open b { color: #ffd23f; font-family: var(--font-display); font-size: 0.95rem; }
 .pj-chest.is-open > span:last-child { flex-basis: 100%; text-align: center; color: var(--color-cream); }
 @media (prefers-reduced-motion: reduce) { .pj-well.is-almost { animation: none; } }
+.pj-emoji-ico { font-size: 26px; line-height: 1; }

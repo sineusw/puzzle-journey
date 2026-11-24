@@ -297,7 +297,8 @@ function TitleBar() {
   );
 }
 
-function modeLabel(match: { mode: string; levelId: number | null }): string {
+function modeLabel(match: { mode: string; levelId: number | null; daily?: number }): string {
+  if (match.daily) return `Daily puzzle #${match.daily} · same board for everyone`;
   if (match.mode === "adventure") {
     const lvl = ADVENTURE.find((l) => l.id === match.levelId);
     return lvl ? `Adventure · Island ${lvl.id} · ${lvl.name}` : "Adventure";

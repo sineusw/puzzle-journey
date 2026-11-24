@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
+import { dailyNumber } from "@/lib/game/engine";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
 import { normalizeLive } from "@/lib/game/liveops";
 import { CHEST_SIZE, useGame } from "@/lib/game/store";
@@ -15,6 +16,7 @@ export function LobbyScreen() {
   const startAdventure = useGame((s) => s.startAdventure);
   const setTab = useGame((s) => s.setTab);
   const setPanel = useGame((s) => s.setPanel);
+  const startDaily = useGame((s) => s.startDaily);
   const [now, setNow] = useState(() => Date.now());
   const [top, setTop] = useState<BoardRow[] | null>(null);
 
@@ -42,15 +44,26 @@ export function LobbyScreen() {
   const dailyReady = reached >= FEATURE_AT.daily && now >= profile.daily.nextAt;
   const spinReady = reached >= FEATURE_AT.spin && !normalizeLive(profile.live).spin.free;
 
+  const today = dailyNumber(new Date(now));
+  const puzzleReady = profile.puzzleDay !== today;
   const play = () => (inProgress ? setTab("home") : startAdventure(playId));
 
   const tiles: Array<{ f: FeatureId | null; label: string; icon: React.ReactNode; dot?: boolean; go: () => void }> = [
+    { f: "daily", label: "Puzzle", icon: <span className="pj-emoji-ico">🧩</span>, dot: puzzleReady, go: () => startDaily() },
     { f: "daily", label: "Daily", icon: <GameIcon name="daily" />, dot: dailyReady, go: () => setPanel("daily") },
     { f: "spin", label: "Spin", icon: <span className="pj-spin-ico" aria-hidden="true" />, dot: spinReady, go: () => setPanel("spin") },
     { f: "shop", label: "Shop", icon: <GameIcon name="shop" />, go: () => setPanel("shop") },
     { f: null, label: "Skins", icon: <Palette strokeWidth={2.4} />, go: () => setTab("skins") },
     { f: "challenges", label: "Challenges", icon: <GameIcon name="quests" />, go: () => setTab("challenges") },
   ];
+
+  // New players see only what they can use, plus one teaser for the next unlock.
+  const open = tiles.filter((t) => t.f === null || reached >= FEATURE_AT[t.f]);
+  const nextLocked = tiles
+    .filter((t) => t.f !== null && reached < FEATURE_AT[t.f])
+    .sort((a, b) => FEATURE_AT[a.f!] - FEATURE_AT[b.f!])[0];
+  const shown = nextLocked ? [...open, nextLocked] : open;
+  const showBoard = reached >= 4;
 
   return (
     <div className="pj-lobby" data-testid="lobby">
@@ -86,8 +99,8 @@ export function LobbyScreen() {
         </div>
       </div>
 
-      <div className="pj-lobby-tiles">
-        {tiles.map((t) => {
+      <div className="pj-lobby-tiles" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)`, ["--n" as string]: shown.length }}>
+        {shown.map((t) => {
           const locked = t.f !== null && reached < FEATURE_AT[t.f];
           return (
             <button
@@ -104,7 +117,7 @@ export function LobbyScreen() {
         })}
       </div>
 
-      <button type="button" className="pj-lobby-ranks" onClick={() => setTab("ranks")}>
+      {showBoard ? <button type="button" className="pj-lobby-ranks" onClick={() => setTab("ranks")}>
         <div className="pj-lobby-ranks-head">
           <Trophy className="size-5" />
           <b>Leaderboard</b>
@@ -123,7 +136,7 @@ export function LobbyScreen() {
         ) : (
           <p>Your best score: <b className="tabular-nums">{profile.highScore.toLocaleString("en-US")}</b> · Play a ranked run to get on the board</p>
         )}
-      </button>
+      </button> : null}
     </div>
   );
 }
@@ -171,5 +184,27 @@ export async function shareRun(score: number, combo: number, levelId: number | n
     window.setTimeout(() => useGame.setState({ toast: null }), 2000);
   } catch {
     // Share sheet closed: nothing to do.
+  }
+}
+
+/** Wordle-style daily puzzle result for group chats. */
+export async function shareDaily(day: number, moves: number, stars: number, streak: number): Promise<void> {
+  const url = typeof location !== "undefined" ? location.origin : "";
+  const text = [
+    `Block Journey Daily #${day} 🧩`,
+    `${"⭐".repeat(stars)}${"▫️".repeat(3 - stars)} solved in ${moves} moves`,
+    streak > 1 ? `🔥 ${streak}-day streak` : "",
+    "Can you do it in fewer?",
+  ].filter(Boolean).join("\n");
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: `Block Journey Daily #${day}`, text, url });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    useGame.setState({ toast: "Copied! Paste it in your group chat." });
+    window.setTimeout(() => useGame.setState({ toast: null }), 2000);
+  } catch {
+    // Share sheet closed.
   }
 }

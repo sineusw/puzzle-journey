@@ -1,4 +1,4 @@
-import { LobbyScreen, ChestBar, shareRun } from "./lobby";
+import { LobbyScreen, ChestBar, shareRun, shareDaily } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Crown,
@@ -805,10 +805,22 @@ function WonSheet() {
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
         ) : null}
         <div className="pj-won-actions">
-          <button type="button" className="pj-btn pj-btn-ghost" onClick={() => shareRun(match.score, match.bestCombo, match.levelId)}>
+          <button
+            type="button"
+            className="pj-btn pj-btn-ghost"
+            onClick={() =>
+              match.daily
+                ? shareDaily(match.daily, match.moves, starsFor(match.goal, match.moves, match.mode, match.levelId), useGame.getState().profile.puzzleStreak)
+                : shareRun(match.score, match.bestCombo, match.levelId)
+            }
+          >
             Share
           </button>
-          {nextOpen && nextId ? (
+          {match.daily ? (
+            <button type="button" className="pj-btn pj-btn-primary pj-won-next" onClick={() => setTab("lobby")}>
+              Home ▶
+            </button>
+          ) : nextOpen && nextId ? (
             <button
               type="button"
               className="pj-btn pj-btn-primary pj-won-next"

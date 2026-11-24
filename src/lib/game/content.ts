@@ -143,19 +143,19 @@ export const WAVE = [0.85, 0.9, 1.15, 0.8, 1, 0.9, 1.15, 0.8, 0.95, 1.1, 0.85, 1
 
 export const ADVENTURE: AdventureLevel[] = [
   { id: 1, name: "Shore", blurb: "Score 400 to leave the beach.", goal: { type: "score", value: 400 }, stones: 0, reward: { coins: 40, gems: 4 } },
-  { id: 2, name: "Palms", blurb: "Clear 6 lines under the palms.", goal: { type: "lines", value: 6 }, stones: 0, reward: { coins: 50, gems: 5 }, introduces: "stars" },
+  { id: 2, name: "Palms", blurb: "Clear 5 lines under the palms.", goal: { type: "lines", value: 5 }, stones: 0, reward: { coins: 50, gems: 5 }, introduces: "stars" },
   { id: 3, name: "Cove", blurb: "Score 700 in the cove.", goal: { type: "score", value: 700 }, stones: 0, reward: { coins: 60, gems: 6 }, introduces: "arrows" },
   { id: 4, name: "Falls", blurb: "Reach a x3 combo by the waterfall.", goal: { type: "combo", value: 3 }, stones: 0, reward: { coins: 70, gems: 6 } },
-  { id: 5, name: "Lanterns", blurb: "Clear 10 lines by lantern light.", goal: { type: "lines", value: 10 }, stones: 0, reward: { coins: 80, gems: 8 }, introduces: "bombs" },
+  { id: 5, name: "Lanterns", blurb: "Clear 7 lines by lantern light.", goal: { type: "lines", value: 7 }, stones: 0, reward: { coins: 80, gems: 8 }, introduces: "bombs" },
   { id: 6, name: "Cliff", blurb: "Score 1,000 on the cliff.", goal: { type: "score", value: 1000 }, stones: 0, reward: { coins: 90, gems: 8 }, introduces: "milo" },
-  { id: 7, name: "Ruins", blurb: "Clear 11 lines among cracked ruins.", goal: { type: "lines", value: 11 }, stones: 3, reward: { coins: 100, gems: 10 }, introduces: "stones" },
+  { id: 7, name: "Ruins", blurb: "Clear 8 lines among cracked ruins.", goal: { type: "lines", value: 8 }, stones: 3, reward: { coins: 100, gems: 10 }, introduces: "stones" },
   { id: 8, name: "Quarry", blurb: "Score 1,350 in the old quarry.", goal: { type: "score", value: 1350 }, stones: 4, reward: { coins: 110, gems: 10 }, introduces: "kai" },
   { id: 9, name: "Temple", blurb: "Reach a x4 combo at the temple.", goal: { type: "combo", value: 4 }, stones: 4, reward: { coins: 130, gems: 12 }, introduces: "luna" },
   { id: 10, name: "Summit", blurb: "Score 1,800 on the summit.", goal: { type: "score", value: 1800 }, stones: 5, reward: { coins: 150, gems: 14 }, introduces: "blast" },
-  { id: 11, name: "Grotto", blurb: "Clear 16 lines in the glowing grotto.", goal: { type: "lines", value: 16 }, stones: 5, reward: { coins: 160, gems: 14 }, introduces: "nia" },
+  { id: 11, name: "Grotto", blurb: "Clear 10 lines in the glowing grotto.", goal: { type: "lines", value: 10 }, stones: 5, reward: { coins: 160, gems: 14 }, introduces: "nia" },
   { id: 12, name: "Reef", blurb: "Score 2,500 over the reef.", goal: { type: "score", value: 2500 }, stones: 5, reward: { coins: 170, gems: 16 }, introduces: "pip" },
-  { id: 13, name: "Lagoon", blurb: "Reach a x5 combo across the lagoon.", goal: { type: "combo", value: 5 }, stones: 6, reward: { coins: 180, gems: 16 } },
-  { id: 14, name: "Volcano", blurb: "Clear 20 lines on the volcano's rim.", goal: { type: "lines", value: 20 }, stones: 6, reward: { coins: 200, gems: 18 } },
+  { id: 13, name: "Lagoon", blurb: "Reach a x4 combo across the lagoon.", goal: { type: "combo", value: 4 }, stones: 6, reward: { coins: 180, gems: 16 } },
+  { id: 14, name: "Volcano", blurb: "Clear 12 lines on the volcano's rim.", goal: { type: "lines", value: 12 }, stones: 6, reward: { coins: 200, gems: 18 } },
   { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 7, reward: { coins: 240, gems: 24 }, boss: true },
   ...Array.from({ length: WORLDS.length * WORLD_SIZE - 15 }, (_, i) => generatedLevel(i + 16)),
 ];
@@ -174,16 +174,20 @@ function generatedLevel(id: number): AdventureLevel {
   const short = world.split(" ").pop()!;
   let goal: Goal;
   let blurb: string;
+  let placedGems = 0;
   if (kind === "gems") {
-    const n = Math.min(20, 5 + Math.floor(w * 1.1) + (k % 4) + (boss ? 4 : 0));
-    goal = { type: "gems", value: n };
-    blurb = `Collect ${n} gems.`;
+    const n = Math.min(14, Math.max(4, Math.round((4 + Math.floor(w * 0.5) + (k % 3)) * wave) + (boss ? 1 : 0)));
+    // A couple of spare gems on the board, so one stuck in a corner doesn't sink the island.
+    const need = Math.max(3, Math.round(n * 0.8));
+    goal = { type: "gems", value: need };
+    blurb = `Collect ${need} gems.`;
+    placedGems = n;
   } else if (kind === "score") {
-    const v = Math.round(((2000 + (id - 15) * 18) * wave) / 50) * 50;
+    const v = Math.round(((2000 + (id - 15) * 11) * wave) / 50) * 50;
     goal = { type: "score", value: v };
     blurb = `Score ${v.toLocaleString("en-US")}.`;
   } else if (kind === "lines") {
-    const v = Math.min(40, Math.round((12 + Math.floor((id - 15) / 12)) * wave));
+    const v = Math.min(32, Math.round((9 + Math.floor((id - 15) / 16)) * wave));
     goal = { type: "lines", value: v };
     blurb = `Clear ${v} lines.`;
   } else {
@@ -191,25 +195,32 @@ function generatedLevel(id: number): AdventureLevel {
     goal = { type: "combo", value: v };
     blurb = `Reach a x${v} combo.`;
   }
-  const fill = Math.max(0.1, Math.min(0.85, 0.2 + d * 0.5 + (wave - 1) * 0.4 + (boss ? 0.1 : 0)));
+  const fill = Math.max(0.1, Math.min(0.85, (0.18 + d * 0.3 + (wave - 1) * 0.3 + (boss ? 0.05 : 0)) * (kind === "gems" ? 0.75 : 1)));
   return {
     id,
     name: boss ? `${short} Boss` : bonusIsle ? `${short} Bonus` : `${short} ${k + 1}`,
     blurb,
     goal,
-    stones: Math.min(8, 3 + Math.floor(w / 2)),
+    stones: Math.min(6, 3 + Math.floor(w / 3)),
     reward: { coins: Math.round((150 + id * 2) * (boss ? 2 : bonusIsle ? 1.5 : 1)), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
     introduces: id === 16 ? "gems" : undefined,
     layout: {
       fill,
-      gems: kind === "gems" ? goal.value : 0,
+      gems: placedGems,
       high: Math.min(0.7, 0.2 + d * 0.5 + (boss ? 0.2 : 0)),
       // Obstacles ramp up slowly after they're introduced, and not every island has them.
-      overlays: OBSTACLES.flatMap(([ov, at]) => {
-        if (id < at || (id > at + 2 && k % 3 === 2 && !boss)) return [];
-        const n = Math.min(6, 1 + Math.floor((id - at) / 14) + (boss ? 1 : 0));
-        return [{ kind: ov, count: id === at ? 3 : n }];
-      }),
+      // At most two obstacle kinds per island (the newest one always included), so late boards stay playable.
+      overlays: (() => {
+        const all = OBSTACLES.flatMap(([ov, at]) => {
+          if (id < at || (id > at + 2 && k % 3 === 2 && !boss)) return [];
+          const n = Math.min(4, 1 + Math.floor((id - at) / 20) + (boss ? 1 : 0));
+          return [{ kind: ov, count: id === at ? 3 : n }];
+        });
+        if (all.length <= 2) return all;
+        const newest = all[all.length - 1]!;
+        const other = all[id % (all.length - 1)]!;
+        return [other, newest];
+      })(),
     },
     boss,
   };

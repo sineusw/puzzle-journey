@@ -28,7 +28,7 @@ import { PLAIN_FEATURES, cloneFeatures } from "../src/lib/game/engine.ts";
 import { writeFileSync } from "node:fs";
 
 type Move = { i: number; r: number; c: number };
-type Strategy = "random" | "greedy" | "planner";
+type Strategy = "random" | "casual" | "greedy" | "planner";
 
 const MAX_MOVES = 300;
 
@@ -154,13 +154,17 @@ function play(start: Match, strategy: Strategy, seed: number, checkDeals: boolea
   check(m);
   while (!m.won && !m.over && m.moves < MAX_MOVES) {
     let mv: Move | null;
-    if (strategy === "random") {
+    // "casual" models a typical player: usually the best spot, sometimes a quick random drop.
+    if (strategy === "random" || (strategy === "casual" && rnd() < 0.3)) {
       const all = legalMoves(m);
       mv = all.length ? all[Math.floor(rnd() * all.length)]! : null;
-    } else mv = strategy === "greedy" ? pickGreedy(m) : pickPlanner(m);
+    } else mv = strategy === "greedy" || strategy === "casual" ? pickGreedy(m) : pickPlanner(m);
     if (!mv) break;
     const res = placePiece(m, mv.i, mv.r, mv.c);
-    if (!res.ok) break;
+    if (!res.ok) {
+      if (process.env.SIM_DEBUG) console.error("refused", strategy, m.levelId, m.tray[mv.i]?.shape, mv.r, mv.c, (res as { reason?: string }).reason);
+      break;
+    }
     const refilled = m.tray.filter(Boolean).length === 1 && res.match.tray.some(Boolean);
     m = res.match;
     if (refilled) {
@@ -205,10 +209,15 @@ const levels = [
   ...(only !== "classic" ? ADVENTURE.map((l) => ({ mode: "adventure" as const, id: l.id, goal: l.goal, stones: l.stones, features: adventureFeatures(l.id), layout: l.layout })) : []),
   ...(only !== "adventure" ? CLASSIC.map((l) => ({ mode: "classic" as const, id: l.id, goal: l.goal, stones: 0, features: cloneFeatures(PLAIN_FEATURES) })) : []),
 ];
+const maxAt = process.argv.indexOf("--max");
+if (maxAt > 0) levels.splice(0, levels.length, ...levels.filter((l) => l.id <= Number(process.argv[maxAt + 1])));
+const minAt = process.argv.indexOf("--min");
+if (minAt > 0) levels.splice(0, levels.length, ...levels.filter((l) => l.id >= Number(process.argv[minAt + 1])));
+const FAST = process.argv.includes("--fast");
 const CALIBRATE = process.argv.includes("--calibrate");
 const table: Record<string, Record<number, { three: number; two: number }>> = { adventure: {}, classic: {} };
 for (const lvl of levels) {
-  for (const strategy of (CALIBRATE ? ["greedy"] : ["random", "greedy", "planner"]) as Strategy[]) {
+  for (const strategy of (CALIBRATE ? ["greedy"] : FAST ? ["casual", "greedy"] : ["random", "greedy", "planner"]) as Strategy[]) {
     const games = strategy === "planner" ? Math.max(20, Math.floor(N / 2)) : N;
     const rs: GameResult[] = [];
     for (let g = 0; g < games; g++) {
@@ -217,7 +226,7 @@ for (const lvl of levels) {
       rs.push(play(start, strategy, SEED_BASE + g * 7919 + lvl.id, strategy === "greedy"));
     }
     const row = summarize(lvl.mode, lvl.id, `${lvl.goal.type} ${lvl.goal.value}`, starPar(lvl.goal, lvl.mode, lvl.id), strategy, rs);
-    if (CALIBRATE) {
+    if (CALIBRATE && row.winMoves.length) {
       // The greedy bot weighs every placement on the board, so it is steadier
       // than most people (who, in turn, have boosters and visitors). 3 stars =
       // what 60% of its wins manage (80% on the first three levels, which
