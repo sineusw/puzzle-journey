@@ -290,7 +290,7 @@ export function rollSpin(rnd = Math.random): number {
 
 /* ---------------------------------------------------------------- grants */
 
-const POWER_NAME: Record<PowerId, string> = { hammer: "Hammer", refresh: "Reroll", bomb: "Bomb", freeze: "Frost" };
+const POWER_NAME: Record<PowerId, string> = { hammer: "Hammer", refresh: "Reroll", bomb: "Bomb", freeze: "Frost", laser: "Laser", cross: "Cross Blast", paint: "Color Clear" };
 
 /** Short chips describing a reward: ["200 coins", "2 Hammer"]. */
 export function grantParts(g: Grant): Array<{ icon: string; text: string }> {
@@ -298,7 +298,7 @@ export function grantParts(g: Grant): Array<{ icon: string; text: string }> {
   if (g.coins) out.push({ icon: "/icons/coin.webp", text: g.coins.toLocaleString("en-US") });
   if (g.gems) out.push({ icon: "/icons/gem.webp", text: g.gems.toLocaleString("en-US") });
   for (const [k, n] of Object.entries(g.powers ?? {}) as Array<[PowerId, number]>) {
-    if (n) out.push({ icon: `/icons/${k === "freeze" ? "frost" : k}.webp`, text: `${n} ${POWER_NAME[k]}` });
+    if (n) out.push({ icon: `/icons/${({ freeze: "frost", laser: "hammer", cross: "bomb", paint: "refresh" } as Record<string, string>)[k] ?? k}.webp`, text: `${n} ${POWER_NAME[k]}` });
   }
   if (g.passes) out.push({ icon: "/icons/refresh.webp", text: `${g.passes} Continue Pass${g.passes > 1 ? "es" : ""}` });
   if (g.skin) out.push({ icon: "/icons/skins.webp", text: `${SKINS.find((s) => s.id === g.skin)?.name ?? "New"} skin` });

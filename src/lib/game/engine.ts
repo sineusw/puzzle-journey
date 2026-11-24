@@ -244,10 +244,7 @@ const SHAPES: Shape[] = [
   { id: "l4", cells: [[0, 0], [1, 0], [2, 0], [2, 1]], weight: 8 },
   { id: "j4", cells: [[0, 1], [1, 1], [2, 0], [2, 1]], weight: 8 },
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
-  { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
-  { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
-  { id: "z5", cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], weight: 3 },
   { id: "diag2", cells: [[0, 0], [1, 1]], weight: 2 },
 ];
 
@@ -259,7 +256,7 @@ export function shapeCells(id: string): CellPos[] {
 }
 
 /** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
-export const UNUSUAL_SHAPES = ["diag2", "corner5", "z5", "i5", "o9"] as const;
+export const UNUSUAL_SHAPES = ["diag2", "corner5", "i5", "o9"] as const;
 
 let seq = 1;
 export function uid(prefix = "p"): string {
@@ -414,7 +411,7 @@ export function findHint(
 }
 
 /** Shapes that are hard to fit: five-block pieces, the 3×3, and gap shapes. */
-const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "z5", "h3", "diag2", "r23"]);
+const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "h3", "diag2", "r23"]);
 
 /**
  * How often bulky shapes appear, by how full the board is. A documented,
@@ -1412,7 +1409,7 @@ export function placePiece(
     const lines = clear.lines;
     // The star is rare: only a perfect clear or a x10 combo (x20, x30...) makes one.
     const comboMilestone = next.combo >= 10 && next.combo % 10 === 0 && next.combo !== match.combo;
-    if ((perfect || comboMilestone) && f.stars) earned.push("star");
+    if (((perfect && lines >= 2) || comboMilestone) && f.stars) earned.push("star");
     if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
     else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");
     else if (lines >= 2 && hasArrow) {
@@ -1471,6 +1468,49 @@ export function bombCell(match: Match, row: number, col: number): Match | null {
   next.over = false;
   checkOver(next);
   return next;
+}
+
+/** Peel every breakable cell in a set of cells; null if nothing was hit. */
+function peelMany(match: Match, cells: Array<[number, number]>): Match | null {
+  const next = cloneMatch(match);
+  let hit = false;
+  for (const [r, c] of cells) {
+    const cell = next.board[r]?.[c];
+    if (!cell || isEmpty(cell) || isUnbreakable(cell)) continue;
+    next.board[r]![c] = { t: "e" };
+    hit = true;
+  }
+  if (!hit) return null;
+  next.over = false;
+  checkOver(next);
+  return next;
+}
+
+/** Laser booster: clears the whole row of the tapped block. */
+export function laserCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  return peelMany(match, Array.from({ length: SIZE }, (_, c) => [row, c] as [number, number]));
+}
+
+/** Cross Blast booster: clears the tapped block's row and column. */
+export function crossCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  const cells: Array<[number, number]> = [];
+  for (let i = 0; i < SIZE; i++) cells.push([row, i], [i, col]);
+  return peelMany(match, cells);
+}
+
+/** Color Clear booster: every block the same color as the tapped one disappears. */
+export function paintCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  const target = match.board[row][col];
+  if (isEmpty(target) || target.t !== "b") return null;
+  const cells: Array<[number, number]> = [];
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+    const cell = match.board[r][c];
+    if (cell.t === "b" && cell.c === target.c) cells.push([r, c]);
+  }
+  return peelMany(match, cells);
 }
 
 export function refreshTray(match: Match): Match {

@@ -2,6 +2,7 @@ import { CurrencySheet, LevelSheet, ResetSheet } from "./hud-sheets";
 import { isNative } from "@/lib/game/native";
 import { LobbyScreen, ChestBar, shareRun, shareDaily } from "./lobby";
 import { useEffect, useState, type ReactNode } from "react";
+import type { PowerId } from "@/lib/game/content";
 import {
   Crown,
   Info,
@@ -171,18 +172,25 @@ export function PowerBar() {
   );
   const open = unlockedPowers(reached);
   const all: Array<{
-    id: "hammer" | "refresh" | "bomb" | "freeze";
+    id: PowerId;
     label: string;
-    icon: IconName;
+    icon: IconName | null;
+    emoji?: string;
   }> = [
     { id: "hammer", label: "Hammer", icon: "hammer" },
     { id: "refresh", label: "Reroll", icon: "refresh" },
     { id: "bomb", label: "Bomb", icon: "bomb" },
     { id: "freeze", label: "Frost", icon: "frost" },
+    { id: "laser", label: "Laser", icon: null, emoji: "🔦" },
+    { id: "cross", label: "Cross Blast", icon: null, emoji: "✳️" },
+    { id: "paint", label: "Color Clear", icon: null, emoji: "🎨" },
   ];
-  // All four always show; locked ones say which island opens them.
-  const items = all;
-  const lockAt = (id: string) => unlockLevel(({ hammer: "hammer", refresh: "reroll", bomb: "boom", freeze: "frost" } as const)[id as "hammer"]);
+  const UNLOCK_OF = { hammer: "hammer", refresh: "reroll", bomb: "boom", freeze: "frost", laser: "laser", cross: "cross", paint: "paint" } as const;
+  const lockAt = (id: PowerId) => unlockLevel(UNLOCK_OF[id]);
+  // Unlocked boosters, plus the next one coming up (with the island it opens on).
+  const nextLocked = all.filter((i) => !open.includes(i.id)).sort((a, b) => lockAt(a.id) - lockAt(b.id))[0];
+  const items = all.filter((i) => open.includes(i.id) || i === nextLocked);
+  const icon = (item: (typeof all)[number]) => (item.icon ? <GameIcon name={item.icon} /> : <span className="pj-power-emoji">{item.emoji}</span>);
   return (
     <div className="pj-powers">
       {items.map((item) => (
@@ -193,12 +201,12 @@ export function PowerBar() {
                 type="button"
                 data-testid={`power-${item.id}`}
                 data-id={item.id}
-                className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${powerups[item.id] <= 0 ? "is-empty" : ""}`}
+                className={`pj-power ${targeting === item.id ? "is-armed" : ""} ${(powerups[item.id] ?? 0) <= 0 ? "is-empty" : ""}`}
                 onClick={() => armPower(item.id)}
                 aria-label={item.label}
               >
-                <GameIcon name={item.icon} />
-                <span className="pj-count">{powerups[item.id]}</span>
+                {icon(item)}
+                <span className="pj-count">{powerups[item.id] ?? 0}</span>
               </button>
               <button type="button" className="pj-add" onClick={() => setPanel("shop")} aria-label={`Buy ${item.label}`}>
                 +
@@ -215,7 +223,7 @@ export function PowerBar() {
               }}
               aria-label={`${item.label}, unlocks on island ${lockAt(item.id)}`}
             >
-              <GameIcon name={item.icon} />
+              {icon(item)}
               <span className="pj-power-lock">
                 <Lock className="size-3" /> {lockAt(item.id)}
               </span>

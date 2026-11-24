@@ -4173,3 +4173,4 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-play-body .pj-advcard-goal { padding: 6px 8px !important; }
 .pj-play-body .pj-advcard-play { height: 50px !important; font-size: 1.3rem !important; }
 .pj-play-body .pj-advcard-new { display: none; }
+.pj-power-emoji { font-size: 1.7em; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }

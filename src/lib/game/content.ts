@@ -1,7 +1,7 @@
 import { STAR_TABLE } from "./star-table.ts";
 import { PLAIN_FEATURES, cloneFeatures, type Features, type Goal, type Layout } from "./engine.ts";
 
-export type PowerId = "hammer" | "refresh" | "bomb" | "freeze";
+export type PowerId = "hammer" | "refresh" | "bomb" | "freeze" | "laser" | "cross" | "paint";
 
 export const OBSTACLE_PROGRESSION = [
   { id: "normal", fromLevel: 1, blurb: "Plain candy blocks." },
@@ -38,7 +38,10 @@ export type UnlockId =
   | "hammer"
   | "reroll"
   | "boom"
-  | "frost";
+  | "frost"
+  | "laser"
+  | "cross"
+  | "paint";
 
 export type UnlockInfo = {
   id: UnlockId;
@@ -75,6 +78,9 @@ export const UNLOCKS: Record<UnlockId, UnlockInfo> = {
   reroll: { id: "reroll", kind: "block", name: "Reroll booster", blurb: "Don't like your pieces? Tap Reroll to swap all three for new ones.", art: "/icons/refresh.webp", power: "refresh" },
   boom: { id: "boom", kind: "block", name: "Bomb booster", blurb: "Tap the bomb, then tap the board: a 3×3 area blows up.", art: "/icons/bomb.webp", power: "bomb" },
   frost: { id: "frost", kind: "block", name: "Frost booster", blurb: "Frost freezes your combo so it won't break for your next two drops.", art: "/icons/frost.webp", power: "freeze" },
+  laser: { id: "laser", kind: "block", name: "Laser booster", blurb: "Tap the laser, then tap any block: its whole row is vaporized.", art: "/icons/hammer.webp", power: "laser" },
+  cross: { id: "cross", kind: "block", name: "Cross Blast booster", blurb: "Tap Cross Blast, then a block: its row AND column clear at once.", art: "/icons/bomb.webp", power: "cross" },
+  paint: { id: "paint", kind: "block", name: "Color Clear booster", blurb: "Tap Color Clear, then a block: every block of that color disappears.", art: "/icons/refresh.webp", power: "paint" },
   pip: { id: "pip", kind: "visitor", name: "Pip the Parrot", blurb: "Drops a paint bomb on a block. If it matches the blocks touching it, the whole group pops!", art: "/characters/pip-3d.webp" },
 };
 
@@ -98,10 +104,10 @@ const WORLD_RHYTHM: Goal["type"][] = ["gems", "score", "gems", "lines", "gems", 
 
 /** Board obstacles and the island they first appear on. */
 const OBSTACLES: Array<["ice" | "chain" | "vine" | "lock", number]> = [
-  ["ice", 33],
-  ["chain", 57],
-  ["vine", 80],
-  ["lock", 105],
+  ["ice", 24],
+  ["chain", 40],
+  ["vine", 56],
+  ["lock", 72],
 ];
 
 /** Every world is 15 islands. */
@@ -148,15 +154,15 @@ export const ADVENTURE: AdventureLevel[] = [
   { id: 4, name: "Falls", blurb: "Reach a x3 combo by the waterfall.", goal: { type: "combo", value: 3 }, stones: 0, reward: { coins: 70, gems: 6 } },
   { id: 5, name: "Lanterns", blurb: "Clear 7 lines by lantern light.", goal: { type: "lines", value: 7 }, stones: 0, reward: { coins: 80, gems: 8 }, introduces: "bombs" },
   { id: 6, name: "Cliff", blurb: "Score 1,000 on the cliff.", goal: { type: "score", value: 1000 }, stones: 0, reward: { coins: 90, gems: 8 }, introduces: "milo" },
-  { id: 7, name: "Ruins", blurb: "Clear 8 lines among cracked ruins.", goal: { type: "lines", value: 8 }, stones: 3, reward: { coins: 100, gems: 10 }, introduces: "stones" },
-  { id: 8, name: "Quarry", blurb: "Score 1,350 in the old quarry.", goal: { type: "score", value: 1350 }, stones: 4, reward: { coins: 110, gems: 10 }, introduces: "kai" },
-  { id: 9, name: "Temple", blurb: "Reach a x4 combo at the temple.", goal: { type: "combo", value: 4 }, stones: 4, reward: { coins: 130, gems: 12 }, introduces: "luna" },
-  { id: 10, name: "Summit", blurb: "Score 1,800 on the summit.", goal: { type: "score", value: 1800 }, stones: 5, reward: { coins: 150, gems: 14 }, introduces: "blast" },
-  { id: 11, name: "Grotto", blurb: "Clear 10 lines in the glowing grotto.", goal: { type: "lines", value: 10 }, stones: 5, reward: { coins: 160, gems: 14 }, introduces: "nia" },
-  { id: 12, name: "Reef", blurb: "Score 2,500 over the reef.", goal: { type: "score", value: 2500 }, stones: 5, reward: { coins: 170, gems: 16 }, introduces: "pip" },
-  { id: 13, name: "Lagoon", blurb: "Reach a x4 combo across the lagoon.", goal: { type: "combo", value: 4 }, stones: 6, reward: { coins: 180, gems: 16 } },
-  { id: 14, name: "Volcano", blurb: "Clear 12 lines on the volcano's rim.", goal: { type: "lines", value: 12 }, stones: 6, reward: { coins: 200, gems: 18 } },
-  { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 7, reward: { coins: 240, gems: 24 }, boss: true },
+  { id: 7, name: "Ruins", blurb: "Clear 8 lines among cracked ruins.", goal: { type: "lines", value: 8 }, stones: 0, reward: { coins: 100, gems: 10 }, introduces: "stones" },
+  { id: 8, name: "Quarry", blurb: "Score 1,350 in the old quarry.", goal: { type: "score", value: 1350 }, stones: 0, reward: { coins: 110, gems: 10 }, introduces: "kai" },
+  { id: 9, name: "Temple", blurb: "Reach a x4 combo at the temple.", goal: { type: "combo", value: 4 }, stones: 0, reward: { coins: 130, gems: 12 }, introduces: "luna" },
+  { id: 10, name: "Summit", blurb: "Score 1,800 on the summit.", goal: { type: "score", value: 1800 }, stones: 0, reward: { coins: 150, gems: 14 }, introduces: "blast" },
+  { id: 11, name: "Grotto", blurb: "Clear 10 lines in the glowing grotto.", goal: { type: "lines", value: 10 }, stones: 0, reward: { coins: 160, gems: 14 }, introduces: "nia" },
+  { id: 12, name: "Reef", blurb: "Score 2,500 over the reef.", goal: { type: "score", value: 2500 }, stones: 0, reward: { coins: 170, gems: 16 }, introduces: "pip" },
+  { id: 13, name: "Lagoon", blurb: "Reach a x4 combo across the lagoon.", goal: { type: "combo", value: 4 }, stones: 0, reward: { coins: 180, gems: 16 } },
+  { id: 14, name: "Volcano", blurb: "Clear 12 lines on the volcano's rim.", goal: { type: "lines", value: 12 }, stones: 3, reward: { coins: 200, gems: 18 } },
+  { id: 15, name: "Sky Temple", blurb: "Score 3,200 at the Sky Temple.", goal: { type: "score", value: 3200 }, stones: 4, reward: { coins: 240, gems: 24 }, boss: true },
   ...Array.from({ length: WORLDS.length * WORLD_SIZE - 15 }, (_, i) => generatedLevel(i + 16)),
 ];
 
@@ -201,7 +207,7 @@ function generatedLevel(id: number): AdventureLevel {
     name: boss ? `${short} Boss` : bonusIsle ? `${short} Bonus` : `${short} ${k + 1}`,
     blurb,
     goal,
-    stones: Math.min(6, 3 + Math.floor(w / 3)),
+    stones: Math.min(8, 2 + Math.floor(id / 25)),
     reward: { coins: Math.round((150 + id * 2) * (boss ? 2 : bonusIsle ? 1.5 : 1)), gems: (10 + Math.floor(id / 20)) * (boss ? 2 : 1) },
     introduces: id === 16 ? "gems" : undefined,
     layout: {
@@ -213,13 +219,17 @@ function generatedLevel(id: number): AdventureLevel {
       overlays: (() => {
         const all = OBSTACLES.flatMap(([ov, at]) => {
           if (id < at || (id > at + 2 && k % 3 === 2 && !boss)) return [];
-          const n = Math.min(4, 1 + Math.floor((id - at) / 20) + (boss ? 1 : 0));
+          // Obstacles pile up the further you go.
+          const n = Math.min(6, 2 + Math.floor((id - at) / 15) + (boss ? 1 : 0));
           return [{ kind: ov, count: id === at ? 3 : n }];
         });
-        if (all.length <= 2) return all;
+        // Up to two kinds early on, three once the late game starts.
+        const kinds = id >= 90 ? 3 : 2;
+        if (all.length <= kinds) return all;
         const newest = all[all.length - 1]!;
-        const other = all[id % (all.length - 1)]!;
-        return [other, newest];
+        const rest = all.slice(0, -1);
+        const picks = Array.from({ length: kinds - 1 }, (_, j) => rest[(id + j) % rest.length]!);
+        return [...new Set([...picks, newest])];
       })(),
     },
     boss,
@@ -231,25 +241,30 @@ function generatedLevel(id: number): AdventureLevel {
  * then spaced further apart so each one gets played with before the next.
  */
 export const UNLOCK_SCHEDULE: Record<number, UnlockId> = {
-  2: "hammer",
-  3: "arrows",
-  4: "reroll",
-  7: "stars",
-  8: "boom",
-  10: "bombs",
-  12: "frost",
-  13: "milo",
+  // Slow start: the first islands are just blocks, then one new thing every few islands,
+  // power-ups spread all the way into the late game and obstacles stacking up as it gets harder.
+  3: "hammer",
+  6: "arrows",
+  9: "reroll",
+  12: "milo",
+  14: "stones",
   16: "gems",
-  20: "stones",
-  28: "kai",
-  33: "ice",
-  38: "blast",
-  50: "luna",
-  57: "chains",
+  19: "boom",
+  22: "bombs",
+  24: "ice",
+  27: "frost",
+  30: "kai",
+  33: "laser",
+  36: "stars",
+  40: "chains",
+  44: "cross",
+  48: "luna",
+  52: "blast",
+  56: "vines",
+  60: "paint",
   64: "nia",
-  80: "vines",
-  90: "pip",
-  105: "locks",
+  72: "locks",
+  80: "pip",
 };
 for (const lvl of ADVENTURE) lvl.introduces = UNLOCK_SCHEDULE[lvl.id];
 
@@ -336,6 +351,9 @@ export const SHOP_ITEMS: Array<{
   { id: "refresh", name: "Reroll", blurb: "New set of three blocks.", power: "refresh", amount: 1, coins: 70 },
   { id: "bomb", name: "Bomb", blurb: "Clear a 3×3 blast.", power: "bomb", amount: 1, coins: 140 },
   { id: "freeze", name: "Frost", blurb: "Combo shield for two drops.", power: "freeze", amount: 1, coins: 110 },
+  { id: "laser", name: "Laser", blurb: "Clear a whole row.", power: "laser", amount: 1, coins: 160 },
+  { id: "cross", name: "Cross Blast", blurb: "Clear a row and a column.", power: "cross", amount: 1, coins: 220 },
+  { id: "paint", name: "Color Clear", blurb: "Clear every block of one color.", power: "paint", amount: 1, coins: 260 },
   { id: "pack", name: "Power pack", blurb: "+2 of every tool.", amount: 2, gems: 90 },
   { id: "coins", name: "Coin pouch", blurb: "+400 coins.", amount: 400, gems: 40 },
 ];

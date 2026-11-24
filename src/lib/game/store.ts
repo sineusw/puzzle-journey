@@ -5,6 +5,9 @@ import {
   praiseFor,
   continueMatch,
   hammerCell,
+  laserCell,
+  crossCell,
+  paintCell,
   newGoalMatch,
   newLevelMatch,
   newSandboxMatch,
@@ -826,13 +829,24 @@ export const useGame = create<GameStore>((set, get) => ({
     const { targeting, match, profile, visitorBusy } = get();
     if (!targeting || visitorBusy) return false;
     const hit =
-      targeting === "hammer" ? hammerCell(match, row, col) : targeting === "bomb" ? bombCell(match, row, col) : null;
+      targeting === "hammer"
+        ? hammerCell(match, row, col)
+        : targeting === "bomb"
+          ? bombCell(match, row, col)
+          : targeting === "laser"
+            ? laserCell(match, row, col)
+            : targeting === "cross"
+              ? crossCell(match, row, col)
+              : targeting === "paint"
+                ? paintCell(match, row, col)
+                : null;
     const used = hit ? voidRanked(hit) : null;
     if (!used) {
       audio.sfxBad();
       return false;
     }
-    if (targeting === "bomb") audio.sfxBomb();
+    if (targeting === "bomb" || targeting === "cross" || targeting === "paint") audio.sfxBomb();
+    if (targeting !== "hammer") audio.vibrate([30, 40, 30]);
     else audio.sfxPlace();
     const nextProfile = trackChallenges(
       applyQuestScore({ ...profile, powerups: { ...profile.powerups, [targeting]: profile.powerups[targeting] - 1 } }, used, 1),
@@ -861,7 +875,7 @@ export const useGame = create<GameStore>((set, get) => ({
         milestone: null,
         newBest: false,
         comboWarning: false,
-        power: targeting,
+        power: targeting === "hammer" || targeting === "bomb" ? targeting : "bomb",
       },
     });
     persistSoon(get);
@@ -1042,6 +1056,9 @@ export const useGame = create<GameStore>((set, get) => ({
             refresh: profile.powerups.refresh + 2,
             bomb: profile.powerups.bomb + 2,
             freeze: profile.powerups.freeze + 2,
+            laser: profile.powerups.laser ?? 0,
+            cross: profile.powerups.cross ?? 0,
+            paint: profile.powerups.paint ?? 0,
           },
         },
         toast: "Packed four tools.",
@@ -1067,6 +1084,9 @@ export const useGame = create<GameStore>((set, get) => ({
       refresh: { coins: 70, power: "refresh" },
       bomb: { coins: 140, power: "bomb" },
       freeze: { coins: 110, power: "freeze" },
+      laser: { coins: 160, power: "laser" },
+      cross: { coins: 220, power: "cross" },
+      paint: { coins: 260, power: "paint" },
     };
     const item = prices[itemId];
     if (!item) return;
@@ -1470,7 +1490,9 @@ export const useGame = create<GameStore>((set, get) => ({
             fired: clear.fired,
             swept: clear.swept ?? null,
           }
-        : get().fx,
+        : visitorEvent.action.kind === "move"
+          ? { ...(get().fx ?? ({} as NonNullable<GameStore["fx"]>)), id: fxSeq++, landed: [{ r: visitorEvent.action.to[0], c: visitorEvent.action.to[1] }], cleared: [], rows: [], cols: [], gained: 0, combo: 0, praise: null, perfect: false, shake: false, placedCells: 1, special: null, milestone: null, newBest: false, comboWarning: false, fired: [], swept: null, origin: { r: visitorEvent.action.to[0], c: visitorEvent.action.to[1] } }
+          : get().fx,
     });
     persistSoon(get);
   },
@@ -1667,10 +1689,13 @@ function announceEarned(earned: BonusId[], perfect: boolean): void {
 export function withStreakBoosters(match: Match, streak: number): Match {
   if (streak < 2) return match;
   // Held until the board has blocks for them to hit (see POWER_MIN_FILL).
-  const bonus: NonNullable<Match["bonus"]> = [streak % 2 ? "rocketV" : "rocketH"];
-  if (streak >= 4) bonus.push("bomb");
-  if (streak >= 6) bonus.push("blast");
-  return { ...match, bonus };
+  // Only power blocks this island has already unlocked.
+  const sp = match.features.specials;
+  const bonus: NonNullable<Match["bonus"]> = [];
+  if (sp.includes("rocketH")) bonus.push(streak % 2 ? "rocketV" : "rocketH");
+  if (streak >= 4 && sp.includes("bomb")) bonus.push("bomb");
+  if (streak >= 6 && sp.includes("blast")) bonus.push("blast");
+  return bonus.length ? { ...match, bonus } : match;
 }
 
 function streakBanner(set: (partial: Partial<GameStore>) => void, streak: number): void {

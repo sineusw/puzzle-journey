@@ -78,7 +78,7 @@ export function defaultProfile(): Profile {
     highScore: 0,
     bestCombo: 0,
     games: 0,
-    powerups: { hammer: 3, refresh: 3, bomb: 3, freeze: 3 },
+    powerups: { hammer: 3, refresh: 3, bomb: 3, freeze: 3, laser: 1, cross: 1, paint: 1 },
     settings: { sfx: true, music: true, shake: true, voice: true },
     daily: { lastClaim: 0, streak: 0, nextAt: now },
     quests: EMPTY_QUESTS(),
