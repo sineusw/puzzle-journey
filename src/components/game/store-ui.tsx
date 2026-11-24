@@ -1,7 +1,8 @@
 import { celebrateClaim } from "./claim-fx";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, Clock, Lock, Play, X } from "lucide-react";
-import { CONTINUE_COST, QUESTS, SKINS, type SkinId } from "@/lib/game/content";
+import { CONTINUE_COST, QUESTS, SKINS, coinContinueCost, type SkinId } from "@/lib/game/content";
+import * as audioFx from "@/lib/game/audio";
 import {
   AD_COINS,
   AD_DAILY_CAP,
@@ -151,7 +152,7 @@ const SECTION_TITLE: Record<ShopSection, string> = {
   offers: "Special offers",
   boosters: "Boosters",
   passes: "Continue Passes",
-  coins: "Coins",
+  coins: "Jungle Coins",
   gems: "Gems",
 };
 
@@ -168,7 +169,7 @@ export function ShopSheet() {
           <Play className="size-4" fill="currentColor" />
         </span>
         <span className="flex-1 text-left">
-          <b>Free coins</b>
+          <b>Free Jungle Coins</b>
           <small>{adsLeft > 0 ? `Watch a short video · ${adsLeft} left today` : "Come back tomorrow for more"}</small>
         </span>
         <span className="pj-free-amt">
@@ -600,6 +601,75 @@ export function SpinSheet() {
 }
 
 /* -------------------------------------------------------------- continue */
+
+/** First thing a player sees when no block fits: watch an ad, pay Jungle Coins, or start over. */
+export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
+  const coins = useGame((s) => s.profile.coins);
+  const passes = useGame((s) => s.profile.live.passes);
+  const used = useGame((s) => s.videoContinueRun === s.runStats.startedAt);
+  const busy = useGame((s) => s.videoBusy);
+  const coinUses = useGame((s) => (s.coinContinues.run === s.runStats.startedAt ? s.coinContinues.n : 0));
+  const goal = useGame((s) => s.match.goal);
+  const progress = useGame((s) => s.match.goalProgress);
+  const continueWith = useGame((s) => s.continueWith);
+  const newGame = useGame((s) => s.newGame);
+  const cost = coinContinueCost(coinUses);
+  const left = goal ? Math.max(0, goal.value - progress) : 0;
+  useEffect(() => {
+    audioFx.feelRoundOver();
+    audioFx.vibrate([30, 60, 30]);
+  }, []);
+  return (
+    <div className="pj-sheet pj-oom text-center" data-testid="out-of-moves">
+      <div className="pj-oom-emoji" aria-hidden="true">😱</div>
+      <h2 className="pj-oom-title font-display">Out of moves!</h2>
+      <p className="pj-oom-sub">{goal && left > 0 ? `So close. Only ${formatInt(left)} to go!` : "No room left for these blocks."}</p>
+      {goal ? (
+        <div className="pj-result-progress" aria-hidden="true">
+          <span style={{ width: `${Math.round(Math.min(1, progress / goal.value) * 100)}%` }} />
+        </div>
+      ) : null}
+      <div className="pj-oom-actions">
+        <button type="button" className="pj-oom-btn is-video" disabled={used || busy} onClick={() => void continueWith("video")}>
+          <Play className="size-6" fill="currentColor" />
+          <span className="flex-1 text-left">
+            <b>{used ? "Ad already used" : busy ? "Loading ad…" : "Watch an ad"}</b>
+            <small>{used ? "One free continue per run" : "Continue free + easier blocks"}</small>
+          </span>
+          <span className="pj-oom-tag">FREE</span>
+        </button>
+        <button type="button" className={`pj-oom-btn is-coins${coins < cost ? " is-short" : ""}`} onClick={() => void continueWith("coins")}>
+          <img src="/icons/coin.webp" alt="" className="pj-oom-ico" />
+          <span className="flex-1 text-left">
+            <b>Continue with Jungle Coins</b>
+            <small>{coins < cost ? `You have ${formatInt(coins)}. Tap to get more` : "Clears your two fullest rows"}</small>
+          </span>
+          <span className="pj-oom-tag is-coin">
+            <img src="/icons/coin.webp" alt="" /> {formatInt(cost)}
+          </span>
+        </button>
+        {passes > 0 ? (
+          <button type="button" className="pj-oom-btn is-pass" onClick={() => void continueWith("pass")}>
+            <img src="/icons/refresh.webp" alt="" className="pj-oom-ico" />
+            <span className="flex-1 text-left">
+              <b>Use a Continue Pass</b>
+              <small>You have {passes}</small>
+            </span>
+          </button>
+        ) : null}
+        <button type="button" className="pj-oom-btn is-restart" onClick={newGame}>
+          <span className="pj-oom-restart-ico" aria-hidden="true">↻</span>
+          <span className="flex-1 text-left">
+            <b>Start over</b>
+          </span>
+        </button>
+      </div>
+      <button type="button" className="pj-oom-results" onClick={onResults}>
+        See results
+      </button>
+    </div>
+  );
+}
 
 /** The "keep going" box on the game-over sheet. */
 export function ContinueOptions() {

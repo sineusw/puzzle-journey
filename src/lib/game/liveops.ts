@@ -45,7 +45,7 @@ export const SHOP: ShopItem[] = [
     id: "starter",
     section: "offers",
     name: "Starter Chest",
-    blurb: "2,500 coins, 120 gems, 3 of every booster and 2 Continue Passes.",
+    blurb: "2,500 Jungle Coins, 120 gems, 3 of every booster and 2 Continue Passes.",
     art: ["/icons/gift.webp", "/icons/coin.webp", "/icons/gem.webp"],
     usd: 1.99,
     grant: { coins: 2500, gems: 120, powers: { hammer: 3, refresh: 3, bomb: 3, freeze: 3 }, passes: 2 },
@@ -56,7 +56,7 @@ export const SHOP: ShopItem[] = [
     id: "treasure",
     section: "offers",
     name: "Island Treasure",
-    blurb: "15,000 coins, 600 gems, 10 of every booster and 10 Continue Passes.",
+    blurb: "15,000 Jungle Coins, 600 gems, 10 of every booster and 10 Continue Passes.",
     art: ["/icons/gem.webp", "/icons/coin.webp", "/icons/gift.webp"],
     usd: 9.99,
     grant: { coins: 15000, gems: 600, powers: { hammer: 10, refresh: 10, bomb: 10, freeze: 10 }, passes: 10 },
@@ -80,9 +80,9 @@ export const SHOP: ShopItem[] = [
   },
   { id: "pass1", section: "passes", name: "Continue Pass", blurb: "Keep going after you run out of room, with easier blocks.", art: ["/icons/refresh.webp"], qty: "×1", coins: 900, usd: 0.99, grant: { passes: 1 } },
   { id: "pass5", section: "passes", name: "Continue Passes", blurb: "Five continues, each with easier blocks after.", art: ["/icons/refresh.webp"], qty: "×5", coins: 4000, usd: 3.99, grant: { passes: 5 }, tag: "Save 20%" },
-  { id: "coins1", section: "coins", name: "Pile of Coins", blurb: "", art: ["/icons/coin.webp"], qty: "1,200", gems: 60, usd: 0.99, grant: { coins: 1200 } },
-  { id: "coins2", section: "coins", name: "Bag of Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp"], qty: "6,500", gems: 300, usd: 4.99, grant: { coins: 6500 }, tag: "Popular" },
-  { id: "coins3", section: "coins", name: "Chest of Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp", "/icons/coin.webp"], qty: "15,000", gems: 650, usd: 9.99, grant: { coins: 15000 }, tag: "Best value" },
+  { id: "coins1", section: "coins", name: "Pile of Jungle Coins", blurb: "", art: ["/icons/coin.webp"], qty: "1,200", gems: 60, usd: 0.99, grant: { coins: 1200 } },
+  { id: "coins2", section: "coins", name: "Bag of Jungle Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp"], qty: "6,500", gems: 300, usd: 4.99, grant: { coins: 6500 }, tag: "Popular" },
+  { id: "coins3", section: "coins", name: "Chest of Jungle Coins", blurb: "", art: ["/icons/coin.webp", "/icons/coin.webp", "/icons/coin.webp"], qty: "15,000", gems: 650, usd: 9.99, grant: { coins: 15000 }, tag: "Best value" },
   { id: "gems1", section: "gems", name: "Handful of Gems", blurb: "", art: ["/icons/gem.webp"], qty: "120", coins: 3000, usd: 1.99, grant: { gems: 120 } },
   { id: "gems2", section: "gems", name: "Pouch of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp"], qty: "650", coins: 16000, usd: 9.99, grant: { gems: 650 }, tag: "Popular" },
   { id: "gems3", section: "gems", name: "Vault of Gems", blurb: "", art: ["/icons/gem.webp", "/icons/gem.webp", "/icons/gem.webp"], qty: "1,500", coins: 36000, usd: 19.99, grant: { gems: 1500 }, tag: "Best value" },
@@ -307,6 +307,6 @@ export function grantParts(g: Grant): Array<{ icon: string; text: string }> {
 
 export function grantText(g: Grant): string {
   return grantParts(g)
-    .map((p) => (p.icon.includes("coin") ? `${p.text} coins` : p.icon.includes("gem") ? `${p.text} gems` : p.text))
+    .map((p) => (p.icon.includes("coin") ? `${p.text} Jungle Coins` : p.icon.includes("gem") ? `${p.text} gems` : p.text))
     .join(", ");
 }

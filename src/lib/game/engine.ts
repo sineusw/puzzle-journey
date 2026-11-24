@@ -1644,9 +1644,9 @@ export function dailyNumber(now = new Date()): number {
 /** The daily puzzle's goal: a weekly rhythm of lines, score and combo days. */
 export function dailyGoal(day: number): Goal {
   const kind = day % 3;
-  if (kind === 0) return { type: "combo", value: 4 };
-  if (kind === 1) return { type: "lines", value: 8 };
-  return { type: "score", value: 1500 };
+  if (kind === 0) return { type: "combo", value: 6 };
+  if (kind === 1) return { type: "lines", value: 14 };
+  return { type: "score", value: 3200 };
 }
 
 /**
@@ -1658,8 +1658,8 @@ export function newDailyMatch(day: number): Match {
   const features = cloneFeatures(PLAIN_FEATURES);
   features.stones = true;
   const board = emptyBoard();
-  applyLayout(board, { fill: 0.18 + (day % 4) * 0.03, gems: 0 }, rng);
-  sprinkleStones(board, 2 + (day % 3), rng);
+  applyLayout(board, { fill: 0.3 + (day % 4) * 0.04, gems: 0 }, rng);
+  sprinkleStones(board, 4 + (day % 3), rng);
   const match = blankMatch(features);
   match.board = board;
   match.mode = "challenge";

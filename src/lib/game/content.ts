@@ -355,7 +355,7 @@ export const SHOP_ITEMS: Array<{
   { id: "cross", name: "Cross Blast", blurb: "Clear a row and a column.", power: "cross", amount: 1, coins: 220 },
   { id: "paint", name: "Color Clear", blurb: "Clear every block of one color.", power: "paint", amount: 1, coins: 260 },
   { id: "pack", name: "Power pack", blurb: "+2 of every tool.", amount: 2, gems: 90 },
-  { id: "coins", name: "Coin pouch", blurb: "+400 coins.", amount: 400, gems: 40 },
+  { id: "coins", name: "Coin pouch", blurb: "+400 Jungle Coins.", amount: 400, gems: 40 },
 ];
 
 export type QuestId = "lines" | "score" | "combo" | "powers";
@@ -399,6 +399,10 @@ export const SKINS: Array<{ id: SkinId; name: string; blurb: string; rarity: Rar
 ];
 
 export const CONTINUE_COST = 40;
+/** Jungle Coin price of a continue: climbs each time in the same run (250, 500, 1000...). */
+export function coinContinueCost(used: number): number {
+  return 250 * 2 ** Math.min(4, used);
+}
 
 export function xpForLevel(level: number): number {
   return 700 + level * 220;

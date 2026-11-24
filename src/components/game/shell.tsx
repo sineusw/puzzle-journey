@@ -149,7 +149,7 @@ function Hud() {
           <span style={{ width: `${xpPct}%` }} />
         </div>
       </button>
-      <button type="button" className="pj-chip" onClick={() => setPanel("coins")} aria-label="Get coins">
+      <button type="button" className="pj-chip" onClick={() => setPanel("coins")} aria-label="Get Jungle Coins">
         <GameIcon name="coin" className="pj-chip-ico" />
         <Counter value={coins} />
         <span className="pj-plus" aria-hidden="true">

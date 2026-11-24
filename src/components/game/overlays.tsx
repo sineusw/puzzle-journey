@@ -49,6 +49,7 @@ import { dailySet, rollover } from "@/lib/game/challenges";
 import { AdventureMap } from "./adventure-map";
 import {
   ContinueOptions,
+  OutOfMovesPrompt,
   DailySheet,
   EventsSheet,
   HouseAd,
@@ -638,7 +639,13 @@ function RunStats() {
   );
 }
 
+/** Out of moves: offer a continue first; the results sheet only if they pass. */
 function OverSheet() {
+  const [offer, setOffer] = useState(true);
+  return offer ? <OutOfMovesPrompt onResults={() => setOffer(false)} /> : <OverResults />;
+}
+
+function OverResults() {
   const profile = useGame((s) => s.profile);
   const match = useGame((s) => s.match);
   const bestAtStart = useGame((s) => s.run.bestAtStart);

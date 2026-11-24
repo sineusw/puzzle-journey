@@ -29,7 +29,7 @@ import {
   ADVENTURE,
   CHALLENGES,
   CLASSIC,
-  CONTINUE_COST,
+  CONTINUE_COST, coinContinueCost,
   QUESTS,
   SKINS,
   adventureFeatures,
@@ -270,7 +270,9 @@ type GameStore = {
   /** Free coins for watching a video. */
   watchForCoins: () => Promise<void>;
   /** Keep a lost run going: by video (once per run), Continue Pass, or gems. */
-  continueWith: (how: "video" | "pass" | "gems") => Promise<void>;
+  continueWith: (how: "video" | "pass" | "gems" | "coins") => Promise<void>;
+  /** Jungle Coin continues used this run: { run start, count }. */
+  coinContinues: { run: number; n: number };
   /** Run (by start time) that already used its one video continue. */
   videoContinueRun: number;
   /** A rewarded video is playing. */
@@ -437,6 +439,7 @@ export const useGame = create<GameStore>((set, get) => ({
   lastResult: null,
   toast: null,
   videoContinueRun: 0,
+  coinContinues: { run: 0, n: 0 },
   videoBusy: false,
   levelUpTo: null,
   introUnlock: null,
@@ -1014,7 +1017,7 @@ export const useGame = create<GameStore>((set, get) => ({
         gems: profile.gems + gems,
         daily: { lastClaim: now, streak, nextAt: now + 8 * 3600 * 1000 },
       },
-      toast: `Daily gift: +${coins} coins, +${gems} gems`,
+      toast: `Daily gift: +${coins} Jungle Coins, +${gems} gems`,
     });
     persistSoon(get);
     window.setTimeout(() => set({ toast: null }), 1400);
@@ -1074,7 +1077,7 @@ export const useGame = create<GameStore>((set, get) => ({
       audio.sfxCoin();
       set({
         profile: { ...profile, gems: profile.gems - 40, coins: profile.coins + 400 },
-        toast: "+400 coins",
+        toast: "+400 Jungle Coins",
       });
       persistSoon(get);
       return;
@@ -1091,7 +1094,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const item = prices[itemId];
     if (!item) return;
     if (profile.coins < item.coins) {
-      set({ toast: "Not enough coins." });
+      set({ toast: "Not enough Jungle Coins." });
       return;
     }
     audio.sfxCoin();
@@ -1112,7 +1115,7 @@ export const useGame = create<GameStore>((set, get) => ({
     if (item.once && profile.live.bought.includes(item.id)) return;
     if (item.coins) {
       if (profile.coins < item.coins) {
-        set({ toast: "Not enough coins." });
+        set({ toast: "Not enough Jungle Coins." });
         window.setTimeout(() => set({ toast: null }), 1400);
         return;
       }
@@ -1292,7 +1295,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const l = normalizeLive(profile.live);
     const p = applyGrant({ ...profile, live: { ...l, ads: { ...l.ads, n: l.ads.n + 1 } } }, { coins: AD_COINS });
     audio.feelCoins(6);
-    set({ profile: p, toast: `+${AD_COINS} coins` });
+    set({ profile: p, toast: `+${AD_COINS} Jungle Coins` });
     persistSoon(get);
     window.setTimeout(() => set({ toast: null }), 1400);
   },
@@ -1320,6 +1323,18 @@ export const useGame = create<GameStore>((set, get) => ({
         return;
       }
       p = { ...profile, live: { ...profile.live, passes: profile.live.passes - 1 } };
+    } else if (how === "coins") {
+      const run = get().runStats.startedAt;
+      const used = get().coinContinues.run === run ? get().coinContinues.n : 0;
+      const cost = coinContinueCost(used);
+      if (profile.coins < cost) {
+        set({ panel: "coins", toast: `Need ${cost.toLocaleString()} Jungle Coins to continue.` });
+        window.setTimeout(() => set({ toast: null }), 1800);
+        return;
+      }
+      p = { ...profile, coins: profile.coins - cost };
+      set({ coinContinues: { run, n: used + 1 } });
+      audio.feelCoins(4);
     } else {
       if (profile.gems < CONTINUE_COST) {
         set({ panel: "shop", toast: `Need ${CONTINUE_COST} gems to continue.` });

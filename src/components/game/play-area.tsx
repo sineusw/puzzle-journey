@@ -151,7 +151,7 @@ export function PlayArea() {
       // Only resize for real layout changes (rotation, window size), not for
       // banners and pop-ups coming and going, so the board never "breathes".
       const prev = parseFloat(frame.style.getPropertyValue("--bs")) || 0;
-      if (prev && Math.abs(prev - size) < 28 && size < prev) return;
+      if (prev && Math.abs(prev - size) < 64) return;
       frame.style.setProperty("--bs", `${size}px`);
     };
     fit();

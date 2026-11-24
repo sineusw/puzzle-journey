@@ -8,11 +8,11 @@ import { ItemCard, ShopSheetFrame, Wallet } from "./store-ui";
 export function CurrencySheet({ first }: { first: "coins" | "gems" }) {
   const order: Array<"coins" | "gems"> = first === "coins" ? ["coins", "gems"] : ["gems", "coins"];
   return (
-    <ShopSheetFrame title={first === "coins" ? "Get Coins" : "Get Gems"} sub={<Wallet />} wide>
+    <ShopSheetFrame title={first === "coins" ? "Get Jungle Coins" : "Get Gems"} sub={<Wallet />} wide>
       {order.map((sec) => (
         <section key={sec} className="pj-shop-sec">
           <h3>{sec === "coins" ? "🪙 Coin packs" : "💎 Gem packs"}</h3>
-          <p className="pj-cur-help">{sec === "coins" ? "Pay with gems or real money." : "Pay with coins or real money."}</p>
+          <p className="pj-cur-help">{sec === "coins" ? "Pay with gems or real money." : "Pay with Jungle Coins or real money."}</p>
           <div className="pj-item-grid">
             {SHOP.filter((i) => i.section === sec).map((item) => (
               <ItemCard key={item.id} item={item} />
