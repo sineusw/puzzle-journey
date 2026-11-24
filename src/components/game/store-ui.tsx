@@ -621,7 +621,13 @@ export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
   }, []);
   return (
     <div className="pj-sheet pj-oom text-center" data-testid="out-of-moves">
-      <div className="pj-oom-emoji" aria-hidden="true">😱</div>
+      <span className="pj-oom-vine is-l" aria-hidden="true" />
+      <span className="pj-oom-vine is-r" aria-hidden="true" />
+      <span className="pj-oom-leaf is-tl" aria-hidden="true">🌿</span>
+      <span className="pj-oom-leaf is-tr" aria-hidden="true">🍃</span>
+      <span className="pj-oom-leaf is-bl" aria-hidden="true">🌺</span>
+      <span className="pj-oom-leaf is-br" aria-hidden="true">🌴</span>
+      <div className="pj-oom-emoji" aria-hidden="true">🙈</div>
       <h2 className="pj-oom-title font-display">Out of moves!</h2>
       <p className="pj-oom-sub">{goal && left > 0 ? `So close. Only ${formatInt(left)} to go!` : "No room left for these blocks."}</p>
       {goal ? (

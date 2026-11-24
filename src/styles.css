@@ -4313,3 +4313,34 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-oom-results { margin-top: 10px; font-size: 0.8rem; font-weight: 800; color: rgb(244 238 227 / 0.6); text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .pj-oom, .pj-oom-emoji, .pj-oom-btn.is-video { animation: none; } }
 .pj-tray:not(.is-tutorial) { padding-top: 26px !important; }
+/* out of moves: jungle wood sign */
+.pj-sheet.pj-oom { position: relative; overflow: visible; border-radius: 26px; border: 4px solid #5a3415;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgb(140 255 120 / 0.18), transparent 60%),
+    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.14) 0 2px, transparent 2px 46px),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.03) 0 7px, rgb(0 0 0 / 0.04) 7px 13px),
+    linear-gradient(180deg, #2f5e2a 0%, #1f4320 45%, #15301a 100%);
+  box-shadow: 0 0 0 3px #a8742e, 0 10px 0 #3a200b, 0 18px 40px rgb(0 0 0 / 0.55), inset 0 2px 0 rgb(255 255 255 / 0.15); }
+.pj-oom-vine { position: absolute; top: -14px; width: 10px; height: 70%; border-radius: 6px; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(170deg, #3f9a3a 0 9px, #2e7a2c 9px 18px); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25); }
+.pj-oom-vine::after { content: "🍃"; position: absolute; bottom: -10px; left: -7px; font-size: 18px; }
+.pj-oom-vine.is-l { left: 26px; height: 64px !important; transform-origin: top; animation: pj-vine 3.2s ease-in-out infinite; }
+.pj-oom-vine.is-r { right: 30px; height: 44px; transform-origin: top; animation: pj-vine 3.8s ease-in-out infinite reverse; }
+@keyframes pj-vine { 50% { transform: rotate(3deg); } }
+.pj-oom-leaf { position: absolute; z-index: 3; font-size: 34px; line-height: 1; pointer-events: none; filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.4)); animation: pj-decor 3.4s ease-in-out infinite; }
+.pj-oom-leaf.is-tl { top: -18px; left: -14px; rotate: -30deg; }
+.pj-oom-leaf.is-tr { top: -16px; right: -12px; rotate: 25deg; animation-delay: -1s; }
+.pj-oom-leaf.is-bl { bottom: -12px; left: -10px; font-size: 26px; animation-delay: -2s; }
+.pj-oom-leaf.is-br { bottom: -14px; right: -12px; font-size: 30px; animation-delay: -.5s; }
+.pj-oom .pj-oom-emoji { font-size: 64px; }
+.pj-oom .pj-oom-title { color: #fff1b8; -webkit-text-stroke: 2px #2a4a12; text-shadow: 0 4px 0 #1c3a0c, 0 0 22px rgb(255 214 80 / 0.55); }
+.pj-oom .pj-oom-sub { color: #e6f5cf; }
+.pj-oom .pj-result-progress { background: rgb(0 0 0 / 0.35); border: 2px solid #5a3415; }
+.pj-oom .pj-oom-btn { border: 3px solid rgb(0 0 0 / 0.25); }
+.pj-oom .pj-oom-btn.is-video { background: linear-gradient(180deg, #7ee35a, #2f9e2e); border-color: #1d6b1f; box-shadow: 0 5px 0 #165017, inset 0 2px 0 rgb(255 255 255 / 0.45); }
+.pj-oom .pj-oom-btn.is-coins { background: linear-gradient(180deg, #ffd96a, #e6a020); border-color: #a86a10; box-shadow: 0 5px 0 #7a4a08, inset 0 2px 0 rgb(255 255 255 / 0.55); }
+.pj-oom .pj-oom-btn.is-pass { background: linear-gradient(180deg, #4fd0c0, #1e8a86); border-color: #145e5a; box-shadow: 0 5px 0 #0e4442, inset 0 2px 0 rgb(255 255 255 / 0.4); }
+.pj-oom .pj-oom-btn.is-restart { color: #fff4dc; border-color: #4a2a0f;
+  background: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.04) 0 6px, rgb(0 0 0 / 0.05) 6px 12px), linear-gradient(180deg, #a8692c, #7a4518); box-shadow: 0 5px 0 #3e220a, inset 0 2px 0 rgb(255 255 255 / 0.25); }
+.pj-oom .pj-oom-results { color: #cfe8b0; }
+@media (prefers-reduced-motion: reduce) { .pj-oom-vine, .pj-oom-leaf { animation: none; } }
