@@ -4419,3 +4419,10 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-intro-studio { position: absolute; z-index: 2; bottom: calc(14% - 34px); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.08em; color: rgb(255 255 255 / 0.55); text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce) { .pj-intro *, .pj-intro { animation: none !important; } }
 .pj-intro-blocks { position: absolute; inset: 0; pointer-events: none; }
+
+/* ---- bigger board on phones: one-row booster bar, slimmer header */
+.pj-powers { grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)) !important; width: min(100%, calc(var(--n, 4) * 78px)) !important; gap: 6px !important; }
+.pj-powers .pj-power-wrap { width: min(62px, 100%); }
+.pj-title-row .pj-logo img { height: clamp(58px, 9vh, 92px); }
+.pj-title-row .pj-rail { min-height: 30px; padding-top: 2px; padding-bottom: 2px; }
+.pj-title-row .pj-rails { gap: 4px; }

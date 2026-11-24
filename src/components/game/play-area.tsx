@@ -160,16 +160,19 @@ export function PlayArea() {
       // The size settles during the first moments after the screen opens (taking the
       // smallest fit seen, so nothing overflows), then is locked: banners, pop-ups and
       // toasts can never make the board grow and shrink mid-game.
+      // While settling, follow the latest measurement; once settled it is locked.
       const prev = parseFloat(frame.style.getPropertyValue("--bs")) || 0;
       if (prev && performance.now() > settleUntil) return;
-      if (prev && size >= prev) return;
       frame.style.setProperty("--bs", `${size}px`);
     };
-    let settleUntil = performance.now() + 1200;
+    let settleUntil = performance.now() + 1600;
     refit.current = () => {
       frame.style.removeProperty("--bs");
-      settleUntil = performance.now() + 1200;
+      settleUntil = performance.now() + 1600;
       fit();
+      // Measure again once the screen has finished animating in.
+      window.setTimeout(fit, 700);
+      window.setTimeout(fit, 1500);
     };
     fit();
     let lastW = window.innerWidth;

@@ -194,7 +194,7 @@ export function PowerBar() {
   const items = all.filter((i) => open.includes(i.id) || i === nextLocked);
   const icon = (item: (typeof all)[number]) => (item.icon ? <GameIcon name={item.icon} /> : <span className="pj-power-emoji">{item.emoji}</span>);
   return (
-    <div className="pj-powers">
+    <div className="pj-powers" style={{ ["--n" as string]: items.length }}>
       {items.map((item) => (
         <div key={item.id} className="pj-power-wrap">
           {open.includes(item.id) ? (
