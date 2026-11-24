@@ -1,422 +1,762 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as PE } from "react";
-import { bounds, canPlace, findHint, pieceFits, placeFromCell, previewClear, SIZE, snapPlace, type Piece } from "@/lib/game/engine";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as PE } from "react";
+import { bounds, canPlaceAnywhere, COMBO_WINDOW, placeFromCell, previewClear, SIZE, snapPlace, UNUSUAL_SHAPES, type Cell, type Piece } from "@/lib/game/engine";
 import { useGame } from "@/lib/game/store";
+import { LESSONS, targetCells } from "@/lib/game/tutorial";
 import * as audio from "@/lib/game/audio";
-import { BlockFace, PieceGrid, colorOf, overlaysOf, pieceSize } from "./block";
+import { BlockFace, PieceGrid, colorOf, colorTextureUrl, overlaysOf, pieceSize } from "./block";
+import { BoardFxRunner } from "./board-fx";
 import { SideRails } from "./overlays";
+import { useCompactLayout } from "./use-compact";
+import { SPECIAL_WORDS } from "./explainers";
+import { TutorialHand } from "./tutorial-coach";
+import { Cheerleader } from "./cheerleader";
 import { VisitorLayer } from "./visitors/visitor-layer";
+
+/** Tray pieces are drawn at this cell size before they're picked up. */
+const TRAY_CELL = 23;
+
+/**
+ * Cell size for a piece in the tray: as big as fits its third of the tray
+ * (small pieces read larger, long ones still fit). A lone special block is
+ * drawn bigger so its icon is easy to see.
+ */
+function trayCellFor(piece: Piece): number {
+  if (piece.cells.length === 1 && piece.special && piece.special !== "stone") return Math.round(TRAY_CELL * 2);
+  const { rows, cols } = bounds(piece.cells);
+  return Math.max(16, Math.min(27, Math.floor(108 / cols), Math.floor(84 / rows)));
+}
+
+type Metrics = { left: number; top: number; cell: number; gap: number; stride: number; right: number; bottom: number };
 
 type Drag = {
   index: number;
   pointerId: number;
+  piece: Piece;
   x: number;
   y: number;
   startX: number;
   startY: number;
   lift: number;
+  /** Full lift height; `lift` eases up to it so the piece rises, not jumps. */
+  liftMax: number;
+  t0: number;
+  /** Drag gain: the piece travels a little further than the finger. */
+  gx: number;
+  gy: number;
+  m: Metrics;
+  moved: boolean;
+  slot: DOMRect;
 };
 
-type Hover = { r: number; c: number; valid: boolean; rows: number[]; cols: number[]; extras: string[] };
+const LIFT_MS = 130;
 
-function gridMetrics(grid: HTMLElement) {
+/** Move the dragged piece for a pointer at (cx, cy), with gain and eased lift. */
+function follow(d: Drag, cx: number, cy: number): void {
+  d.x = d.startX + (cx - d.startX) * d.gx;
+  d.y = d.startY + (cy - d.startY) * d.gy;
+  const t = Math.min(1, (performance.now() - d.t0) / LIFT_MS);
+  d.lift = d.liftMax * (1 - (1 - t) * (1 - t) * (1 - t));
+}
+
+/** What the board shows under a dragged piece. */
+type Preview = {
+  r: number;
+  c: number;
+  /** Cells the piece would occupy. */
+  shadow: Set<string>;
+  /** Cells that would clear, tinted in the piece's color (Block Blast style). */
+  tint: Set<string>;
+  color: Piece["color"];
+};
+
+function measure(grid: HTMLElement): Metrics | null {
   const a = grid.querySelector<HTMLElement>('[data-cell="0-0"]');
   const b = grid.querySelector<HTMLElement>('[data-cell="0-1"]');
   if (!a) return null;
   const ar = a.getBoundingClientRect();
-  const br = b?.getBoundingClientRect();
+  const gap = b ? b.getBoundingClientRect().left - ar.right : 3;
   const cell = ar.width;
-  const gap = br ? br.left - ar.right : 4;
-  return { left: ar.left, top: ar.top, cell, gap, stride: cell + gap, right: ar.left + 8 * cell + 7 * (br ? br.left - ar.right : 4), bottom: ar.top + 8 * cell + 7 * (br ? br.left - ar.right : 4) };
+  const stride = cell + gap;
+  return { left: ar.left, top: ar.top, cell, gap, stride, right: ar.left + SIZE * stride - gap, bottom: ar.top + SIZE * stride - gap };
 }
 
+/** Last effect played, so remounting the board (tab switch) never replays it. */
+let lastFxId = 0;
+
 export function PlayArea() {
-  const match = useGame((s) => s.match);
+  const hasNext = useGame((s) => Boolean(s.match.next?.length));
+  const skin = useGame((s) => s.profile.skin);
+  const board = useGame((s) => s.match.board);
+  // Crowded board: the frame glows red so every drop feels like it counts.
+  const danger = useMemo(() => board.flat().filter((c) => c.t !== "e").length >= 44, [board]);
+  const tray = useGame((s) => s.match.tray);
+  const seenShapes = useGame((s) => s.profile.seenShapes);
+  const tutorial = useGame((s) => s.tutorial);
+  const guide = useMemo(() => {
+    if (!tutorial || tutorial.phase !== "play") return null;
+    const step = LESSONS[tutorial.lesson][tutorial.index];
+    return step ? new Set(targetCells(step).map(({ r, c }) => `${r}-${c}`)) : null;
+  }, [tutorial]);
+  const shield = useGame((s) => s.match.shield);
+  const comboHeat = useGame((s) => (s.match.combo >= 5 ? "hot" : s.match.combo >= 2 ? "warm" : undefined));
+  const over = useGame((s) => s.match.over);
   const selected = useGame((s) => s.selected);
   const targeting = useGame((s) => s.targeting);
-  const flash = useGame((s) => s.flash);
-  const landed = useGame((s) => s.landed);
-  const shake = useGame((s) => s.shake);
-  const comboPop = useGame((s) => s.comboPop);
-  const selectPiece = useGame((s) => s.selectPiece);
-  const rotateSelected = useGame((s) => s.rotateSelected);
-  const tryPlace = useGame((s) => s.tryPlace);
-  const usePowerOnCell = useGame((s) => s.usePowerOnCell);
   const visitorBusy = useGame((s) => s.visitorBusy);
-  const visitorEvent = useGame((s) => s.visitorEvent);
-  const setPointerBusy = useGame((s) => s.setPointerBusy);
+  const compact = useCompactLayout();
+  const visitorHide = useGame((s) => s.visitorHide);
+  const fx = useGame((s) => s.fx);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const fxHostRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
+  const ghostInnerRef = useRef<HTMLDivElement>(null);
+  const runnerRef = useRef<BoardFxRunner | null>(null);
   const dragRef = useRef<Drag | null>(null);
-  const hoverRef = useRef<Hover | null>(null);
-  const moveFrame = useRef<number | null>(null);
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const [hover, setHover] = useState<Hover | null>(null);
-  const [hint, setHint] = useState<{ r: number; c: number; index: number } | null>(null);
-  const moved = useRef(false);
+  const frameReq = useRef<number | null>(null);
   const skipClick = useRef(false);
-  const wasSelected = useRef(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // Hold the background ambience still while a piece is being dragged.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (dragIndex !== null) root.dataset.dragging = "1";
+    else delete root.dataset.dragging;
+  }, [dragIndex]);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const dropping = useRef(false);
+  const previewKey = useRef("");
+  const previewLines = useRef(0);
 
-  const setHoverBoth = (h: Hover | null) => {
-    const prev = hoverRef.current;
-    const same =
-      prev === h ||
-      (prev !== null &&
-        h !== null &&
-        prev.r === h.r &&
-        prev.c === h.c &&
-        prev.valid === h.valid &&
-        prev.rows.join(",") === h.rows.join(",") &&
-        prev.cols.join(",") === h.cols.join(",") &&
-        prev.extras.join(",") === h.extras.join(","));
-    if (same) return;
-    hoverRef.current = h;
-    setHover(h);
-  };
+  // Latest values for stable callbacks.
+  const live = useRef({ board, tray, over, selected, targeting, visitorBusy });
+  live.current = { board, tray, over, selected, targeting, visitorBusy };
 
-  const paintGhost = useCallback((d: Drag, piece: Piece) => {
+  // Size the board to the largest square that fits the space left for it.
+  // Done in JS so every browser (Safari included) gets the same result.
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const frame = frameRef.current;
+    if (!row || !frame) return;
+    const fit = () => {
+      const rails = row.querySelectorAll<HTMLElement>(".pj-rails");
+      let railW = 0;
+      rails.forEach((r) => (railW += r.offsetWidth));
+      const gap = parseFloat(getComputedStyle(row).columnGap || "0") || 0;
+      const w = row.clientWidth - railW - gap * rails.length;
+      const h = row.clientHeight;
+      const max = parseFloat(getComputedStyle(frame).getPropertyValue("--pj-board-max")) || 480;
+      const size = Math.max(160, Math.floor(Math.min(w, h, max)));
+      frame.style.setProperty("--bs", `${size}px`);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, []);
+
+  // Board effects layer.
+  useEffect(() => {
+    if (!fxHostRef.current || !gridRef.current || !frameRef.current) return;
+    const runner = new BoardFxRunner(fxHostRef.current, gridRef.current, frameRef.current);
+    runnerRef.current = runner;
+    const onResize = () => runner.resize();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      runner.destroy();
+      runnerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!fx || fx.id === lastFxId) return;
+    lastFxId = fx.id;
+    runnerRef.current?.play(fx);
+  }, [fx]);
+
+  const placeGhost = useCallback((d: Drag) => {
     const el = ghostRef.current;
-    const grid = gridRef.current;
-    if (!el || !grid) return;
-    const metrics = gridMetrics(grid) ?? { cell: 28, gap: 2 };
-    const size = pieceSize(piece.cells, metrics.cell, metrics.gap);
-    el.style.width = `${size.w}px`;
-    el.style.height = `${size.h}px`;
+    if (!el) return;
+    const size = pieceSize(d.piece.cells, d.m.cell, d.m.gap);
     el.style.transform = `translate3d(${d.x - size.w / 2}px, ${d.y - d.lift - size.h / 2}px, 0)`;
   }, []);
 
-  const syncHover = useCallback(
-    (x: number, y: number, piece: Piece, lift: number) => {
-      const grid = gridRef.current;
-      if (!grid) return;
-      const m = gridMetrics(grid);
-      if (!m) return;
-      const { rows, cols } = bounds(piece.cells);
-      const w = cols * m.cell + (cols - 1) * m.gap;
-      const h = rows * m.cell + (rows - 1) * m.gap;
-      const cx = x;
-      const cy = y - lift;
-      const left = cx - w / 2;
-      const top = cy - h / 2;
-      const over =
-        cx >= m.left - m.cell &&
-        cx <= m.right + m.cell &&
-        cy >= m.top - m.cell &&
-        cy <= m.bottom + m.cell;
-      if (!over) {
-        setHoverBoth(null);
-        return;
-      }
-      const c = Math.round((left - m.left) / m.stride);
-      const r = Math.round((top - m.top) / m.stride);
-      const snap = snapPlace(match.board, piece.cells, r, c);
+  /** Work out where the piece would land and what would clear. */
+  const updatePreview = useCallback((d: Drag) => {
+    const { board: b } = live.current;
+    const { m, piece } = d;
+    const { rows, cols } = bounds(piece.cells);
+    const w = cols * m.stride - m.gap;
+    const h = rows * m.stride - m.gap;
+    const cx = d.x;
+    const cy = d.y - d.lift;
+    const over = cx >= m.left - m.cell && cx <= m.right + m.cell && cy >= m.top - m.cell && cy <= m.bottom + m.cell;
+    let next: Preview | null = null;
+    if (over) {
+      const c = Math.round((cx - w / 2 - m.left) / m.stride);
+      const r = Math.round((cy - h / 2 - m.top) / m.stride);
+      const snap = snapPlace(b, piece.cells, r, c);
       if (snap) {
-        const preview = previewClear(match.board, piece, snap.r, snap.c);
-        setHoverBoth({
-          r: snap.r,
-          c: snap.c,
-          valid: true,
-          rows: preview?.rows ?? [],
-          cols: preview?.cols ?? [],
-          extras: (preview?.cells ?? []).map((x) => `${x.r}-${x.c}`),
-        });
+        const key = `${snap.r},${snap.c}`;
+        if (key === previewKey.current) return;
+        previewKey.current = key;
+        const shadow = new Set(piece.cells.map(([dr, dc]) => `${snap.r + dr}-${snap.c + dc}`));
+        const tint = new Set<string>();
+        const clear = previewClear(b, piece, snap.r, snap.c);
+        if (clear) {
+          for (const row of clear.rows) for (let x = 0; x < SIZE; x++) tint.add(`${row}-${x}`);
+          for (const col of clear.cols) for (let y = 0; y < SIZE; y++) tint.add(`${y}-${col}`);
+          for (const cell of clear.cells) tint.add(`${cell.r}-${cell.c}`);
+        }
+        next = { r: snap.r, c: snap.c, shadow, tint, color: piece.color };
+        // Feedback while aiming: a tick per new spot, a shimmer when it would clear.
+        const lines = clear ? clear.rows.length + clear.cols.length : 0;
+        if (lines > 0 && previewLines.current === 0) audio.feelWouldClear(lines);
+        else audio.feelSnap(snap.r);
+        previewLines.current = lines;
+      }
+    }
+    if (!next) {
+      previewLines.current = 0;
+      if (previewKey.current === "") return;
+      previewKey.current = "";
+    }
+    ghostInnerRef.current?.classList.toggle("is-invalid", over && !next);
+    setPreview(next);
+  }, []);
+
+  const endDrag = useCallback(
+    (d: Drag, placed: boolean) => {
+      dragRef.current = null;
+      previewKey.current = "";
+      setPreview(null);
+      useGame.getState().setPointerBusy(false);
+      const el = ghostRef.current;
+      const inner = ghostInnerRef.current;
+      if (placed || !el || !inner || !d.moved) {
+        setDragIndex(null);
         return;
       }
-      const valid = canPlace(match.board, piece.cells, r, c);
-      setHoverBoth({ r, c, valid, rows: [], cols: [], extras: [] });
+      // Glide back to the tray.
+      const size = pieceSize(d.piece.cells, d.m.cell, d.m.gap);
+      const tx = d.slot.left + d.slot.width / 2 - size.w / 2;
+      const ty = d.slot.top + d.slot.height / 2 - size.h / 2;
+      el.classList.add("is-returning");
+      el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+      inner.style.transform = `scale(${trayCellFor(d.piece) / d.m.cell})`;
+      window.setTimeout(() => setDragIndex((i) => (i === d.index ? null : i)), 190);
     },
-    [match.board],
+    [],
   );
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || e.pointerId !== d.pointerId) return;
-      if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) moved.current = true;
-      const next = { ...d, x: e.clientX, y: e.clientY };
-      dragRef.current = next;
-      if (moveFrame.current !== null) return;
-      moveFrame.current = window.requestAnimationFrame(() => {
-        moveFrame.current = null;
+      follow(d, e.clientX, e.clientY);
+      if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) d.moved = true;
+      if (frameReq.current !== null) return;
+      frameReq.current = requestAnimationFrame(() => {
+        frameReq.current = null;
         const latest = dragRef.current;
         if (!latest) return;
-        const piece = match.tray[latest.index];
-        if (!piece) return;
-        paintGhost(latest, piece);
-        syncHover(latest.x, latest.y, piece, latest.lift);
+        placeGhost(latest);
+        updatePreview(latest);
+        if (latest.moved) runnerRef.current?.trail(latest.x, latest.y - latest.lift, latest.piece.color);
       });
     };
     const onUp = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || e.pointerId !== d.pointerId) return;
-      const piece = match.tray[d.index];
-      if (moveFrame.current !== null) {
-        window.cancelAnimationFrame(moveFrame.current);
-        moveFrame.current = null;
+      if (frameReq.current !== null) {
+        cancelAnimationFrame(frameReq.current);
+        frameReq.current = null;
       }
-      if (piece) syncHover(e.clientX, e.clientY, piece, d.lift);
-      const h = hoverRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      setPointerBusy(false);
-      if (piece && h?.valid && moved.current) {
+      follow(d, e.clientX, e.clientY);
+      d.lift = d.liftMax;
+      previewKey.current = "";
+      updatePreview(d);
+      const target = previewKey.current ? previewKey.current.split(",").map(Number) : null;
+      let placed = false;
+      if (d.moved && target && e.type !== "pointercancel") {
         skipClick.current = true;
-        tryPlace(d.index, h.r, h.c);
-      } else if (!moved.current) {
-        if (wasSelected.current) rotateSelected();
-      } else if (moved.current && piece && h) {
-        const snap = placeFromCell(match.board, piece.cells, h.r, h.c);
-        if (snap) {
-          skipClick.current = true;
-          tryPlace(d.index, snap.r, snap.c);
-        } else audio.sfxBad();
-      } else if (moved.current && piece) {
-        audio.sfxBad();
+        // Only swallow the click that follows this drag; touch drags often send none.
+        window.setTimeout(() => (skipClick.current = false), 350);
+        const el = ghostRef.current;
+        if (el && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          // Glide the piece into its slot, then commit: drops read as one smooth motion.
+          dragRef.current = null;
+          dropping.current = true;
+          el.classList.add("is-dropping");
+          el.style.transform = `translate3d(${d.m.left + target[1]! * d.m.stride}px, ${d.m.top + target[0]! * d.m.stride}px, 0)`;
+          window.setTimeout(() => {
+            dropping.current = false;
+            el.classList.remove("is-dropping");
+            const ok = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
+            endDrag(d, ok);
+          }, 80);
+          return;
+        }
+        placed = useGame.getState().tryPlace(d.index, target[0]!, target[1]!);
+      } else if (d.moved) {
+        audio.feelNope();
       }
-      setHoverBoth(null);
+      endDrag(d, placed);
     };
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
-      if (moveFrame.current !== null) window.cancelAnimationFrame(moveFrame.current);
+      if (frameReq.current !== null) cancelAnimationFrame(frameReq.current);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [match.board, match.tray, paintGhost, rotateSelected, syncHover, tryPlace, setPointerBusy]);
+  }, [endDrag, placeGhost, updatePreview]);
 
-  const onPieceDown = (index: number, e: PE<HTMLButtonElement>) => {
-    if (match.over || visitorBusy || !match.tray[index]) return;
+  const onPieceDown = useCallback((index: number, e: PE<HTMLButtonElement>) => {
+    const { tray: t, over: o, visitorBusy: busy } = live.current;
+    const piece = t[index];
+    if (o || busy || dropping.current || !piece || !gridRef.current) return;
+    const m = measure(gridRef.current);
+    if (!m) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    moved.current = false;
-    wasSelected.current = selected === index;
-    audio.sfxClick();
-    const lift = e.pointerType === "mouse" ? 0 : 72;
-    const d: Drag = {
+    audio.feelPickup();
+    runnerRef.current?.pickup(e.clientX, e.clientY, piece.color);
+    previewLines.current = 0;
+    dragRef.current = {
       index,
       pointerId: e.pointerId,
+      piece,
       x: e.clientX,
       y: e.clientY,
       startX: e.clientX,
       startY: e.clientY,
-      lift,
+      lift: 0,
+      // Touch: hold the piece above the finger, its bottom edge clear of the fingertip.
+      liftMax: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
+      t0: performance.now(),
+      gx: e.pointerType === "mouse" ? 1 : 1.12,
+      gy: e.pointerType === "mouse" ? 1 : 1.3,
+      m,
+      moved: false,
+      slot: e.currentTarget.getBoundingClientRect(),
     };
-    dragRef.current = d;
-    setDrag(d);
-    setPointerBusy(true);
-    selectPiece(index);
-  };
+    // Ease the lift in even if the finger holds still.
+    const rise = () => {
+      const d = dragRef.current;
+      if (!d || d.lift >= d.liftMax) return;
+      follow(d, d.startX + (d.x - d.startX) / d.gx, d.startY + (d.y - d.startY) / d.gy);
+      placeGhost(d);
+      requestAnimationFrame(rise);
+    };
+    requestAnimationFrame(rise);
+    previewKey.current = "";
+    setDragIndex(index);
+    useGame.getState().setPointerBusy(true);
+    useGame.getState().selectPiece(index);
+  }, [placeGhost]);
 
-  const onCellClick = (r: number, c: number) => {
-    if (visitorBusy) return;
+  // Position the ghost before it paints, then let it grow to board size.
+  useLayoutEffect(() => {
+    const d = dragRef.current;
+    const el = ghostRef.current;
+    const inner = ghostInnerRef.current;
+    if (dragIndex === null || !d || !el || !inner) return;
+    el.classList.remove("is-returning");
+    const slot = d.slot;
+    const size = pieceSize(d.piece.cells, d.m.cell, d.m.gap);
+    el.style.transform = `translate3d(${slot.left + slot.width / 2 - size.w / 2}px, ${slot.top + slot.height / 2 - size.h / 2}px, 0)`;
+    inner.style.transform = `scale(${trayCellFor(d.piece) / d.m.cell})`;
+    const id = requestAnimationFrame(() => {
+      if (dragRef.current !== d) return;
+      el.classList.add("is-live");
+      inner.style.transform = "scale(1)";
+      placeGhost(d);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [dragIndex, placeGhost]);
+
+  const onGridClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-cell]");
+    if (!btn) return;
+    const [r, c] = btn.dataset.cell!.split("-").map(Number) as [number, number];
+    const s = live.current;
+    if (s.visitorBusy) return;
     if (skipClick.current) {
       skipClick.current = false;
       return;
     }
-    if (targeting) {
-      usePowerOnCell(r, c);
+    const store = useGame.getState();
+    // Tutorial: tapping a glowing square drops the block right there.
+    const tut = store.tutorial;
+    if (tut && tut.phase === "play") {
+      const step = LESSONS[tut.lesson][tut.index];
+      if (step && targetCells(step).some((t) => t.r === r && t.c === c)) {
+        const slot = s.tray.findIndex((p) => p);
+        if (slot >= 0) store.tryPlace(slot, step.at.r, step.at.c);
+      }
       return;
     }
-    if (selected === null) return;
-    const piece = match.tray[selected];
+    if (s.targeting) {
+      store.usePowerOnCell(r, c);
+      return;
+    }
+    if (s.selected === null) return;
+    const piece = s.tray[s.selected];
     if (!piece) return;
-    const snap = placeFromCell(match.board, piece.cells, r, c);
-    if (snap) tryPlace(selected, snap.r, snap.c);
-    else tryPlace(selected, r, c);
-  };
+    const snap = placeFromCell(s.board, piece.cells, r, c);
+    if (snap) store.tryPlace(s.selected, snap.r, snap.c);
+    else store.tryPlace(s.selected, r, c);
+  }, []);
 
-  const showHint = () => {
-    const index = selected !== null && match.tray[selected] ? selected : match.tray.findIndex((p) => p && pieceFits(match, p));
-    const piece = index >= 0 ? match.tray[index] : null;
-    if (!piece) {
-      audio.sfxBad();
-      return;
-    }
-    const pos = findHint(match.board, piece.cells);
-    if (!pos) {
-      audio.sfxBad();
-      return;
-    }
-    audio.sfxClick();
-    selectPiece(index);
-    setHint({ ...pos, index });
-    window.setTimeout(() => setHint(null), 1400);
-  };
-
-  const flashAt = (r: number, c: number) => flash.find((f) => f.r === r && f.c === c);
-  const landedAt = (r: number, c: number) => landed.some((p) => p.r === r && p.c === c);
-
-  const draggingPiece = drag ? match.tray[drag.index] : null;
-  const ghostMetrics = (() => {
-    if (!drag || !draggingPiece || !gridRef.current) return { cell: 28, gap: 2 };
-    return gridMetrics(gridRef.current) ?? { cell: 28, gap: 2 };
-  })();
-
-  const hintCells = new Set<string>();
-  if (hover?.valid && draggingPiece) {
-    for (const [dr, dc] of draggingPiece.cells) hintCells.add(`${hover.r + dr}-${hover.c + dc}`);
-  }
-  if (hint) {
-    const piece = match.tray[hint.index];
-    if (piece) for (const [dr, dc] of piece.cells) hintCells.add(`${hint.r + dr}-${hint.c + dc}`);
-  }
-
-  const clearSet = new Set<string>();
-  if (hover?.valid) {
-    for (const r of hover.rows) for (let c = 0; c < SIZE; c++) clearSet.add(`${r}-${c}`);
-    for (const c of hover.cols) for (let r = 0; r < SIZE; r++) clearSet.add(`${r}-${c}`);
-    for (const key of hover.extras) clearSet.add(key);
-  }
-
-  useLayoutEffect(() => {
-    if (drag && draggingPiece) paintGhost(drag, draggingPiece);
-  }, [drag, draggingPiece, paintGhost]);
+  const draggingPiece = dragIndex !== null ? dragRef.current?.piece ?? tray[dragIndex] ?? null : null;
+  const ghostMetrics = dragRef.current?.m;
 
   return (
     <div className={`pj-play ${visitorBusy ? "is-visiting" : ""}`}>
-      <div className="pj-board-row">
-        <SideRails side="l" />
-        <div className={`pj-frame ${shake ? "pj-shake" : ""}`}>
-          <span className="pj-rivet tl" />
-          <span className="pj-rivet tr" />
-          <span className="pj-rivet bl" />
-          <span className="pj-rivet br" />
-          <div ref={gridRef} className="pj-grid" data-testid="board">
-            {match.board.flatMap((row, r) =>
-              row.map((cell, c) => {
-                const key = `${r}-${c}`;
-                const col = colorOf(cell);
-                const ghost = flashAt(r, c);
-                const justLanded = landedAt(r, c);
-                const hinted = hintCells.has(key);
-                const willClear = clearSet.has(key);
-                const hideForFly =
-                  visitorEvent?.action.kind === "move" &&
-                  visitorEvent.action.from[0] === r &&
-                  visitorEvent.action.from[1] === c;
-                const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
-                const cubeColor = special === "bomb" ? "violet" : special === "blast" ? "amber" : special === "rocketH" || special === "rocketV" ? "azure" : col;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    data-cell={key}
-                    data-testid={`cell-${r}-${c}`}
-                    className={`pj-well ${willClear ? "is-clear" : ""} ${hinted ? "is-hint" : ""} ${targeting ? "is-target" : ""} ${ghost ? "is-boom" : ""} ${justLanded ? "is-landed" : ""}`}
-                    onClick={() => onCellClick(r, c)}
-                    aria-label={`Row ${r + 1} column ${c + 1}`}
-                  >
-                    {col && !hideForFly ? (
-                      <BlockFace
-                        color={cubeColor ?? "cyan"}
-                        star={cell.t === "s"}
-                        gold={cell.t === "s" && cell.gold}
-                        cracked={cell.t === "k"}
-                        special={special}
-                        stoneHp={cell.t === "k" ? cell.hp : undefined}
-                        overlays={overlaysOf(cell)}
-                      />
-                    ) : hinted && draggingPiece ? (
-                      <BlockFace color={draggingPiece.color} ghost />
-                    ) : ghost ? (
-                      <BlockFace
-                        color={colorOf(ghost.cell) ?? "stone"}
-                        star={ghost.cell.t === "s"}
-                        gold={ghost.cell.t === "s" && ghost.cell.gold}
-                        flash
-                      />
-                    ) : null}
-                  </button>
-                );
-              }),
-            )}
-          </div>
-          {comboPop ? (
-            <div className="pj-float">
-              <div className="pj-combo">
-                {comboPop.label}
-                {comboPop.combo > 1 ? ` x${comboPop.combo}` : ""}
-                <div className="pj-combo-pts">+{comboPop.score}</div>
-              </div>
-              <div className="pj-sparks" aria-hidden="true">
-                {Array.from({ length: 12 }, (_, i) => (
-                  <span key={i} className="pj-spark" style={{ ["--a" as string]: `${i * 30}deg` }} />
-                ))}
-              </div>
-            </div>
-          ) : null}
+      <div ref={rowRef} className="pj-board-row">
+        {compact ? null : <SideRails side="l" />}
+        <div ref={frameRef} className={`pj-frame${over ? " is-over" : ""}${danger && !over ? " is-danger" : ""}`} data-combo={comboHeat} data-shield={shield > 0 ? "" : undefined}>
+          <ComboMeter />
+          <BoardGrid
+            key={skin}
+            gridRef={gridRef}
+            board={board}
+            preview={preview}
+            targeting={Boolean(targeting)}
+            hidden={visitorHide}
+            guide={guide}
+            onClick={onGridClick}
+          />
         </div>
-        <SideRails side="r" />
+        {compact ? null : <SideRails side="r" />}
       </div>
 
-      <div className="pj-tray-wrap">
-        <div className="pj-tray-bar">
-          <span className="pj-tray-label">Next blocks</span>
-          <button type="button" className="pj-hint-btn" onClick={showHint} data-testid="hint">
-            Hint
-          </button>
-          <button type="button" className="pj-hint-btn" onClick={() => rotateSelected()} data-testid="rotate">
-            Rotate
-          </button>
-        </div>
-        <div className="pj-tray" data-testid="tray">
-        {match.tray.map((piece, i) => {
-          const fits = piece ? pieceFits(match, piece) : true;
-          return (
-            <button
+      <div
+        className="pj-tray-wrap"
+        // Reaching for a piece during a visit fast-forwards it; it never picks one up.
+        onPointerDown={visitorBusy ? () => useGame.getState().skipVisitor() : undefined}
+      >
+        {tutorial ? null : <TrayTip tray={tray} />}
+        {tutorial ? null : <UpNext />}
+        <div className={`pj-tray${tutorial?.phase === "play" ? " is-tutorial" : ""}${!tutorial && hasNext ? " has-next" : ""}`} data-testid="tray">
+          {tray.map((piece, i) => (
+            <TraySlot
+              skin={skin}
               key={piece?.id ?? `empty-${i}`}
-              type="button"
-              data-testid={`tray-${i}`}
-              className={`pj-slot ${selected === i ? "is-selected" : ""} ${piece && !fits ? "is-dead" : ""} ${drag?.index === i ? "is-lifted" : ""}`}
-              disabled={!piece || match.over || visitorBusy}
-              onPointerDown={(e) => onPieceDown(i, e)}
-              onClick={(e) => {
-                if (e.detail !== 0) return;
-                if (!piece) return;
-                if (selected === i) rotateSelected();
-                else selectPiece(i);
-              }}
-              aria-label={piece ? `Next block ${i + 1}. Tap to rotate, drag onto the board.` : `Empty slot ${i + 1}`}
-            >
-              {piece ? (
-                <PieceGrid piece={piece} cell={20} faded={!fits || drag?.index === i} />
-              ) : null}
-            </button>
-          );
-        })}
+              index={i}
+              piece={piece}
+              fits={piece ? canFit(board, piece) : true}
+              selected={selected === i}
+              lifted={dragIndex === i}
+              disabled={!piece || over || visitorBusy}
+              onDown={onPieceDown}
+              isNew={Boolean(piece && (UNUSUAL_SHAPES as readonly string[]).includes(piece.shape) && !seenShapes.includes(piece.shape))}
+            />
+          ))}
         </div>
       </div>
 
-      {drag && draggingPiece
-        ? (() => {
-            const size = pieceSize(draggingPiece.cells, ghostMetrics.cell, ghostMetrics.gap);
-            return (
-              <div
-                ref={ghostRef}
-                className="pj-ghost"
-                style={{
-                  left: 0,
-                  top: 0,
-                  width: size.w,
-                  height: size.h,
-                }}
-              >
-                <div className="pj-ghost-piece">
-                  <PieceGrid
-                    piece={draggingPiece}
-                    cell={ghostMetrics.cell}
-                    gap={ghostMetrics.gap}
-                    faded={hover ? !hover.valid : false}
-                  />
-                </div>
-              </div>
-            );
-          })()
-        : null}
+      {draggingPiece && ghostMetrics ? (
+        <div ref={ghostRef} className="pj-ghost" aria-hidden="true">
+          <div ref={ghostInnerRef} className="pj-ghost-piece">
+            <PieceGrid piece={draggingPiece} cell={ghostMetrics.cell} gap={ghostMetrics.gap} />
+          </div>
+        </div>
+      ) : null}
 
+      <div ref={fxHostRef} className="pj-boardfx-host" aria-hidden="true" />
       <VisitorLayer grid={gridRef.current} />
+      <TutorialHand dragging={dragIndex !== null} />
+      <RunBanner />
+      <Cheerleader />
+    </div>
+  );
+}
+
+/** Streak pill on the frame's top edge: combo level plus moves left to keep it. */
+const ComboMeter = memo(function ComboMeter() {
+  const combo = useGame((s) => s.match.combo);
+  const since = useGame((s) => s.match.sinceClear);
+  const tutorial = useGame((s) => s.tutorial !== null);
+  if (combo < 1 || tutorial) return null;
+  const left = Math.max(0, COMBO_WINDOW - since);
+  return (
+    <div className={`pj-combo-meter ${left <= 1 ? "is-last" : ""}`} data-testid="combo-meter" aria-label={`Combo ${combo}. ${left} moves left to keep it.`}>
+      <span className="pj-combo-meter-label">Combo</span>
+      <strong className="tabular-nums">×{combo}</strong>
+      <span className="pj-combo-pips" aria-hidden="true">
+        {Array.from({ length: COMBO_WINDOW }, (_, i) => (
+          <i key={i} className={i < left ? "is-on" : ""} />
+        ))}
+      </span>
+    </div>
+  );
+});
+
+function canFit(board: Cell[][], piece: Piece): boolean {
+  return canPlaceAnywhere(board, piece.cells);
+}
+
+/* ------------------------------------------------------------------ board */
+
+/** A string that changes only when what a cell shows changes. */
+function faceKey(cell: Cell): string {
+  switch (cell.t) {
+    case "e":
+      return "";
+    case "b":
+      return `b:${cell.c}:${cell.sp ?? ""}:${(cell.ov ?? []).join(",")}:${cell.gm ? 1 : 0}`;
+    case "s":
+      return `s:${cell.c}:${cell.gold ? 1 : 0}:${cell.sp ?? ""}:${(cell.ov ?? []).join(",")}`;
+    case "k":
+      return `k:${cell.hp}:${cell.kind ?? ""}`;
+    case "crate":
+      return `c:${cell.hp}`;
+    case "portal":
+      return `p:${cell.hue}`;
+  }
+}
+
+const BoardGrid = memo(function BoardGrid({
+  gridRef,
+  board,
+  preview,
+  targeting,
+  hidden,
+  guide,
+  onClick,
+}: {
+  guide: Set<string> | null;
+  gridRef: React.RefObject<HTMLDivElement | null>;
+  board: Cell[][];
+  preview: Preview | null;
+  targeting: boolean;
+  hidden: string[];
+  onClick: (e: MouseEvent<HTMLDivElement>) => void;
+}) {
+  const tintUrl = preview ? colorTextureUrl(preview.color) : null;
+  const hide = useMemo(() => new Set(hidden), [hidden]);
+  // A row or column one block from full: its last gap glows so the player can see the clear.
+  const almost = useMemo(() => {
+    const out = new Set<string>();
+    const n = board.length;
+    for (let i = 0; i < n; i++) {
+      const rowGaps: number[] = [];
+      const colGaps: number[] = [];
+      for (let j = 0; j < n; j++) {
+        if (board[i]![j]!.t === "e") rowGaps.push(j);
+        if (board[j]![i]!.t === "e") colGaps.push(j);
+      }
+      if (rowGaps.length === 1) out.add(`${i}-${rowGaps[0]}`);
+      if (colGaps.length === 1) out.add(`${colGaps[0]}-${i}`);
+    }
+    return out;
+  }, [board]);
+  return (
+    <div ref={gridRef} className="pj-grid" data-testid="board" onClick={onClick}>
+      {board.flatMap((row, r) =>
+        row.map((cell, c) => {
+          const key = `${r}-${c}`;
+          return (
+            <BoardCell
+              key={key}
+              k={key}
+              cell={cell}
+              face={faceKey(cell)}
+              shadow={preview?.shadow.has(key) ? preview.color : null}
+              tint={preview?.tint.has(key) && cell.t !== "e" ? tintUrl : null}
+              target={targeting}
+              guide={Boolean(guide?.has(key))}
+              hidden={hide.has(key)}
+              almost={!preview && almost.has(key)}
+            />
+          );
+        }),
+      )}
+    </div>
+  );
+});
+
+type CellProps = {
+  k: string;
+  cell: Cell;
+  face: string;
+  shadow: Piece["color"] | null;
+  tint: string | null;
+  target: boolean;
+  guide: boolean;
+  hidden: boolean;
+  almost?: boolean;
+};
+
+const BoardCell = memo(
+  function BoardCell({ k, cell, shadow, tint, target, guide, hidden, almost }: CellProps) {
+    const [r, c] = k.split("-").map(Number) as [number, number];
+    const col = colorOf(cell);
+    const special = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
+    const cubeColor =
+      special === "bomb" ? "violet" : special === "blast" ? "amber" : special === "rocketH" || special === "rocketV" ? "azure" : col;
+    return (
+      <button
+        type="button"
+        data-cell={k}
+        data-testid={`cell-${k}`}
+        className={`pj-well${target ? " is-target" : ""}${tint ? " is-clear" : ""}${guide ? " is-guide" : ""}${almost ? " is-almost" : ""}`}
+        aria-label={`Row ${r + 1} column ${c + 1}`}
+      >
+        {col && !hidden ? (
+          <BlockFace
+            color={cubeColor ?? "cyan"}
+            star={cell.t === "s"}
+            gold={cell.t === "s" && cell.gold}
+            cracked={cell.t === "k"}
+            special={special}
+            stoneHp={cell.t === "k" ? cell.hp : undefined}
+            overlays={overlaysOf(cell)}
+            gem={cell.t === "b" && Boolean(cell.gm)}
+          />
+        ) : shadow ? (
+          <BlockFace color={shadow} ghost />
+        ) : null}
+        {tint && !hidden ? <span className="pj-clear-tint" style={{ backgroundImage: `url(${tint})` }} /> : null}
+      </button>
+    );
+  },
+  (a, b) => a.face === b.face && a.shadow === b.shadow && a.tint === b.tint && a.target === b.target && a.guide === b.guide && a.hidden === b.hidden && a.almost === b.almost && a.k === b.k,
+);
+
+/* ------------------------------------------------------------------- tray */
+
+const TIP_TEXT: Record<string, { title: string; body: string }> = {
+  ...Object.fromEntries(Object.entries(SPECIAL_WORDS).map(([k, w]) => [k, { title: w.name, body: w.does }])),
+  star: { title: "Star block = color bomb!", body: "Drop it anywhere and every block of its color on the board pops. No full row needed!" },
+  stone: { title: "Stone block", body: "Stones are tough. Clear blocks right next to a stone two times and it breaks." },
+};
+
+/** First time a special block shows up in the tray, say what it does. */
+const TrayTip = memo(function TrayTip({ tray }: { tray: Array<Piece | null> }) {
+  const seen = useGame((s) => s.profile.seenSpecialTips);
+  const dismissTip = useGame((s) => s.dismissTip);
+  const kinds = tray.flatMap((p) => (p ? [p.special ?? "", p.starAt !== null ? "star" : ""] : [])).filter(Boolean);
+  const sp = kinds.find((k) => TIP_TEXT[k] && !seen.includes(k));
+  // Any tap anywhere puts the tip away.
+  useEffect(() => {
+    if (!sp) return;
+    const off = () => dismissTip(sp);
+    const t = window.setTimeout(() => window.addEventListener("pointerdown", off, { once: true, capture: true }), 250);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", off, { capture: true });
+    };
+  }, [sp, dismissTip]);
+  if (!sp || !TIP_TEXT[sp]) return null;
+  const tip = TIP_TEXT[sp]!;
+  return (
+    <div className="pj-tray-tip" role="status" data-testid="tray-tip">
+      <strong>{tip.title}</strong>
+      <span>{tip.body}</span>
+      <button type="button" className="pj-tray-tip-ok" onClick={() => dismissTip(sp)}>
+        Got it
+      </button>
+    </div>
+  );
+});
+
+function pieceSpan(p: Piece): number {
+  return Math.max(...p.cells.map((c) => c[0]), ...p.cells.map((c) => c[1])) + 1;
+}
+
+/** Small "Up next" preview of the following set, so players can plan a move ahead. */
+function UpNext() {
+  const next = useGame((s) => s.match.next);
+  const bonus = useGame((s) => s.match.bonus);
+  if (!next?.length) return null;
+  return (
+    <div className="pj-upnext" data-testid="up-next" aria-label="Up next">
+      <span>Next</span>
+      {bonus?.length ? <b className="pj-upnext-bonus" title="Earned power blocks">+{bonus.length} ⚡</b> : null}
+      {next.map((p) => (
+        <PieceGrid key={p.id} piece={p} cell={Math.min(8, Math.floor(26 / pieceSpan(p)) - 1)} gap={1} />
+      ))}
+    </div>
+  );
+}
+
+const TraySlot = memo(function TraySlot({
+  index,
+  piece,
+  fits,
+  selected,
+  lifted,
+  disabled,
+  onDown,
+  isNew,
+}: {
+  skin?: string;
+  index: number;
+  piece: Piece | null;
+  fits: boolean;
+  selected: boolean;
+  lifted: boolean;
+  disabled: boolean;
+  onDown: (index: number, e: PE<HTMLButtonElement>) => void;
+  isNew?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={`tray-${index}`}
+      className={`pj-slot${piece && (piece.starAt !== null || (piece.special && piece.special !== "stone")) ? " is-power" : ""}${selected ? " is-selected" : ""}${piece && !fits ? " is-dead" : ""}${lifted ? " is-lifted" : ""}`}
+      disabled={disabled}
+      onPointerDown={(e) => onDown(index, e)}
+      onClick={(e) => {
+        if (e.detail !== 0 || !piece) return;
+        useGame.getState().selectPiece(index);
+      }}
+      aria-label={piece ? `Next block ${index + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${index + 1}`}
+    >
+      {piece ? (
+        <PieceGrid
+          piece={piece}
+          cell={trayCellFor(piece)}
+          faded={!fits || lifted}
+        />
+      ) : null}
+      {isNew && !lifted ? <span className="pj-new-tag">New shape</span> : null}
+    </button>
+  );
+});
+
+/** "Island 5 · Lanterns" ribbon that sweeps in when a run starts. */
+export function RunBanner() {
+  const banner = useGame((s) => s.runBanner);
+  const panel = useGame((s) => s.panel);
+  const [shown, setShown] = useState<number | null>(null);
+  const done = useRef(0);
+  useEffect(() => {
+    // Once per run, as soon as no menu or card is covering the board.
+    if (!banner || panel || done.current === banner.id) return;
+    done.current = banner.id;
+    setShown(banner.id);
+    audio.feelMilestone();
+    const t = window.setTimeout(() => setShown(null), 1600);
+    const off = () => setShown(null);
+    window.addEventListener("pointerdown", off, { once: true, capture: true });
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", off, { capture: true });
+    };
+  }, [banner, panel]);
+  if (!banner || shown !== banner.id) return null;
+  return (
+    <div className="pj-run-banner" key={banner.id} aria-live="polite">
+      <strong>{banner.title}</strong>
+      <span>{banner.sub}</span>
     </div>
   );
 }

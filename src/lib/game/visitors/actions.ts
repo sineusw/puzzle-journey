@@ -4,6 +4,8 @@ import {
   checkOver,
   cloneBoard,
   cloneMatch,
+  detonateAt,
+  mergeClears,
   isEmpty,
   resolveClears,
   trayFits,
@@ -13,8 +15,8 @@ import {
   type ColorId,
   type Match,
   type SpecialId,
-} from "../engine";
-import type { VisitorAction, VisitorId, VisitorMood } from "./types";
+} from "../engine.ts";
+import type { VisitorAction, VisitorId, VisitorMood } from "./types.ts";
 
 export function isPlainBlock(cell: Cell): boolean {
   if (cell.t !== "b" && cell.t !== "s") return false;
@@ -89,12 +91,34 @@ function cloneCell(cell: Cell): Cell {
   return { ...cell };
 }
 
+/** Clear the connected same-color group at (r, c) when it has 3+ blocks. */
+function paintPop(board: Cell[][], r: number, c: number, color: ColorId): ClearInfo | null {
+  const seen = new Set<string>();
+  const group: Array<[number, number]> = [];
+  const stack: Array<[number, number]> = [[r, c]];
+  while (stack.length) {
+    const [rr, cc] = stack.pop()!;
+    const key = `${rr},${cc}`;
+    if (seen.has(key) || !inBounds(rr, cc)) continue;
+    seen.add(key);
+    const cell = board[rr]![cc]!;
+    if ((cell.t !== "b" && cell.t !== "s") || cell.c !== color) continue;
+    group.push([rr, cc]);
+    stack.push([rr + 1, cc], [rr - 1, cc], [rr, cc + 1], [rr, cc - 1]);
+  }
+  if (group.length < 3) return null;
+  const cells = group.map(([rr, cc]) => ({ r: rr, c: cc, cell: { ...board[rr]![cc]! } }));
+  for (const [rr, cc] of group) board[rr]![cc] = { t: "e" };
+  return { rows: [], cols: [], cells, lines: 0, intersections: 0, stars: 0, golds: 0, waves: 1, bombs: 0, rockets: 0, blasts: 0, fired: [], swept: { color, count: cells.length } };
+}
+
 export function applyVisitorAction(
   match: Match,
   action: VisitorAction,
 ): { match: Match; clear: ClearInfo | null } | null {
   if (match.over || match.won) return null;
   const board = cloneBoard(match.board);
+  let boom: ClearInfo | null = null;
 
   if (action.kind === "move") {
     const [fr, fc] = action.from;
@@ -110,6 +134,8 @@ export function applyVisitorAction(
     const cell = board[r][c]!;
     if (cell.t !== "b" && cell.t !== "s") return null;
     board[r][c] = { ...cell, sp: action.special };
+    // Luna's magic block goes off right away, like any special block.
+    boom = detonateAt(board, r, c);
   } else if (action.kind === "build") {
     const [r, c] = action.at;
     if (!inBounds(r, c) || !isEmpty(board[r][c]!)) return null;
@@ -151,10 +177,14 @@ export function applyVisitorAction(
     if (cell.t !== "b" && cell.t !== "s") return null;
     if (cell.c === action.to) return null;
     board[r][c] = { ...cell, c: action.to };
+    // Pip's paint pops: the painted block and every same-color block touching
+    // it (a group of 3 or more) burst.
+    boom = paintPop(board, r, c, action.to);
   }
 
   const settled = settle(match, board);
   if (!settled) return null;
+  if (boom) settled.clear = mergeClears(boom, settled.clear);
   const next = cloneMatch(match);
   next.board = settled.board;
   if (settled.clear) {
@@ -283,8 +313,33 @@ function planNia(match: Match, rng: () => number): VisitorAction | null {
   return null;
 }
 
+function groupSize(board: Cell[][], at: CellPos, color: ColorId): number {
+  const b = cloneBoard(board);
+  const cell = b[at[0]]![at[1]]!;
+  if (cell.t !== "b" && cell.t !== "s") return 0;
+  b[at[0]]![at[1]] = { ...cell, c: color };
+  return paintPop(b, at[0], at[1], color)?.cells.length ?? 1;
+}
+
 function planPip(match: Match, mood: VisitorMood, rng: () => number): VisitorAction | null {
   const board = match.board;
+  // Helpful Pip paints where it makes the biggest color pop.
+  if (mood === "help") {
+    let best: { at: CellPos; from: ColorId; to: ColorId; n: number } | null = null;
+    for (const at of plains(board)) {
+      const from = colorOfPlain(board[at[0]]![at[1]]!);
+      if (!from) continue;
+      for (const to of COLORS) {
+        if (to === from) continue;
+        const n = groupSize(board, at, to);
+        if (n >= 3 && (!best || n > best.n || (n === best.n && rng() < 0.3))) best = { at, from, to, n };
+      }
+    }
+    if (best) {
+      const action: VisitorAction = { visitor: "pip", kind: "recolor", at: best.at, from: best.from, to: best.to };
+      if (tryAction(match, action)) return action;
+    }
+  }
   for (const at of shuffled(plains(board), rng)) {
     const cell = board[at[0]]![at[1]]!;
     const from = colorOfPlain(cell);

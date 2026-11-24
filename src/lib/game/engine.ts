@@ -26,7 +26,7 @@ export type ObstacleKind = "stone" | "steel" | "wall" | "crate";
 
 export type Cell =
   | { t: "e" }
-  | { t: "b"; c: ColorId; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[] }
+  | { t: "b"; c: ColorId; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[]; gm?: 1 }
   | { t: "s"; c: ColorId; gold?: boolean; sp?: Exclude<SpecialId, "stone">; ov?: OverlayId[] }
   | { t: "k"; hp: 1 | 2; kind?: ObstacleKind }
   | { t: "crate"; hp: 1 | 2 }
@@ -48,24 +48,87 @@ export type Piece = {
 export type Goal =
   | { type: "score"; value: number }
   | { type: "lines"; value: number }
-  | { type: "combo"; value: number };
+  | { type: "combo"; value: number }
+  | { type: "gems"; value: number };
+
+/** Game modes. "classic" = plain-block levels, "adventure" = levels that
+ *  unlock specials and visitors one at a time, "sandbox" = endless high
+ *  score with plain blocks, "challenge" = short goal runs. */
+export type GameMode = "classic" | "adventure" | "sandbox" | "challenge";
+
+export type BlockSpecial = Exclude<SpecialId, "stone">;
+/** A power block the player can earn: a special, or a star color bomb. */
+export type BonusId = BlockSpecial | "star";
+
+/** What may appear in a match. Every generator and visitor obeys this. */
+export type Features = {
+  /** Star gem blocks (bonus points when cleared). */
+  stars: boolean;
+  /** Special blocks pieces can carry. */
+  specials: BlockSpecial[];
+  /** Stone obstacles on the board and on pieces. */
+  stones: boolean;
+  /** Island Visitor ids allowed to drop in. */
+  visitors: string[];
+};
+
+export const PLAIN_FEATURES: Features = { stars: false, specials: [], stones: false, visitors: [] };
+
+export const ALL_FEATURES: Features = {
+  stars: true,
+  specials: ["rocketH", "rocketV", "bomb", "blast"],
+  stones: true,
+  visitors: ["milo", "luna", "kai", "nia", "pip"],
+};
+
+export function cloneFeatures(f: Features): Features {
+  return { stars: f.stars, specials: [...f.specials], stones: f.stones, visitors: [...f.visitors] };
+}
 
 export type Match = {
+  /** Trays left that deal small, easy pieces (after a Continue). */
+  easy?: number;
   board: Cell[][];
   tray: Array<Piece | null>;
+  /** The set dealt after this tray, shown as "Up next" so players can plan ahead. */
+  next?: Piece[] | null;
+  /** Daily puzzle day number (same board and deals for everyone that day). */
+  daily?: number;
+  /** Gems placed on the board at the start (a gem goal can need fewer than this). */
+  gemsTotal?: number;
+  /**
+   * Earned power blocks (from big clears, combos, perfect clears, win streaks),
+   * dealt into the next tray once the board has blocks for them to hit.
+   */
+  bonus?: BonusId[];
   score: number;
   combo: number;
   bestCombo: number;
   lines: number;
   moves: number;
   shield: number;
+  /** Placements since the last clear. The combo survives while this stays under COMBO_WINDOW. */
+  sinceClear: number;
+  /** Perfect (empty-board) clears this run. */
+  perfects: number;
   over: boolean;
   won: boolean;
-  mode: "endless" | "adventure";
+  mode: GameMode;
   levelId: number | null;
+  features: Features;
   goal: Goal | null;
   goalProgress: number;
   stonesCleared: number;
+  /** Seed for this game's deals, so any tray can be reproduced and tested. */
+  seed?: number;
+  /** Trays dealt so far (with `seed`, picks the next deal's random stream). */
+  deals?: number;
+  /**
+   * A ranked run (server-issued seed): the placements so far, sent for
+   * verification when the game ends. `void` = a booster or continue was used,
+   * so the run no longer counts.
+   */
+  ranked?: { runId: string; moves: Array<[number, number, number]>; void?: string; submitted?: boolean };
 };
 
 export type ClearInfo = {
@@ -80,7 +143,44 @@ export type ClearInfo = {
   bombs: number;
   rockets: number;
   blasts: number;
+  /** Specials that went off, in order, for captions and effects. */
+  fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
+  /** A star block's color sweep: which color popped and how many blocks. */
+  swept?: { color: ColorId; count: number };
+  /**
+   * Rows and columns a special emptied (arrow, bomb, golden block, star pop)
+   * that were at least half full. They count toward "Clear N lines" goals but
+   * score as the special, not as a line clear.
+   */
+  zapLines?: number;
 };
+
+/** A line a special empties counts as cleared when it held at least this many blocks. */
+export const ZAP_LINE_MIN = 4;
+
+/**
+ * Rows and columns that held at least ZAP_LINE_MIN blocks before and are
+ * empty after (unbreakable cells aside).
+ */
+export function countZapLines(before: Cell[][], after: Cell[][]): number {
+  let n = 0;
+  const filled = (cell: Cell) => cell.t !== "e" && !isUnbreakable(cell);
+  for (let i = 0; i < SIZE; i++) {
+    let rowBefore = 0;
+    let rowAfter = 0;
+    let colBefore = 0;
+    let colAfter = 0;
+    for (let j = 0; j < SIZE; j++) {
+      if (filled(before[i]![j]!)) rowBefore++;
+      if (filled(after[i]![j]!)) rowAfter++;
+      if (filled(before[j]![i]!)) colBefore++;
+      if (filled(after[j]![i]!)) colAfter++;
+    }
+    if (rowBefore >= ZAP_LINE_MIN && rowAfter === 0) n++;
+    if (colBefore >= ZAP_LINE_MIN && colAfter === 0) n++;
+  }
+  return n;
+}
 
 export type PlaceResult = {
   ok: boolean;
@@ -89,7 +189,25 @@ export type PlaceResult = {
   gained: number;
   combo: number;
   coins: number;
+  /** The clear emptied the whole board. */
+  perfect: boolean;
+  /** Power blocks this move earned (Candy Crush style), headed for the next tray. */
+  earned?: BonusId[];
+  /** A star block that paid its bonus on this drop. */
+  star?: { r: number; c: number; gold: boolean; bonus: number } | null;
 };
+
+/**
+ * Block Blast-style combo: a streak keeps going as long as the next clear
+ * comes within this many placements of the last one.
+ */
+export const COMBO_WINDOW = 3;
+
+/** Bonus for emptying the whole board, before the combo multiplier. */
+export const PERFECT_BONUS = 300;
+/** Points for dropping a star block (gold stars are worth more). */
+export const STAR_BONUS = 50;
+export const STAR_BONUS_GOLD = 200;
 
 type Shape = {
   id: string;
@@ -126,20 +244,22 @@ const SHAPES: Shape[] = [
   { id: "l4", cells: [[0, 0], [1, 0], [2, 0], [2, 1]], weight: 8 },
   { id: "j4", cells: [[0, 1], [1, 1], [2, 0], [2, 1]], weight: 8 },
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
-  { id: "t4", cells: [[0, 0], [0, 1], [0, 2], [1, 1]], weight: 8 },
-  { id: "t5", cells: [[0, 0], [0, 1], [0, 2], [1, 1], [2, 1]], weight: 3 },
   { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
   { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
-  { id: "u5", cells: [[0, 0], [0, 2], [1, 0], [1, 1], [1, 2]], weight: 4 },
-  { id: "plus", cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]], weight: 3 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
   { id: "z5", cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], weight: 3 },
   { id: "diag2", cells: [[0, 0], [1, 1]], weight: 2 },
-  { id: "h3", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 2]], weight: 3 },
 ];
 
 const SHAPE_MAP = new Map(SHAPES.map((s) => [s.id, s]));
-const WEIGHT_SUM = SHAPES.reduce((a, s) => a + s.weight, 0);
+
+/** Cells of a shape by id (for the shape gallery). */
+export function shapeCells(id: string): CellPos[] {
+  return SHAPE_MAP.get(id)?.cells ?? [[0, 0]];
+}
+
+/** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
+export const UNUSUAL_SHAPES = ["diag2", "corner5", "z5", "i5", "o9"] as const;
 
 let seq = 1;
 export function uid(prefix = "p"): string {
@@ -174,10 +294,19 @@ export function sanitizePiece(piece: Piece): Piece {
 }
 
 export function sanitizeMatch(match: Match): Match {
+  const legacyMode = (match.mode as string) === "endless";
   return {
     ...match,
-    board: cloneBoard(match.board ?? emptyBoard()),
-    tray: (match.tray ?? [null, null, null]).map((p) => (p ? sanitizePiece(p) : null)),
+    mode: legacyMode ? "sandbox" : match.mode,
+    sinceClear: match.sinceClear ?? 0,
+    perfects: match.perfects ?? 0,
+    features: match.features ? cloneFeatures(match.features) : legacyMode ? cloneFeatures(PLAIN_FEATURES) : cloneFeatures(ALL_FEATURES),
+    // Special blocks never wait on the board: an old save's leftovers turn plain.
+    board: cloneBoard(match.board ?? emptyBoard()).map((row) => row.map((cell) => ((cell.t === "b" || cell.t === "s") && cell.sp ? { ...cell, sp: undefined } : cell))),
+    tray: (match.tray ?? [null, null, null]).map((p) =>
+      p ? (p.special && p.special !== "stone" && p.cells.length > 1 ? specialPiece(p.special) : sanitizePiece(p)) : null,
+    ),
+    next: Array.isArray(match.next) ? match.next.map((p) => sanitizePiece(p)) : null,
     goal: match.goal ? { ...match.goal } : null,
   };
 }
@@ -185,8 +314,10 @@ export function sanitizeMatch(match: Match): Match {
 export function cloneMatch(m: Match): Match {
   return {
     ...m,
+    features: cloneFeatures(m.features),
     board: cloneBoard(m.board),
     tray: m.tray.map((p) => (p ? clonePiece(p) : null)),
+    next: m.next ? m.next.map((p) => clonePiece(p)) : null,
     goal: m.goal ? { ...m.goal } : null,
   };
 }
@@ -282,34 +413,77 @@ export function findHint(
   return null;
 }
 
-function pickShape(rng: () => number): Shape {
-  let roll = rng() * WEIGHT_SUM;
+/** Shapes that are hard to fit: five-block pieces, the 3×3, and gap shapes. */
+const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "z5", "h3", "diag2", "r23"]);
+
+/**
+ * How often bulky shapes appear, by how full the board is. A documented,
+ * fixed curve based only on the board: the fuller it gets, the more the
+ * deal leans on small, easy-to-read pieces.
+ *   under 35% full → normal mix · 35–55% → bulky ×0.6 · over 55% → bulky ×0.3
+ */
+export function bulkyFactor(occupancy: number): number {
+  return occupancy < 0.35 ? 1 : occupancy < 0.55 ? 0.6 : 0.3;
+}
+
+function pickShape(rng: () => number, occupancy = 0): Shape {
+  const k = bulkyFactor(occupancy);
+  const weightOf = (sh: Shape) => (BULKY.has(sh.id) ? sh.weight * k : sh.weight);
+  const total = SHAPES.reduce((a, sh) => a + weightOf(sh), 0);
+  let roll = rng() * total;
   for (const shape of SHAPES) {
-    roll -= shape.weight;
+    roll -= weightOf(shape);
     if (roll <= 0) return shape;
   }
   return SHAPES[0];
+}
+
+/** Share of board cells that are filled (0–1). */
+export function occupancy(board: Cell[][]): number {
+  let n = 0;
+  for (const row of board) for (const cell of row) if (!isEmpty(cell)) n++;
+  return n / (SIZE * SIZE);
+}
+
+/** The random stream for this match's next deal (reproducible from seed + deal count). */
+export function dealRng(match: Match): () => number {
+  if (match.seed === undefined) match.seed = Math.floor(Math.random() * 2 ** 31);
+  const n = match.deals ?? 0;
+  match.deals = n + 1;
+  return mulberry32((match.seed ^ Math.imul(n + 1, 0x9e3779b1)) >>> 0);
 }
 
 function pickColor(rng: () => number): ColorId {
   return COLORS[Math.floor(rng() * COLORS.length)]!;
 }
 
-export function makePiece(rng: () => number, forceShape?: string): Piece {
+/** Pick a special a piece may carry under `features`, or null. */
+function rollSpecial(rng: () => number, features: Features): SpecialId | null {
+  const roll = rng();
+  const has = (sp: BlockSpecial) => features.specials.includes(sp);
+  if (roll > 0.985 && has("blast")) return "blast";
+  if (roll > 0.93 && has("bomb")) return "bomb";
+  if (roll > 0.85 && (has("rocketH") || has("rocketV"))) {
+    const dirs = (["rocketH", "rocketV"] as const).filter(has);
+    return dirs[Math.floor(rng() * dirs.length)]!;
+  }
+  if (roll > 0.75 && features.stones) return "stone";
+  return null;
+}
+
+export function makePiece(rng: () => number, forceShape?: string, features: Features = ALL_FEATURES, occ = 0): Piece {
   const shape = forceShape
-    ? SHAPE_MAP.get(forceShape) ?? pickShape(rng)
-    : pickShape(rng);
+    ? SHAPE_MAP.get(forceShape) ?? pickShape(rng, occ)
+    : pickShape(rng, occ);
   const turns = Math.floor(rng() * 4);
   const cells = rotateN(shape.cells, turns);
   const starRoll = rng();
-  const gold = starRoll > 0.97;
-  const starAt = gold || starRoll > 0.9 ? Math.floor(rng() * cells.length) : null;
-  const specRoll = rng();
-  let special: SpecialId | null = null;
-  if (specRoll > 0.93) special = "blast";
-  else if (specRoll > 0.78) special = "bomb";
-  else if (specRoll > 0.64) special = rng() > 0.5 ? "rocketH" : "rocketV";
-  else if (specRoll > 0.52) special = "stone";
+  const gold = features.stars && starRoll > 0.97;
+  const starAt = features.stars && (gold || starRoll > 0.9) ? Math.floor(rng() * cells.length) : null;
+  const special = rollSpecial(rng, features);
+  // Bombs, arrows and golden blocks always come as their own single block,
+  // so every one behaves the same wherever you drop it.
+  if (special && special !== "stone") return specialPiece(special);
   const specialAt = special !== null ? Math.floor(rng() * cells.length) : null;
   return {
     id: uid(),
@@ -321,6 +495,17 @@ export function makePiece(rng: () => number, forceShape?: string): Piece {
     special,
     specialAt,
   };
+}
+
+/** A one-square star color bomb, earned with a combo milestone or a perfect clear. */
+export function starPiece(rng: () => number): Piece {
+  return { id: uid(), shape: "o1", cells: [[0, 0]], color: pickColor(rng), starAt: 0, gold: false, special: null, specialAt: null };
+}
+
+/** A one-square piece that is a special block (bomb, arrow or golden block). */
+export function specialPiece(special: Exclude<SpecialId, "stone">): Piece {
+  const color: ColorId = special === "bomb" ? "violet" : special === "blast" ? "amber" : "azure";
+  return { id: uid(), shape: "o1", cells: [[0, 0]], color, starAt: null, gold: false, special, specialAt: 0 };
 }
 
 export function namedPiece(
@@ -352,9 +537,6 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function defaultRng(): () => number {
-  return Math.random;
-}
 
 function sprinkleStones(board: Cell[][], count: number, rng: () => number): void {
   let placed = 0;
@@ -369,7 +551,7 @@ function sprinkleStones(board: Cell[][], count: number, rng: () => number): void
   }
 }
 
-/** Mid-run board that matches the Puzzle Journey mock — no full lines. */
+/** Mid-run board that matches the Block Journey mock — no full lines. */
 export function openingBoard(): Cell[][] {
   const b = emptyBoard();
   const put = (r: number, c: number, cell: Cell) => {
@@ -387,10 +569,10 @@ export function openingBoard(): Cell[][] {
   put(2, 3, blk("lime"));
   put(2, 5, star("azure"));
   put(2, 7, blk("violet"));
-  put(3, 5, { t: "b", c: "amber", sp: "rocketV" });
+  put(3, 5, blk("amber"));
   put(3, 6, blk("amber"));
   put(3, 7, blk("violet"));
-  put(4, 3, { t: "b", c: "pink", sp: "bomb" });
+  put(4, 3, blk("pink"));
   put(4, 4, blk("pink"));
   put(4, 6, blk("amber"));
   put(4, 7, blk("amber"));
@@ -413,7 +595,7 @@ export function openingBoard(): Cell[][] {
 
 export function openingTray(): Array<Piece | null> {
   return [
-    namedPiece("t4", "pink", [[0, 1], [1, 0], [1, 1], [1, 2]]),
+    namedPiece("i3", "pink", [[0, 0], [0, 1], [0, 2]]),
     namedPiece("o4", "amber", [[0, 0], [0, 1], [1, 0], [1, 1]], null, false, "bomb", 0),
     namedPiece("l4", "cyan", [[0, 0], [1, 0], [1, 1], [1, 2]], null, false, "rocketH", 3),
   ];
@@ -483,6 +665,7 @@ function applyLineClear(board: Cell[][], rows: number[], cols: number[]): ClearI
     bombs: 0,
     rockets: 0,
     blasts: 0,
+    fired: [],
   };
 }
 
@@ -496,6 +679,7 @@ type SpecialAcc = {
   rockets: number;
   blasts: number;
   queued: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
+  fired: Array<{ r: number; c: number; sp: Exclude<SpecialId, "stone"> }>;
   extra: Array<{ r: number; c: number; cell: Cell }>;
 };
 
@@ -511,6 +695,7 @@ function hitCell(board: Cell[][], r: number, c: number, acc: SpecialAcc): boolea
 }
 
 function fireSpecial(board: Cell[][], r: number, c: number, sp: Exclude<SpecialId, "stone">, acc: SpecialAcc): void {
+  acc.fired.push({ r, c, sp });
   if (sp === "bomb") {
     acc.bombs++;
     for (let rr = r - 1; rr <= r + 1; rr++) {
@@ -530,6 +715,149 @@ function fireSpecial(board: Cell[][], r: number, c: number, sp: Exclude<SpecialI
   }
 }
 
+/**
+ * A special block goes off the moment it's placed: an arrow zaps its whole
+ * row or column, a bomb clears the 3×3 around it, a golden block clears the
+ * board. Any specials it hits go off too.
+ */
+function detonatePlaced(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  const sp = piece.special;
+  if (!sp || sp === "stone" || piece.specialAt === null) return null;
+  const at = piece.cells[piece.specialAt];
+  if (!at) return null;
+  const r = row + at[0];
+  const c = col + at[1];
+  const here = board[r]?.[c];
+  if (!here || (here.t !== "b" && here.t !== "s") || here.sp !== sp) return null;
+  const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], fired: [], extra: [] };
+  const done = new Set<string>([`${r},${c},${sp}`]);
+  fireSpecial(board, r, c, sp, acc);
+  while (acc.queued.length) {
+    const next = acc.queued.shift()!;
+    const key = `${next.r},${next.c},${next.sp}`;
+    if (done.has(key)) continue;
+    done.add(key);
+    fireSpecial(board, next.r, next.c, next.sp, acc);
+  }
+  const seen = new Set<string>();
+  const cells = acc.extra.filter(({ r: rr, c: cc }) => (seen.has(`${rr},${cc}`) ? false : (seen.add(`${rr},${cc}`), true)));
+  return {
+    rows: [],
+    cols: [],
+    cells,
+    lines: 0,
+    intersections: 0,
+    stars: 0,
+    golds: 0,
+    waves: 1,
+    bombs: acc.bombs,
+    rockets: acc.rockets,
+    blasts: acc.blasts,
+    fired: acc.fired,
+  };
+}
+
+/** Set off the special block sitting at (r, c), e.g. after Luna's magic. */
+export function detonateAt(board: Cell[][], r: number, c: number): ClearInfo | null {
+  const cell = board[r]?.[c];
+  if (!cell || (cell.t !== "b" && cell.t !== "s") || !cell.sp) return null;
+  return detonatePlaced(board, { id: "x", shape: "o1", cells: [[0, 0]], color: cell.c, starAt: null, gold: false, special: cell.sp, specialAt: 0 }, r, c);
+}
+
+export function mergeClears(a: ClearInfo | null, b: ClearInfo | null): ClearInfo | null {
+  if (!a) return b;
+  if (!b) return a;
+  const seen = new Set(a.cells.map(({ r, c }) => `${r},${c}`));
+  return {
+    rows: [...b.rows],
+    cols: [...b.cols],
+    cells: [...a.cells, ...b.cells.filter(({ r, c }) => !seen.has(`${r},${c}`))],
+    lines: a.lines + b.lines,
+    intersections: a.intersections + b.intersections,
+    stars: a.stars + b.stars,
+    golds: a.golds + b.golds,
+    waves: a.waves + b.waves,
+    bombs: a.bombs + b.bombs,
+    rockets: a.rockets + b.rockets,
+    blasts: a.blasts + b.blasts,
+    fired: [...a.fired, ...b.fired],
+    ...(a.zapLines || b.zapLines ? { zapLines: (a.zapLines ?? 0) + (b.zapLines ?? 0) } : {}),
+    ...(a.swept || b.swept ? { swept: b.swept ?? a.swept } : {}),
+  };
+}
+
+/** Put a piece down: its special goes off, then full lines clear. */
+function settlePiece(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  stampPiece(board, piece, row, col);
+  // Full lines first (a special inside one goes off with it)…
+  const lines = resolveClears(board);
+  const at = piece.specialAt !== null ? piece.cells[piece.specialAt] : undefined;
+  const alreadyFired = Boolean(at && lines?.fired.some((f) => f.r === row + at[0] && f.c === col + at[1]));
+  const beforeSpecials = cloneBoard(board);
+  // …then a special that's still sitting there goes off right away.
+  let specials = alreadyFired ? null : detonatePlaced(board, piece, row, col);
+  // Nothing ever waits for a full line: any other special left on the board goes off too.
+  specials = mergeClears(specials, fireDormant(board));
+  if (specials) {
+    const zap = countZapLines(beforeSpecials, board);
+    if (zap) specials.zapLines = zap;
+  }
+  let clear = mergeClears(lines, specials);
+  // Stones crack when anything right next to them clears (two cracks break one).
+  clear = mergeClears(clear, crackStonesNear(board, clear));
+  return clear;
+}
+
+/** Each stone touching a cleared cell takes one hit (once per move). */
+function crackStonesNear(board: Cell[][], clear: ClearInfo | null): ClearInfo | null {
+  if (!clear || !clear.cells.length) return null;
+  const gone = new Set(clear.cells.map(({ r, c }) => `${r},${c}`));
+  const hit = new Set<string>();
+  const cells: ClearInfo["cells"] = [];
+  for (const { r, c } of clear.cells) {
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const rr = r + dr;
+      const cc = c + dc;
+      const key = `${rr},${cc}`;
+      if (rr < 0 || cc < 0 || rr >= SIZE || cc >= SIZE || hit.has(key) || gone.has(key)) continue;
+      const cell = board[rr]![cc]!;
+      if (cell.t !== "k" || isUnbreakable(cell)) continue;
+      hit.add(key);
+      const before = { ...cell };
+      peelCell(board, rr, cc);
+      if (board[rr]![cc]!.t === "e") cells.push({ r: rr, c: cc, cell: before });
+    }
+  }
+  if (!cells.length) return null;
+  return { rows: [], cols: [], cells, lines: 0, intersections: 0, stars: 0, golds: 0, waves: 0, bombs: 0, rockets: 0, blasts: 0, fired: [] };
+}
+
+/** Set off every special block still sitting on the board. */
+function fireDormant(board: Cell[][]): ClearInfo | null {
+  let out: ClearInfo | null = null;
+  for (let guard = 0; guard < SIZE * SIZE; guard++) {
+    let found: { r: number; c: number } | null = null;
+    for (let r = 0; r < SIZE && !found; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = board[r]![c]!;
+        if ((cell.t === "b" || cell.t === "s") && cell.sp) {
+          found = { r, c };
+          break;
+        }
+      }
+    }
+    if (!found) break;
+    const boom = detonateAt(board, found.r, found.c);
+    if (!boom) {
+      const cell = board[found.r]![found.c]!;
+      if (cell.t === "b" || cell.t === "s") board[found.r]![found.c] = { ...cell, sp: undefined };
+      continue;
+    }
+    out = mergeClears(out, boom);
+  }
+  return out;
+}
+
 export function resolveClears(board: Cell[][]): ClearInfo | null {
   const merged: ClearInfo = {
     rows: [],
@@ -543,13 +871,14 @@ export function resolveClears(board: Cell[][]): ClearInfo | null {
     bombs: 0,
     rockets: 0,
     blasts: 0,
+    fired: [],
   };
   const seen = new Set<string>();
   for (let wave = 0; wave < SIZE; wave++) {
     const { rows, cols } = findFullLines(board);
     if (rows.length + cols.length === 0) break;
     const info = applyLineClear(board, rows, cols);
-    const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], extra: [] };
+    const acc: SpecialAcc = { bombs: 0, rockets: 0, blasts: 0, queued: [], fired: [], extra: [] };
     const fired = new Set<string>();
     for (const cell of info.cells) {
       const sp = specialOf(cell.cell);
@@ -574,6 +903,7 @@ export function resolveClears(board: Cell[][]): ClearInfo | null {
     merged.bombs += acc.bombs;
     merged.rockets += acc.rockets;
     merged.blasts += acc.blasts;
+    merged.fired.push(...acc.fired);
     for (const r of rows) if (!merged.rows.includes(r)) merged.rows.push(r);
     for (const c of cols) if (!merged.cols.includes(c)) merged.cols.push(c);
     for (const cell of info.cells) {
@@ -600,8 +930,42 @@ export function previewClear(
 ): ClearInfo | null {
   if (!canPlace(board, piece.cells, row, col)) return null;
   const next = cloneBoard(board);
-  stampPiece(next, piece, row, col);
-  return resolveClears(next);
+  return settleWithStar(next, piece, row, col);
+}
+
+/**
+ * A star block is a color bomb: drop it and every block of its color on the
+ * board pops (the piece itself included).
+ */
+export function colorSweep(board: Cell[][], color: ColorId): ClearInfo | null {
+  const cells: ClearInfo["cells"] = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cell = board[r]![c]!;
+      if ((cell.t === "b" || cell.t === "s") && cell.c === color) {
+        cells.push({ r, c, cell: { ...cell } });
+        peelCell(board, r, c);
+      }
+    }
+  }
+  if (!cells.length) return null;
+  return { rows: [], cols: [], cells, lines: 0, intersections: 0, stars: 0, golds: 0, waves: 1, bombs: 0, rockets: 0, blasts: 0, fired: [], swept: { color, count: cells.length } };
+}
+
+/** Put a piece down, then (for a star block) sweep its color. */
+function settleWithStar(board: Cell[][], piece: Piece, row: number, col: number): ClearInfo | null {
+  const star = piece.starAt !== null;
+  const clear = settlePiece(board, star ? { ...piece, starAt: null, gold: false } : piece, row, col);
+  if (!star) return clear;
+  const beforeSweep = cloneBoard(board);
+  const sweep = colorSweep(board, piece.color);
+  if (sweep) {
+    const zap = countZapLines(beforeSweep, board);
+    if (zap) sweep.zapLines = zap;
+  }
+  const merged = mergeClears(clear, sweep);
+  if (merged && sweep?.swept) merged.swept = sweep.swept;
+  return merged;
 }
 
 function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): void {
@@ -620,18 +984,34 @@ function stampPiece(board: Cell[][], piece: Piece, row: number, col: number): vo
   });
 }
 
-function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number): number {
+/**
+ * Score for one placement, Block Blast style:
+ * - every block placed is worth 10
+ * - each cleared line is worth 100; clearing several at once adds a growing
+ *   bonus (2 lines = 300, 3 = 600, 4 = 1,000 …) instead of a flat sum
+ * - the whole clear is multiplied by the current combo streak
+ * - stars, specials and a perfect (empty-board) clear add on top
+ */
+function scoreFor(piece: Piece, clear: ClearInfo | null, combo: number, perfect: boolean): number {
   let score = piece.cells.length * 10;
-  if (clear && (clear.lines > 0 || clear.bombs || clear.rockets || clear.blasts)) {
-    score += clear.lines * 100 * combo;
-    if (clear.lines > 1) score += (clear.lines - 1) * 50 * combo;
+  if (clear && (clear.lines > 0 || clear.bombs || clear.rockets || clear.blasts || clear.swept)) {
+    const n = clear.lines;
+    const lineScore = (100 * n * (n + 1)) / 2;
+    score += lineScore * combo;
     score += clear.intersections * 25 * combo;
     score += clear.stars * 50 + clear.golds * 150;
     score += clear.bombs * 80 * combo;
     score += clear.rockets * 70 * combo;
     score += clear.blasts * 240 * combo;
+    score += (clear.swept?.count ?? 0) * 15 * combo;
+    if (perfect) score += PERFECT_BONUS * combo;
   }
   return score;
+}
+
+/** True when nothing breakable is left on the board. */
+export function boardIsEmpty(board: Cell[][]): boolean {
+  return board.every((row) => row.every((cell) => cell.t === "e" || isUnbreakable(cell)));
 }
 
 function coinsFor(clear: ClearInfo | null, gained: number): number {
@@ -647,6 +1027,12 @@ function updateGoal(match: Match): void {
   }
   if (match.goal.type === "score") match.goalProgress = match.score;
   else if (match.goal.type === "lines") match.goalProgress = match.lines;
+  else if (match.goal.type === "gems") {
+    // Gems are collected by clearing the blocks that hold them.
+    let left = 0;
+    for (const row of match.board) for (const cell of row) if (cell.t === "b" && cell.gm) left++;
+    match.goalProgress = Math.max(0, Math.min(match.goal.value, (match.gemsTotal ?? match.goal.value) - left));
+  }
   else match.goalProgress = match.bestCombo;
   match.won = match.goalProgress >= match.goal.value;
 }
@@ -671,43 +1057,129 @@ export function checkOver(match: Match): Match {
   return match;
 }
 
-function fillTray(match: Match, rng: () => number, easy: boolean): void {
-  const makeFitting = (): Piece[] => {
-    if (easy) {
-      return [
-        makePiece(rng, "o4"),
-        makePiece(rng, "i3"),
-        makePiece(rng, "l3"),
-      ];
+/**
+ * True when every piece in the set can be placed, one after another, in some
+ * order — including the line clears each placement triggers. This is what
+ * keeps a fresh set from being a guaranteed loss.
+ *
+ * The search is bounded by `budget` placements tried; if the budget runs out
+ * the set is treated as playable (we only ever reject sets we've *proven* dead).
+ */
+/**
+ * True when there is at least one order and set of spots that places every
+ * piece, using the same placement rules as real play (clears, specials,
+ * stones). The search is capped; if the cap runs out first the tray is NOT
+ * treated as proven, so the dealer tries another or falls back to small
+ * pieces that are checked the same way.
+ */
+export function setIsPlayable(board: Cell[][], pieces: Piece[], budget = 6000): boolean {
+  let tries = 0;
+  const visit = (b: Cell[][], left: Piece[]): boolean => {
+    if (left.length === 0) return true;
+    if (left.length === 1) return canPlaceAnywhere(b, left[0]!.cells);
+    for (let i = 0; i < left.length; i++) {
+      const p = left[i]!;
+      const { rows, cols } = bounds(p.cells);
+      const rest = left.filter((_, j) => j !== i);
+      for (let r = 0; r <= SIZE - rows; r++) {
+        for (let c = 0; c <= SIZE - cols; c++) {
+          if (!canPlace(b, p.cells, r, c)) continue;
+          if (++tries > budget) return false;
+          const next = cloneBoard(b);
+          settlePiece(next, p, r, c);
+          if (visit(next, rest)) return true;
+        }
+      }
     }
-    for (let attempt = 0; attempt < 28; attempt++) {
-      const pieces = [makePiece(rng), makePiece(rng), makePiece(rng)];
-      if (pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) return pieces;
-    }
-    const fallback = [makePiece(rng, "o1"), makePiece(rng, "i2"), makePiece(rng, "l3")];
-    if (!fallback.some((p) => canPlaceAnywhere(match.board, p.cells))) {
-      fallback[0] = makePiece(rng, "o1");
-    }
-    return fallback;
+    return false;
   };
-  const pieces = makeFitting();
-  if (!pieces.some((p) => p.special)) {
-    const i = Math.floor(rng() * pieces.length);
-    const roll = rng();
-    const special: SpecialId =
-      roll > 0.82 ? "blast" : roll > 0.5 ? "bomb" : roll > 0.22 ? (rng() > 0.5 ? "rocketH" : "rocketV") : "stone";
-    pieces[i] = { ...pieces[i]!, special, specialAt: 0 };
-  }
-  match.tray = pieces;
+  return visit(board, pieces);
 }
 
-export function refillIfNeeded(match: Match, rng: () => number = defaultRng()): Match {
-  if (match.tray.every((p) => p === null)) fillTray(match, rng, false);
+/**
+ * Power blocks (arrows, bombs, star color-bombs) only show up once the board
+ * holds enough blocks for them to visibly do something: 16+ of the 64 cells.
+ */
+export const POWER_MIN_FILL = 0.25;
+
+/** The same piece with its power stripped (stones are obstacles and stay). */
+function depower(p: Piece): Piece {
+  if (p.special && p.special !== "stone") return { ...p, special: null, specialAt: null, starAt: null, gold: false, color: p.color };
+  return p.starAt !== null ? { ...p, starAt: null, gold: false } : p;
+}
+
+function fillTray(match: Match, rng: () => number, easy: boolean): void {
+  const f = match.features;
+  const occ = occupancy(match.board);
+  const make = (shape?: string) => makePiece(rng, shape, f, occ);
+  const makeFitting = (): Piece[] => {
+    if (easy) {
+      return [make("o4"), make("i3"), make("l3")];
+    }
+    if ((match.easy ?? 0) > 0) {
+      // Gentle deal after a Continue: small pieces, always a set that fits.
+      const GENTLE = ["o1", "i2", "i2v", "l3", "i3", "o4", "i3v"].filter((id) => SHAPE_MAP.has(id));
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const pieces = [0, 1, 2].map(() => make(GENTLE[Math.floor(rng() * GENTLE.length)]));
+        if (setIsPlayable(match.board, pieces)) return pieces;
+      }
+      return [make("o1"), make("o1"), make("i2")];
+    }
+    let partial: Piece[] | null = null;
+    for (let attempt = 0; attempt < 28; attempt++) {
+      const pieces = [make(), make(), make()];
+      // Variety you can read: never three of the same shape in one tray.
+      if (pieces[0]!.shape === pieces[1]!.shape && pieces[1]!.shape === pieces[2]!.shape) continue;
+      if (!pieces.some((p) => canPlaceAnywhere(match.board, p.cells))) continue;
+      if (setIsPlayable(match.board, pieces)) return pieces;
+      partial ??= pieces;
+    }
+    // Crowded board: small pieces are the fairest offer if they all fit.
+    const small = [make("o1"), make("i2"), make("l3")];
+    if (setIsPlayable(match.board, small)) return small;
+    return partial ?? small;
+  };
+  // When specials are unlocked, make sure they actually show up now and then:
+  // some sets without one get one of the allowed kinds.
+  // Power blocks are earned, never dealt at random; only stone obstacles ride in on pieces.
+  const sprinkle = (pieces: Piece[]): Piece[] => {
+    const out = pieces.map(depower);
+    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.3) {
+      const i = Math.floor(rng() * out.length);
+      out[i] = { ...out[i]!, special: "stone", specialAt: 0 };
+    }
+    return out;
+  };
+  const normal = !easy && !(match.easy ?? 0);
+  // Semi-predictable: the set shown as "Up next" is what you get, as long as it
+  // can still be played on the board you left. If it can't, you get a fair set instead.
+  const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
+  const pieces = (queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting())).map(depower);
+  if (occ >= POWER_MIN_FILL && match.bonus?.length) {
+    // Earned power blocks land now that there are blocks for them to hit.
+    match.bonus.slice(0, 3).forEach((b, i) => (pieces[i] = b === "star" ? starPiece(rng) : specialPiece(b)));
+    match.bonus = match.bonus.length > 3 ? match.bonus.slice(3) : undefined;
+  }
+  // Line up the following set: varied shapes, never three alike.
+  if (normal) {
+    let upNext = [make(), make(), make()];
+    for (let i = 0; i < 6 && new Set(upNext.map((p) => p.shape)).size < 2; i++) upNext = [make(), make(), make()];
+    match.next = sprinkle(upNext);
+  } else {
+    match.next = null;
+  }
+  match.tray = pieces;
+  if ((match.easy ?? 0) > 0) match.easy = match.easy! - 1;
+}
+
+export function refillIfNeeded(match: Match, rng?: () => number): Match {
+  if (match.tray.every((p) => p === null)) fillTray(match, rng ?? dealRng(match), false);
   return checkOver(match);
 }
 
-function blankMatch(): Match {
+function blankMatch(features: Features = PLAIN_FEATURES): Match {
   return {
+    features: cloneFeatures(features),
     board: emptyBoard(),
     tray: [null, null, null],
     score: 0,
@@ -716,48 +1188,176 @@ function blankMatch(): Match {
     lines: 0,
     moves: 0,
     shield: 0,
+    sinceClear: 0,
+    perfects: 0,
     over: false,
     won: false,
-    mode: "endless",
+    mode: "sandbox",
     levelId: null,
     goal: null,
     goalProgress: 0,
     stonesCleared: 0,
+    // One random seed per game; every deal after this is reproducible from it.
+    seed: Math.floor(Math.random() * 2 ** 31),
+    deals: 0,
   };
 }
 
-export function newGoalMatch(goal: Goal): Match {
-  const match = newEndlessMatch();
-  match.mode = "adventure";
+/** Short goal run on a fresh board (Challenges). Uses the full feature set. */
+export function newGoalMatch(goal: Goal, features: Features = ALL_FEATURES): Match {
+  const match = blankMatch(features);
+  match.mode = "challenge";
   match.goal = goal;
-  match.levelId = null;
+  fillTray(match, dealRng(match), true);
   updateGoal(match);
   return match;
 }
 
+/** Sandbox: endless, plain blocks only, chase the high score. */
+export function newSandboxMatch(seed?: number): Match {
+  const match = blankMatch(PLAIN_FEATURES);
+  match.mode = "sandbox";
+  // A given seed (a server-issued ranked run) makes every deal reproducible.
+  if (seed !== undefined) {
+    match.seed = seed >>> 0;
+    match.deals = 0;
+  }
+  fillTray(match, dealRng(match), true);
+  return match;
+}
+
+/** Kept for older callers and tests: the endless run is now Sandbox. */
 export function newEndlessMatch(opts?: { showcase?: boolean }): Match {
-  const match = blankMatch();
   if (opts?.showcase) {
+    const match = blankMatch(ALL_FEATURES);
     match.board = openingBoard();
     match.tray = openingTray();
     return checkOver(match);
   }
-  fillTray(match, defaultRng(), true);
-  return match;
+  return newSandboxMatch();
 }
 
-export function newAdventureMatch(levelId: number, goal: Goal, stones: number): Match {
-  const rng = mulberry32(levelId * 9973 + 17);
+/** A level in Classic or Adventure. Stones are only placed when allowed. */
+/** A level's starting board: some blocks already placed, some holding gems. */
+export type Layout = {
+  fill: number;
+  gems: number;
+  /** Share of gems placed up high, as lone blocks. */
+  high?: number;
+  /** Obstacle layers put on pre-placed blocks. */
+  overlays?: Array<{ kind: OverlayId; count: number }>;
+};
+
+const LAYOUT_COLORS: ColorId[] = ["cyan", "azure", "lime", "pink", "amber", "orange", "violet"];
+
+/**
+ * Pre-fill the lower part of the board in a mirrored pattern, leaving at
+ * least one gap in every row and column so nothing clears by itself, then
+ * hide `gems` gems in the placed blocks.
+ */
+export function applyLayout(board: Cell[][], layout: Layout, rng: () => number): void {
+  const rows = Math.max(2, Math.min(5, Math.round(2 + layout.fill * 4)));
+  const top = SIZE - rows;
+  const half = SIZE / 2;
+  for (let r = top; r < SIZE; r++) {
+    const color = LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!;
+    const alt = LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!;
+    for (let c = 0; c < half; c++) {
+      if (board[r]![c]!.t !== "e") continue;
+      if (rng() < 0.42 + layout.fill * 0.35) {
+        const col = (c + r) % 3 === 0 ? alt : color;
+        board[r]![c] = { t: "b", c: col };
+        if (board[r]![SIZE - 1 - c]!.t === "e") board[r]![SIZE - 1 - c] = { t: "b", c: col };
+      }
+    }
+    // Never a full row.
+    if (board[r]!.every((x) => x.t !== "e")) {
+      const g = Math.floor(rng() * half);
+      board[r]![g] = { t: "e" };
+      board[r]![SIZE - 1 - g] = { t: "e" };
+    }
+  }
+  for (let c = 0; c < SIZE; c++) {
+    if (board.every((row) => row[c]!.t !== "e")) board[top + Math.floor(rng() * rows)]![c] = { t: "e" };
+  }
+  // Gems go in placed blocks; if there aren't enough, the gem blocks are added.
+  const spots: Array<[number, number]> = [];
+  for (let r = top; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "b") spots.push([r, c]);
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [spots[i], spots[j]] = [spots[j]!, spots[i]!];
+  }
+  let placed = 0;
+  // Some gems sit up high on their own: you have to build lines to reach them.
+  const highWant = Math.round(layout.gems * (layout.high ?? 0));
+  const free: Array<[number, number]> = [];
+  for (let r = 1; r < top; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "e" && (r + c) % 2 === 0) free.push([r, c]);
+  for (let i = free.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [free[i], free[j]] = [free[j]!, free[i]!];
+  }
+  for (const [r, c] of free.slice(0, highWant)) {
+    board[r]![c] = { t: "b", c: LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!, gm: 1 };
+    placed++;
+  }
+  for (const [r, c] of spots) {
+    if (placed >= layout.gems) break;
+    const cell = board[r]![c]!;
+    if (cell.t === "b") {
+      board[r]![c] = { ...cell, gm: 1 };
+      placed++;
+    }
+  }
+  // Obstacles go on placed blocks (gem blocks too: they just take longer).
+  const blocks: Array<[number, number]> = [];
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (board[r]![c]!.t === "b" && !(board[r]![c] as { ov?: OverlayId[] }).ov) blocks.push([r, c]);
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [blocks[i], blocks[j]] = [blocks[j]!, blocks[i]!];
+  }
+  let bi = 0;
+  for (const o of layout.overlays ?? []) {
+    for (let n = 0; n < o.count && bi < blocks.length; n++, bi++) {
+      const [r, c] = blocks[bi]!;
+      const cell = board[r]![c]!;
+      if (cell.t === "b") board[r]![c] = { ...cell, ov: [o.kind] };
+    }
+  }
+  for (let r = top - 1; r >= 0 && placed < layout.gems; r--) {
+    for (let c = 0; c < SIZE && placed < layout.gems; c += 3) {
+      if (board[r]![c]!.t === "e") {
+        board[r]![c] = { t: "b", c: LAYOUT_COLORS[Math.floor(rng() * LAYOUT_COLORS.length)]!, gm: 1 };
+        placed++;
+      }
+    }
+  }
+}
+
+export function newLevelMatch(
+  mode: "classic" | "adventure",
+  levelId: number,
+  goal: Goal,
+  stones: number,
+  features: Features,
+  layout?: Layout,
+): Match {
+  const rng = mulberry32(levelId * 9973 + (mode === "classic" ? 4219 : 17));
   const board = emptyBoard();
-  sprinkleStones(board, stones, rng);
-  const match = blankMatch();
+  if (features.stones) sprinkleStones(board, stones, rng);
+  if (layout) applyLayout(board, layout, rng);
+  const match = blankMatch(features);
   match.board = board;
-  match.mode = "adventure";
+  match.mode = mode;
   match.levelId = levelId;
   match.goal = goal;
+  if (goal.type === "gems") match.gemsTotal = board.flat().filter((c) => c.t === "b" && c.gm).length;
   fillTray(match, rng, levelId <= 2);
   updateGoal(match);
   return match;
+}
+
+export function newAdventureMatch(levelId: number, goal: Goal, stones: number, features: Features = ALL_FEATURES, layout?: Layout): Match {
+  return newLevelMatch("adventure", levelId, goal, stones, features, layout);
 }
 
 export function placePiece(
@@ -768,31 +1368,60 @@ export function placePiece(
 ): PlaceResult {
   const piece = match.tray[trayIndex];
   if (!piece || match.over) {
-    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0 };
+    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0, perfect: false };
   }
   if (!canPlace(match.board, piece.cells, row, col)) {
-    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0 };
+    return { ok: false, match, clear: null, gained: 0, combo: match.combo, coins: 0, perfect: false };
   }
 
   const next = cloneMatch(match);
-  stampPiece(next.board, piece, row, col);
-  const clear = resolveClears(next.board);
+  // A star block pays its bonus the moment it's dropped, then is a plain block.
+  const starBonus = piece.starAt !== null ? (piece.gold ? STAR_BONUS_GOLD : STAR_BONUS) : 0;
+  const clear = settleWithStar(next.board, piece, row, col);
   next.tray[trayIndex] = null;
   next.moves += 1;
 
   if (clear) {
-    next.combo = match.combo + 1;
-    next.lines += clear.lines;
+    // A clear within the window extends the streak; otherwise it starts a new one.
+    next.combo = match.sinceClear < COMBO_WINDOW ? match.combo + 1 : 1;
+    next.sinceClear = 0;
+    next.lines += clear.lines + (clear.zapLines ?? 0);
     next.stonesCleared += clear.cells.filter((c) => c.cell.t === "k").length;
-  } else if (next.shield > 0) {
-    next.shield -= 1;
   } else {
-    next.combo = 0;
+    next.sinceClear = match.sinceClear + 1;
+    if (next.sinceClear >= COMBO_WINDOW && next.combo > 0) {
+      // Frost: spend a charge to keep the streak alive a little longer.
+      if (next.shield > 0) {
+        next.shield -= 1;
+        next.sinceClear = COMBO_WINDOW - 1;
+      } else {
+        next.combo = 0;
+      }
+    }
   }
   next.bestCombo = Math.max(next.bestCombo, next.combo);
 
+  // A golden block empties the board by itself; that isn't a "perfect" clear.
+  const perfect = Boolean(clear) && !clear?.blasts && boardIsEmpty(next.board);
+  if (perfect) next.perfects += 1;
+  // Earned power blocks: the player makes specials by playing well.
+  const earned: BonusId[] = [];
+  if (clear) {
+    const f = next.features;
+    const hasArrow = f.specials.includes("rocketH") || f.specials.includes("rocketV");
+    const lines = clear.lines;
+    const comboMilestone = next.combo >= 5 && next.combo % 5 === 0 && next.combo !== match.combo;
+    if ((perfect || comboMilestone) && f.stars) earned.push("star");
+    if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
+    else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");
+    else if (lines >= 2 && hasArrow) {
+      const dir: BlockSpecial = clear.rows.length >= clear.cols.length ? "rocketH" : "rocketV";
+      earned.push(f.specials.includes(dir) ? dir : dir === "rocketH" ? "rocketV" : "rocketH");
+    }
+    if (earned.length) next.bonus = [...(next.bonus ?? []), ...earned].slice(0, 3);
+  }
   const comboForScore = Math.max(1, next.combo);
-  const gained = scoreFor(piece, clear, comboForScore);
+  const gained = scoreFor(piece, clear, comboForScore, perfect) + starBonus;
   next.score += gained;
   updateGoal(next);
   refillIfNeeded(next);
@@ -804,7 +1433,13 @@ export function placePiece(
     clear,
     gained,
     combo: next.combo,
-    coins: coinsFor(clear, gained),
+    coins: coinsFor(clear, gained) + (perfect ? 20 : 0),
+    perfect,
+    earned: earned.length ? earned : undefined,
+    star:
+      starBonus && piece.starAt !== null && piece.cells[piece.starAt]
+        ? { r: row + piece.cells[piece.starAt]![0], c: col + piece.cells[piece.starAt]![1], gold: piece.gold, bonus: starBonus }
+        : null,
   };
 }
 
@@ -839,7 +1474,7 @@ export function bombCell(match: Match, row: number, col: number): Match | null {
 
 export function refreshTray(match: Match): Match {
   const next = cloneMatch(match);
-  fillTray(next, defaultRng(), false);
+  fillTray(next, dealRng(next), false);
   next.over = false;
   checkOver(next);
   return next;
@@ -851,44 +1486,60 @@ export function applyFreeze(match: Match): Match {
   return next;
 }
 
-export function continueMatch(match: Match): Match {
+/** The rows Continue will empty: the two fullest (ties go to the lower row). */
+export function continueRows(board: Cell[][]): number[] {
+  return board
+    .map((row, r) => ({ r, n: row.filter((cell) => !isEmpty(cell)).length }))
+    .sort((a, b) => b.n - a.n || b.r - a.r)
+    .slice(0, 2)
+    .map((x) => x.r)
+    .sort((a, b) => a - b);
+}
+
+export function continueMatch(match: Match, easyTrays = 0, extraRows = 0): Match {
   const next = cloneMatch(match);
-  const occupied: Array<{ r: number; c: number }> = [];
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      if (!isEmpty(next.board[r][c])) occupied.push({ r, c });
-    }
+  // Predictable: Continue always empties the two fullest rows, then deals a
+  // tray that's checked to fit. A rescue continue also clears extra rows and
+  // deals small, easy pieces for the next few trays.
+  const rows = continueRows(next.board);
+  if (extraRows > 0) {
+    const fullness = next.board.map((row, r) => ({ r, n: row.filter((c) => c.t !== "e").length })).filter((x) => !rows.includes(x.r));
+    fullness.sort((a, b) => b.n - a.n);
+    rows.push(...fullness.slice(0, extraRows).map((x) => x.r));
   }
-  occupied.sort(() => Math.random() - 0.5);
-  const remove = Math.min(6, occupied.length);
-  for (let i = 0; i < remove; i++) {
-    const cell = occupied[i]!;
-    next.board[cell.r][cell.c] = { t: "e" };
-  }
+  for (const r of rows) for (let c = 0; c < SIZE; c++) next.board[r]![c] = { t: "e" };
   next.over = false;
-  fillTray(next, defaultRng(), false);
+  next.easy = easyTrays;
+  fillTray(next, dealRng(next), false);
   checkOver(next);
   return next;
 }
 
+/** Praise for a clear, by how many lines went at once. Null for a single line. */
+export function praiseFor(lines: number, perfect: boolean): string | null {
+  if (perfect) return "Perfect!";
+  if (lines >= 6) return "Unbelievable!";
+  if (lines === 5) return "Amazing!";
+  if (lines === 4) return "Excellent!";
+  if (lines === 3) return "Great!";
+  if (lines === 2) return "Good!";
+  return null;
+}
+
+/** Kept for older callers. */
 export function comboLabel(combo: number): string {
-  if (combo <= 1) return "Clear";
-  if (combo === 2) return "Nice";
-  if (combo === 3) return "Great";
-  if (combo === 4) return "Super";
-  if (combo === 5) return "Amazing";
-  if (combo === 6) return "Unreal";
-  return "Legendary";
+  return combo > 1 ? `Combo ${combo}` : "Clear";
 }
 
 export function burstLabel(lines: number): string {
-  if (lines <= 1) return "Line";
-  if (lines === 2) return "Double";
-  if (lines === 3) return "Triple";
-  if (lines === 4) return "Quad";
-  if (lines === 5) return "Penta";
-  return "Mega";
+  return praiseFor(lines, false) ?? "Line";
 }
+
+/**
+ * How far (in cells) a drag may be nudged to the nearest legal spot.
+ * Kept at 1 so a drop never lands somewhere the player wasn't pointing.
+ */
+export const SNAP_RADIUS = 1;
 
 export function snapPlace(
   board: Cell[][],
@@ -898,8 +1549,8 @@ export function snapPlace(
 ): { r: number; c: number } | null {
   if (canPlace(board, cells, row, col)) return { r: row, c: col };
   let best: { r: number; c: number; d: number } | null = null;
-  for (let dr = -2; dr <= 2; dr++) {
-    for (let dc = -2; dc <= 2; dc++) {
+  for (let dr = -SNAP_RADIUS; dr <= SNAP_RADIUS; dr++) {
+    for (let dc = -SNAP_RADIUS; dc <= SNAP_RADIUS; dc++) {
       if (dr === 0 && dc === 0) continue;
       const r = row + dr;
       const c = col + dc;
@@ -938,4 +1589,43 @@ export function cellColor(cell: Cell): ColorId | "stone" | "crate" | "wall" | nu
 
 export function pieceFits(match: Match, piece: Piece): boolean {
   return canPlaceAnywhere(match.board, piece.cells);
+}
+
+/** Day 1 of the daily puzzle. */
+export const DAILY_EPOCH = Date.UTC(2026, 10, 24);
+
+/** Today's daily puzzle number (local calendar day). */
+export function dailyNumber(now = new Date()): number {
+  const local = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(1, Math.floor((local - DAILY_EPOCH) / 86_400_000) + 1);
+}
+
+/** The daily puzzle's goal: a weekly rhythm of lines, score and combo days. */
+export function dailyGoal(day: number): Goal {
+  const kind = day % 3;
+  if (kind === 0) return { type: "combo", value: 4 };
+  if (kind === 1) return { type: "lines", value: 8 };
+  return { type: "score", value: 1500 };
+}
+
+/**
+ * The daily puzzle: one board for everyone. The starting blocks, stones and
+ * every tray dealt come from the day number, so friends can compare results.
+ */
+export function newDailyMatch(day: number): Match {
+  const rng = mulberry32(day * 7919 + 1301);
+  const features = cloneFeatures(PLAIN_FEATURES);
+  features.stones = true;
+  const board = emptyBoard();
+  applyLayout(board, { fill: 0.18 + (day % 4) * 0.03, gems: 0 }, rng);
+  sprinkleStones(board, 2 + (day % 3), rng);
+  const match = blankMatch(features);
+  match.board = board;
+  match.mode = "challenge";
+  match.daily = day;
+  match.seed = (day * 2654435761) >>> 0;
+  match.goal = dailyGoal(day);
+  fillTray(match, dealRng(match), false);
+  updateGoal(match);
+  return match;
 }

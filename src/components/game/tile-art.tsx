@@ -23,30 +23,39 @@ export function PowerGlyph({ name }: { name: "hammer" | "refresh" | "bomb" | "fr
   return <FrostGlyph />;
 }
 
+// Every special icon is drawn centred on (16, 16) in a 32×32 box, and the
+// CSS places that box dead-centre on the tile face, so they line up the same
+// on the board, in the tray and in the lessons.
 function BombFace() {
   const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true">
+    <svg viewBox="0 0 32 32" className="pj-sp pj-sp-bomb" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
       <defs>
-        <radialGradient id={`${id}-b`} cx="32%" cy="28%" r="72%">
-          <stop offset="0%" stopColor="#7a628c" />
-          <stop offset="38%" stopColor="#3a2448" />
-          <stop offset="100%" stopColor="#120814" />
+        <radialGradient id={`${id}-b`} cx="34%" cy="30%" r="78%">
+          <stop offset="0%" stopColor="#a58bc4" />
+          <stop offset="28%" stopColor="#4a2f66" />
+          <stop offset="72%" stopColor="#1c0f2b" />
+          <stop offset="100%" stopColor="#07030c" />
         </radialGradient>
-        <linearGradient id={`${id}-c`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f4e6c0" />
-          <stop offset="100%" stopColor="#a07838" />
-        </linearGradient>
+        <radialGradient id={`${id}-s`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="35%" stopColor="#fff38a" />
+          <stop offset="70%" stopColor="#ff9a2a" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#ff5a1f" stopOpacity="0" />
+        </radialGradient>
       </defs>
-      <ellipse cx="15.3" cy="28.2" rx="10.6" ry="2.2" fill="#050208" opacity="0.5" />
-      <circle cx="15.4" cy="18.2" r="11.8" fill="#0b0610" stroke="#8f6aa8" strokeWidth="1.7" />
-      <circle cx="15.4" cy="18.2" r="10.5" fill={`url(#${id}-b)`} stroke="#e0b8f0" strokeWidth="0.55" />
-      <path d="M8.7 13.2c2.5-4.5 8.6-6.2 13.1-2.9" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" opacity="0.25" />
-      <ellipse cx="11.7" cy="13.7" rx="4" ry="2.4" fill="rgba(255,255,255,0.3)" />
-      <rect x="12.5" y="5.6" width="6.2" height="4.2" rx="1" fill={`url(#${id}-c)`} stroke="#fff1bf" strokeWidth="0.65" />
-      <path d="M18.7 7c3-3.1 6.8-2.4 7.6.4" fill="none" stroke="#d98822" strokeWidth="2.1" strokeLinecap="round" />
-      <path d="M26.5 3.1l1 2.3 2.4.95-2.4.95-1 2.3-1-2.3-2.4-.95 2.4-.95z" fill="#fff18a" stroke="#fffbd8" strokeWidth="0.5" />
-      <circle cx="26.5" cy="6.35" r="1.25" fill="#ff9f20" opacity="0.8" />
+      {/* ball, centred low enough that ball + fuse balance on the tile */}
+      <circle cx="15.2" cy="17.6" r="11" fill="#06020a" stroke="#f1d6ff" strokeWidth="1.3" />
+      <circle cx="15.2" cy="17.6" r="9.9" fill={`url(#${id}-b)`} />
+      <ellipse cx="11.4" cy="13.4" rx="3.6" ry="2.2" fill="rgba(255,255,255,0.42)" transform="rotate(-28 11.4 13.4)" />
+      <circle cx="9.6" cy="20.6" r="1.1" fill="rgba(255,255,255,0.14)" />
+      {/* brass collar + curled fuse */}
+      <rect x="18.1" y="5.6" width="6" height="4.2" rx="1.2" fill="#f0d48a" stroke="#fff4c8" strokeWidth="0.6" transform="rotate(38 21.1 7.7)" />
+      <path d="M23.3 5.4 C24.6 3.6 26.4 3.6 27.3 2.6" fill="none" stroke="#c9852a" strokeWidth="1.7" strokeLinecap="round" />
+      <g className="pj-fuse-spark">
+        <circle cx="27.6" cy="2.4" r="3.4" fill={`url(#${id}-s)`} />
+        <path d="M27.6 -0.6v6M24.6 2.4h6" stroke="#fffbe0" strokeWidth="0.7" strokeLinecap="round" />
+      </g>
     </svg>
   );
 }
@@ -54,24 +63,32 @@ function BombFace() {
 function ArrowFace({ dir }: { dir: "h" | "v" }) {
   const id = useId().replace(/:/g, "");
   return (
-    <svg
-      viewBox="0 0 32 32"
-      className="pj-sp pj-sp-arrow"
-      aria-hidden="true"
-      style={{ transform: dir === "h" ? "rotate(90deg)" : undefined }}
-    >
+    <svg viewBox="0 0 32 32" className={`pj-sp pj-sp-arrow is-${dir}`} aria-hidden="true">
       <defs>
         <linearGradient id={`${id}-a`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="42%" stopColor="#d4eeff" />
-          <stop offset="100%" stopColor="#6aa8e0" />
+          <stop offset="50%" stopColor="#dff4ff" />
+          <stop offset="100%" stopColor="#7cc4ff" />
+        </linearGradient>
+        <linearGradient id={`${id}-c`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#9ff3ff" stopOpacity="0" />
+          <stop offset="50%" stopColor="#ffffff" />
+          <stop offset="100%" stopColor="#9ff3ff" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d="M16 1.8 L29.5 16.3 H22.4 V30 H9.6 V16.3 H2.5 Z" fill="#16376f" stroke="#87d5ff" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d="M16 3.4 L27.5 16 H20.7 V28.2 H11.3 V16 H4.5 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.75" strokeLinejoin="round" />
-      <path d="M16 4.8 L25.1 15.8 H19.2 V26.8 H16 Z" fill="#3976b9" opacity="0.44" />
-      <path d="M15.8 4.3 L6.9 15.8 H11" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" opacity="0.92" />
-      <path d="M13 27.3 V17.2" stroke="#fff" strokeWidth="1.15" strokeLinecap="round" opacity="0.58" />
+      <g transform={dir === "h" ? "rotate(90 16 16)" : undefined}>
+        {/* energy core: the line it zaps along */}
+        <rect x="14.2" y="3" width="3.6" height="26" rx="1.8" fill={`url(#${id}-c)`} className="pj-arrow-core" />
+        {/* two bold chevrons, one each way */}
+        <path d="M16 1.6 L25.6 11 L21.2 11 L16 6.2 L10.8 11 L6.4 11 Z" fill="#0f2d63" stroke="#0f2d63" strokeWidth="2.6" strokeLinejoin="round" />
+        <path d="M16 30.4 L25.6 21 L21.2 21 L16 25.8 L10.8 21 L6.4 21 Z" fill="#0f2d63" stroke="#0f2d63" strokeWidth="2.6" strokeLinejoin="round" />
+        <path d="M16 1.6 L25.6 11 L21.2 11 L16 6.2 L10.8 11 L6.4 11 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.6" strokeLinejoin="round" />
+        <path d="M16 30.4 L25.6 21 L21.2 21 L16 25.8 L10.8 21 L6.4 21 Z" fill={`url(#${id}-a)`} stroke="#ffffff" strokeWidth="0.6" strokeLinejoin="round" />
+        {/* centre gem */}
+        <circle cx="16" cy="16" r="3.6" fill="#0f2d63" />
+        <circle cx="16" cy="16" r="2.6" fill="#ffffff" />
+        <circle cx="16" cy="16" r="1.3" fill="#7fe7ff" />
+      </g>
     </svg>
   );
 }

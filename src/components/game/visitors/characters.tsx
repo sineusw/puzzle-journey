@@ -3,11 +3,11 @@ import type { VisitorId } from "@/lib/game/visitors";
 type VisitorPose = "idle" | "act" | "react";
 
 export const CHARACTER_ART: Record<VisitorId, string> = {
-  milo: "/characters/milo-3d.png",
-  luna: "/characters/luna-3d.png",
-  kai: "/characters/kai-3d.png",
-  nia: "/characters/nia-3d.png",
-  pip: "/characters/pip-3d.png",
+  milo: "/characters/milo-3d.webp",
+  luna: "/characters/luna-3d.webp",
+  kai: "/characters/kai-3d.webp",
+  nia: "/characters/nia-3d.webp",
+  pip: "/characters/pip-3d.webp",
 };
 
 export function VisitorSprite({ id, pose = "idle" }: { id: VisitorId; pose?: VisitorPose }) {

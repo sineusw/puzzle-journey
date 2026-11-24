@@ -16,6 +16,63 @@ export function overlaysOf(cell: Cell): OverlayId[] {
   return [];
 }
 
+/**
+ * Tile textures cut from the approved Block Journey mockup
+ * (tools/extract-mockup-art.py → public/art/tiles). Colors without a texture
+ * (crate, wall) fall back to the procedural CubeMesh.
+ */
+const TILE_TEXTURE: Partial<Record<CubeColor, string>> = {
+  cyan: "cyan",
+  azure: "azure",
+  lime: "lime",
+  pink: "pink",
+  amber: "amber",
+  orange: "orange",
+  violet: "violet",
+};
+
+const STAR_TEXTURE: Partial<Record<CubeColor, string>> = {
+  cyan: "star-blue",
+  azure: "star-blue",
+  lime: "star-green",
+  pink: "star-pink",
+  amber: "star-orange",
+  orange: "star-orange",
+  violet: "star-purple",
+};
+
+/** Tile set of the equipped skin ("" = the base Island Gloss set). */
+let skinDir = "";
+const SKINNED = new Set(["ocean", "candy", "jelly", "tiki", "pixel", "faces", "sunset", "frost", "midnight", "chrome", "royal", "holo", "cosmic"]);
+export function setTileSkin(skin: string): void {
+  skinDir = SKINNED.has(skin) ? `${skin}/` : "";
+}
+export function tileUrl(tex: string, skin?: string): string {
+  const dir = skin === undefined ? skinDir : SKINNED.has(skin) ? `${skin}/` : "";
+  return tex.startsWith("stone") ? `/art/tiles/${tex}.webp` : `/art/tiles/${dir}${tex}.webp`;
+}
+
+function textureFor(color: CubeColor, kind: SpecialId | undefined, star: boolean, gold: boolean, hp?: 1 | 2): string | null {
+  if (kind === "stone") return hp === 1 ? "stone-cracked" : "stone";
+  if (star && !kind) return gold ? "star-orange" : STAR_TEXTURE[color] ?? null;
+  return TILE_TEXTURE[color] ?? null;
+}
+
+/** Texture URL for a board cell, or null when it has no tile art. */
+export function cellTextureUrl(cell: Cell): string | null {
+  const color = colorOf(cell);
+  if (!color) return null;
+  const kind: SpecialId | undefined = cell.t === "k" ? "stone" : cell.t === "b" || cell.t === "s" ? cell.sp : undefined;
+  const tex = textureFor(color, kind, cell.t === "s", cell.t === "s" && Boolean(cell.gold), cell.t === "k" ? cell.hp : undefined);
+  return tex ? tileUrl(tex) : null;
+}
+
+/** Texture URL for a plain block of `color`. */
+export function colorTextureUrl(color: CubeColor, skin?: string): string | null {
+  const tex = TILE_TEXTURE[color];
+  return tex ? tileUrl(tex, skin) : null;
+}
+
 export function BlockFace({
   color,
   star,
@@ -27,7 +84,11 @@ export function BlockFace({
   stoneHp,
   overlays,
   className,
+  skin,
+  gem,
 }: {
+  skin?: string;
+  gem?: boolean;
   color: CubeColor;
   star?: boolean;
   gold?: boolean;
@@ -41,19 +102,26 @@ export function BlockFace({
 }) {
   const kind: SpecialId | undefined = special ?? (cracked || color === "stone" ? "stone" : undefined);
   const ov = overlays ?? [];
+  const tex = textureFor(color, kind, Boolean(star), Boolean(gold), stoneHp);
   return (
     <div
-      className={cn("pj-cube", ghost && "is-ghost", flash && "is-flash", className)}
+      className={cn("pj-cube", tex && "is-tex", ghost && "is-ghost", flash && "is-flash", className)}
       data-c={color}
       data-sp={kind}
     >
-      <CubeMesh color={color} />
+      {tex ? (
+        <span className="pj-tex" style={{ backgroundImage: `url(${tileUrl(tex, skin)})` }} />
+      ) : (
+        <CubeMesh color={color} />
+      )}
       <div className="pj-cube-layers">
-        {star && !kind ? <CrystalStar gold={gold} /> : null}
-        {kind ? <SpecialFace kind={kind} hp={stoneHp} /> : null}
+        {star && !kind && !tex ? <CrystalStar gold={gold} /> : null}
+        {kind && kind !== "stone" ? <SpecialFace kind={kind} hp={stoneHp} /> : null}
+        {kind === "stone" && !tex ? <SpecialFace kind={kind} hp={stoneHp} /> : null}
         {ov.map((o) => (
           <OverlayFace key={o} kind={o} />
         ))}
+        {gem ? <img src="/icons/gem.webp" alt="" className="pj-gem-face" draggable={false} /> : null}
       </div>
     </div>
   );

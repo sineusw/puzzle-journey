@@ -1,4 +1,4 @@
-import type { Cell, CellPos, ColorId, SpecialId } from "../engine";
+import type { Cell, CellPos, ColorId, SpecialId } from "../engine.ts";
 
 export const VISITOR_IDS = ["milo", "luna", "kai", "nia", "pip"] as const;
 export type VisitorId = (typeof VISITOR_IDS)[number];

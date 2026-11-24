@@ -1,0 +1,183 @@
+name: iOS App Store Release (Block Journey)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-release-bj
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    env:
+      BUNDLE_ID: com.pettygamesstudios.blockjourney
+      TEAM_ID: FHGP486J8U
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build game and snapshot it for the app
+        run: |
+          npm ci
+          bash mobile/scripts/build-www.sh
+
+      - name: Sync Capacitor
+        working-directory: mobile
+        run: |
+          npm ci
+          npx cap sync ios
+
+      - name: Restore last CI distribution certificate id
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-cert
+          key: bj-dist-cert-${{ github.run_id }}
+          restore-keys: bj-dist-cert-
+
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+
+      - name: Prepare App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          test -n "$ASC_KEY_ID" && test -n "$ASC_ISSUER_ID" && test -n "$ASC_PRIVATE_KEY"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if printf '%s' "$ASC_PRIVATE_KEY" | grep -q 'BEGIN PRIVATE KEY'; then printf '%s\n' "$ASC_PRIVATE_KEY" > "$KEY_PATH"; else printf '%s' "$ASC_PRIVATE_KEY" | base64 --decode > "$KEY_PATH"; fi
+          openssl pkey -in "$KEY_PATH" -noout
+          {
+            echo "ASC_KEY_ID=$ASC_KEY_ID"; echo "ASC_ISSUER_ID=$ASC_ISSUER_ID"; echo "ASC_KEY_PATH=$KEY_PATH"
+            echo "SIGNING_DIR=$RUNNER_TEMP/signing"
+            echo "STALE_CERT_IDS=$(cat .ci-cert/id 2>/dev/null || true)"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/signing" .ci-cert
+
+      - name: Create temporary keychain
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p actions "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p actions "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          echo "KEYCHAIN_PATH=$KEYCHAIN" >> "$GITHUB_ENV"
+
+      - name: Configure fastlane lanes
+        run: |
+          mkdir -p fastlane
+          cat > fastlane/Fastfile <<'RUBY'
+          default_platform(:ios)
+          platform :ios do
+            private_lane :api_token do
+              app_store_connect_api_key(key_id: ENV.fetch("ASC_KEY_ID"), issuer_id: ENV.fetch("ASC_ISSUER_ID"), key_filepath: ENV.fetch("ASC_KEY_PATH"), in_house: false)
+            end
+            lane :create_signing do
+              token = api_token
+              # Revoke the cert the previous run of THIS workflow created (kept alive until now so
+              # Apple's async signature check on that build could finish).
+              ENV.fetch("STALE_CERT_IDS", "").split(",").map(&:strip).reject(&:empty?).each do |id|
+                begin
+                  c = Spaceship::ConnectAPI::Certificate.get(certificate_id: id)
+                  c.delete! if c && ["DISTRIBUTION", "IOS_DISTRIBUTION"].include?(c.certificate_type)
+                  UI.message("Revoked previous CI certificate #{id}")
+                rescue => e
+                  UI.message("Previous certificate #{id} already gone: #{e.message}")
+                end
+              end
+              cert(api_key: token, team_id: ENV.fetch("TEAM_ID"), output_path: ENV.fetch("SIGNING_DIR"), keychain_path: ENV.fetch("KEYCHAIN_PATH"), keychain_password: "actions", generate_apple_certs: true)
+              id = lane_context[SharedValues::CERT_CERTIFICATE_ID].to_s
+              File.write(File.join(ENV.fetch("GITHUB_WORKSPACE"), ".ci-cert", "id"), id) unless id.empty?
+              sigh(api_key: token, app_identifier: ENV.fetch("BUNDLE_ID"), team_id: ENV.fetch("TEAM_ID"), output_path: ENV.fetch("SIGNING_DIR"), filename: "BlockJourney.mobileprovision", force: true, cert_id: id)
+            end
+            lane :upload_build do
+              upload_to_app_store(api_key: api_token, ipa: ENV.fetch("IPA_PATH"), skip_metadata: true, skip_screenshots: true, run_precheck_before_submit: false)
+            end
+          end
+          RUBY
+
+      - name: Create signing assets
+        run: |
+          fastlane ios create_signing
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions "$KEYCHAIN_PATH"
+          PROFILE_PATH="$SIGNING_DIR/BlockJourney.mobileprovision"
+          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")" >> "$GITHUB_ENV"
+
+      - name: Save this run's certificate id for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ci-cert
+          key: bj-dist-cert-${{ github.run_id }}
+
+      - name: Version, build number, signing
+        run: |
+          P=mobile/ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0" $P || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" $P
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}" $P || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}" $P
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $P 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" $P
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" $P 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" $P
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" $P
+          gem install xcodeproj --no-document >/dev/null 2>&1 || true
+          ruby -e '
+            require "xcodeproj"
+            p = Xcodeproj::Project.open("mobile/ios/App/App.xcodeproj")
+            t = p.targets.find { |x| x.name == "App" } or raise "no App target"
+            t.build_configurations.each do |c|
+              next unless c.name == "Release"
+              c.build_settings["CODE_SIGN_STYLE"] = "Manual"
+              c.build_settings["DEVELOPMENT_TEAM"] = ENV["TEAM_ID"]
+              c.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = ENV["BUNDLE_ID"]
+              c.build_settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = "Apple Distribution"
+              c.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PROFILE_NAME"]
+            end
+            p.save'
+
+      - name: Archive
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/BJ.xcarchive" archive
+
+      - name: Export IPA
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>${BUNDLE_ID}</key><string>${PROFILE_NAME}</string></dict>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/BJ.xcarchive" -exportPath "$RUNNER_TEMP/export" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Verify signature
+        run: |
+          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' -print -quit); test -n "$IPA"
+          mkdir -p "$RUNNER_TEMP/v" && unzip -q "$IPA" -d "$RUNNER_TEMP/v"
+          APP=$(find "$RUNNER_TEMP/v/Payload" -maxdepth 1 -name '*.app' -print -quit)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -d --extract-certificates="$RUNNER_TEMP/rc-" "$APP"
+          security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/ep.plist"
+          RELEASE_APP_PATH="$APP" RELEASE_PROFILE_PATH="$RUNNER_TEMP/ep.plist" RELEASE_CERTIFICATE_PATH="$RUNNER_TEMP/rc-0" python3 scripts/verify-ios-export.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: block-journey-ipa
+          path: ${{ runner.temp }}/export/*.ipa
+
+      - name: Upload to App Store Connect
+        run: |
+          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' -print -quit)
+          IPA_PATH="$IPA" fastlane ios upload_build
