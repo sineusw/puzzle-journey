@@ -114,6 +114,29 @@ export function unlockAudio(): void {
 }
 let gestureBound = false;
 
+/**
+ * Called once when the app opens: start the music right away. The iPhone app
+ * allows that with no tap; a browser may hold it until the first touch, which
+ * then starts it. "playback" keeps sound on even with the ringer switch on silent.
+ */
+let booted = false;
+export function bootAudio(): void {
+  if (typeof window === "undefined" || booted) return;
+  booted = true;
+  try {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) nav.audioSession.type = "playback";
+  } catch {
+    /* older iOS */
+  }
+  unlockAudio();
+  const kick = () => unlockAudio();
+  for (const ev of ["touchend", "keydown", "click"]) window.addEventListener(ev, kick, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") unlockAudio();
+  });
+}
+
 export function setMuted(sfxOn: boolean, musicOn: boolean): void {
   const b = ensure();
   if (!b) return;

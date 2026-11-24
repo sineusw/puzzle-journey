@@ -467,6 +467,7 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     profile = { ...profile, lastActive: Date.now() };
     audio.setMuted(profile.settings.sfx, profile.settings.music);
+    audio.bootAudio();
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
     void connectBoard(profile.card);
