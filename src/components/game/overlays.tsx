@@ -369,7 +369,7 @@ function SettingsSheet() {
         onClick={() => toggleSetting("music")}
       />
       <ToggleRow
-        label="Voice cheers"
+        label="Announcer"
         icon={profile.settings.voice !== false ? Volume2 : VolumeX}
         on={profile.settings.voice !== false}
         onClick={() => toggleSetting("voice")}

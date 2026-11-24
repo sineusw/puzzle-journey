@@ -4,6 +4,8 @@ type Bus = { ctx: AudioContext; master: GainNode; sfx: GainNode; music: GainNode
 let bus: Bus | null = null;
 let musicTimer: number | null = null;
 let unlocked = false;
+/** Background music sits well under the sound effects and announcer. */
+const MUSIC_VOL = 0.12;
 let wantMusic = true;
 
 /**
@@ -26,7 +28,7 @@ function ensure(): Bus | null {
   limiter.attack.value = 0.003;
   limiter.release.value = 0.18;
   sfx.gain.value = 0.78;
-  music.gain.value = 0.22;
+  music.gain.value = MUSIC_VOL;
   master.gain.value = 0.9;
   // Reverb: a generated 1.4 s stereo tail.
   const room = ctx.createGain();
@@ -152,7 +154,7 @@ export function setMuted(sfxOn: boolean, musicOn: boolean): void {
   if (!b) return;
   wantMusic = musicOn;
   b.sfx.gain.setTargetAtTime(sfxOn ? 0.78 : 0, b.ctx.currentTime, 0.04);
-  b.music.gain.setTargetAtTime(musicOn ? 0.3 : 0, b.ctx.currentTime, 0.08);
+  b.music.gain.setTargetAtTime(musicOn ? MUSIC_VOL : 0, b.ctx.currentTime, 0.08);
   if (musicOn) startMusic();
   else stopMusic();
 }
@@ -330,7 +332,7 @@ function startMusic(): void {
   src.buffer = musicBuf;
   src.loop = true;
   src.connect(b.music);
-  b.music.gain.setTargetAtTime(0.3, b.ctx.currentTime, 0.2);
+  b.music.gain.setTargetAtTime(MUSIC_VOL, b.ctx.currentTime, 0.2);
   src.onended = () => {
     if (musicSrc === src) musicSrc = null;
     // A loop only "ends" if the system stopped it: start it again.
@@ -831,4 +833,48 @@ export function visitorTheme(id: "milo" | "luna" | "kai" | "nia" | "pip"): void 
     tone(NOTE(28), 0.12, "sine", 0.06, b.sfx, 1.35, NOTE(36));
   }
   vibrate([20, 40, 20]);
+}
+
+
+/* ------------------------------------------------ announcer clips */
+const clipCache = new Map<string, Promise<AudioBuffer | null>>();
+function loadClip(url: string): Promise<AudioBuffer | null> {
+  const b = ensure();
+  if (!b) return Promise.resolve(null);
+  let p = clipCache.get(url);
+  if (!p) {
+    p = fetch(url)
+      .then((r) => r.arrayBuffer())
+      .then((a) => b.ctx.decodeAudioData(a))
+      .catch(() => null);
+    clipCache.set(url, p);
+  }
+  return p;
+}
+/** Warm the announcer clips so the first one plays on time. */
+export function preloadClips(urls: string[]): void {
+  urls.forEach((u) => void loadClip(u));
+}
+/** Play a recorded announcer line on the effects bus, ducking the music under it. */
+export function playClip(url: string, gain = 1): void {
+  const b = ensure();
+  if (!b || !unlocked) return;
+  void loadClip(url).then((buf) => {
+    if (!buf) return;
+    const src = b.ctx.createBufferSource();
+    const g = b.ctx.createGain();
+    g.gain.value = gain;
+    src.buffer = buf;
+    src.connect(g);
+    g.connect(b.sfx);
+    const t = b.ctx.currentTime;
+    b.music.gain.cancelScheduledValues(t);
+    b.music.gain.setTargetAtTime(wantMusic ? MUSIC_VOL * 0.35 : 0, t, 0.05);
+    b.music.gain.setTargetAtTime(wantMusic ? MUSIC_VOL : 0, t + buf.duration, 0.3);
+    src.start();
+    src.onended = () => {
+      src.disconnect();
+      g.disconnect();
+    };
+  });
 }
