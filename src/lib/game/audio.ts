@@ -132,8 +132,18 @@ export function bootAudio(): void {
   unlockAudio();
   const kick = () => unlockAudio();
   for (const ev of ["touchend", "keydown", "click"]) window.addEventListener(ev, kick, { passive: true });
+  // Leaving the app pauses everything; coming back picks the music up where it was.
+  const pause = () => {
+    const b = bus;
+    if (b && b.ctx.state === "running") void b.ctx.suspend();
+  };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") unlockAudio();
+    else pause();
+  });
+  window.addEventListener("pagehide", pause);
+  window.addEventListener("blur", () => {
+    if (document.visibilityState === "hidden") pause();
   });
 }
 

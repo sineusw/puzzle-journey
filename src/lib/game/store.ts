@@ -1797,6 +1797,9 @@ function startVisit(
   if (s.visitorBusy || s.visitorEvent) return false;
   if (s.match.over || s.match.won) return false;
   if (!forced && (s.tab !== "home" || s.panel)) return false;
+  // Surprise visits (a character moving, breaking or swapping blocks mid-turn) read as
+  // blocks glitching around, so visitors only appear for their own introduction now.
+  if (!forced) return false;
   const mood = pickMood(s.profile.level, s.match.moves, Math.random);
   const allowed = VISITOR_IDS.filter((id) => s.match.features.visitors.includes(id));
   const pool = allowed.length > 1 ? allowed.filter((id) => id !== s.visitorLast) : allowed;
