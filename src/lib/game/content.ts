@@ -310,18 +310,33 @@ export type ClassicLevel = {
   reward: { coins: number; gems: number };
 };
 
-/** Classic: plain blocks only, steadily harder goals. */
-export const CLASSIC: ClassicLevel[] = Array.from({ length: 30 }, (_, i) => {
+/** How many Classic levels there are. */
+export const CLASSIC_COUNT = 500;
+
+/**
+ * Classic: plain blocks only. Goals climb steadily for the first 30 levels, then
+ * keep rising slowly (with an easier "breather" every 10th level) so there's
+ * always another level to beat.
+ */
+export const CLASSIC: ClassicLevel[] = Array.from({ length: CLASSIC_COUNT }, (_, i) => {
   const id = i + 1;
   const tier = Math.floor(i / 3);
   const kind = i % 3;
+  const late = Math.max(0, tier - 10); // past level 30 the climb slows right down
+  const early = Math.min(tier, 10);
+  const breather = id % 10 === 0 ? 0.7 : 1;
   const goal: Goal =
     kind === 0
-      ? { type: "score", value: 300 + tier * 260 }
+      ? { type: "score", value: Math.round(Math.min(14000, 300 + early * 260 + late * 70) * breather / 50) * 50 }
       : kind === 1
-        ? { type: "lines", value: 4 + tier * 2 }
-        : { type: "combo", value: Math.min(2 + Math.floor(tier / 2), 7) };
-  return { id, name: `Classic ${id}`, goal, reward: { coins: 30 + tier * 10, gems: 2 + Math.floor(tier / 2) } };
+        ? { type: "lines", value: Math.round(Math.min(46, 4 + early * 2 + late * 0.35) * breather) }
+        : { type: "combo", value: Math.min(9, 2 + Math.floor(early / 2) + Math.floor(late / 25)) };
+  return {
+    id,
+    name: `Classic ${id}`,
+    goal,
+    reward: { coins: Math.min(200, 30 + early * 10 + Math.floor(late * 1.5)), gems: Math.min(12, 2 + Math.floor(tier / 4)) },
+  };
 });
 
 export type ChallengeDef = {

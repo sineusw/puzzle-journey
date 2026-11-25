@@ -980,7 +980,8 @@ function AdventureScreen() {
   const [mode, setMode] = useState<PlayMode>(() => {
     const want = pendingMode;
     pendingMode = null;
-    return want ?? (current === "classic" || current === "sandbox" ? current : "adventure");
+    void current;
+    return want ?? "adventure";
   });
   const modes: Array<{ id: PlayMode; label: string; blurb: string }> = [
     {
@@ -1002,24 +1003,7 @@ function AdventureScreen() {
   const active = shown.find((m) => m.id === mode) ?? shown[0]!;
   return (
     <div className={active.id === "adventure" ? "pj-play is-map" : "pj-play"}>
-      {shown.length > 1 ? (
-        <div className="pj-modes mt-3" role="tablist" aria-label="Game mode">
-          {shown.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="tab"
-              aria-selected={mode === m.id}
-              data-testid={`mode-${m.id}`}
-              className={`pj-mode-tab ${mode === m.id ? "is-on" : ""}`}
-              onClick={() => setMode(m.id)}
-            >
-              <span className="pj-mode-tab-ico" aria-hidden="true">{m.id === "adventure" ? "🏝️" : m.id === "classic" ? "🧩" : "♾️"}</span>
-              {m.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {/* The Map tab is only the island map; Classic and Sandbox open from the home screen. */}
       {null}
       <div className={active.id === "adventure" ? "pj-play-body" : "mt-3"}>
         {active.id === "adventure" ? (
@@ -1088,7 +1072,7 @@ function ClassicList() {
         ▶ Level {unlocked}
       </button>
       <div className="pj-classic-grid is-jazzy">
-        {CLASSIC.map((lvl, i) => {
+        {CLASSIC.slice(0, Math.min(CLASSIC.length, Math.max(30, Math.ceil((unlocked + 15) / 5) * 5))).map((lvl, i) => {
           const locked = lvl.id > profile.classic.unlocked;
           const stars = profile.classic.stars[String(lvl.id)] ?? 0;
           const isNext = lvl.id === unlocked;

@@ -34,7 +34,7 @@ describe("Adventure unlock ladder", () => {
 
 describe("Classic levels", () => {
   it("has 30 levels whose goals never get easier within a goal type", () => {
-    assert.equal(CLASSIC.length, 30);
+    assert.equal(CLASSIC.length, 500);
     const last: Record<string, number> = {};
     for (const lvl of CLASSIC) {
       const prev = last[lvl.goal.type] ?? 0;
