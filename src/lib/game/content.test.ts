@@ -33,10 +33,11 @@ describe("Adventure unlock ladder", () => {
 });
 
 describe("Classic levels", () => {
-  it("has 30 levels whose goals never get easier within a goal type", () => {
+  it("has 500 levels whose goals never get easier within a goal type (except the easier breather every 10th level)", () => {
     assert.equal(CLASSIC.length, 500);
     const last: Record<string, number> = {};
     for (const lvl of CLASSIC) {
+      if (lvl.id % 10 === 0) continue;
       const prev = last[lvl.goal.type] ?? 0;
       assert.ok(lvl.goal.value >= prev, `${lvl.name} ${lvl.goal.type} dropped`);
       last[lvl.goal.type] = lvl.goal.value;
