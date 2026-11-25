@@ -1211,7 +1211,12 @@ export function setPlayScore(board: Cell[][], pieces: Piece[]): number {
       snug += d.snug;
       g = d.next;
     }
-    if (ok) best = Math.max(best, lines * 40 + snug);
+    if (ok) {
+      // Favor sets that clean the board up, with a big bonus for wiping it completely.
+      const left = g.reduce((n, x) => n + (x ? 1 : 0), 0);
+      const g0n = g0.reduce((n, x) => n + (x ? 1 : 0), 0);
+      best = Math.max(best, lines * 40 + snug + (g0n > 0 && left === 0 ? 600 : 0) - left * 3);
+    }
   }
   return best;
 }
@@ -1718,6 +1723,9 @@ export function snapPlace(
   cells: CellPos[],
   row: number,
   col: number,
+  /** Exact (fractional) spot under the finger, so a near-miss snaps to the closest real fit. */
+  rowF = row,
+  colF = col,
 ): { r: number; c: number } | null {
   if (canPlace(board, cells, row, col)) return { r: row, c: col };
   let best: { r: number; c: number; d: number } | null = null;
@@ -1727,7 +1735,8 @@ export function snapPlace(
       const r = row + dr;
       const c = col + dc;
       if (!canPlace(board, cells, r, c)) continue;
-      const d = dr * dr + dc * dc;
+      const d = (r - rowF) ** 2 + (c - colF) ** 2;
+      if (d > 2.05) continue; // never more than one cell (diagonal included) from the finger
       if (!best || d < best.d) best = { r, c, d };
     }
   }

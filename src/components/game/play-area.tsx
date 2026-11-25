@@ -233,9 +233,9 @@ export function PlayArea() {
     const over = cx >= m.left - m.cell && cx <= m.right + m.cell && cy >= m.top - m.cell && cy <= m.bottom + m.cell;
     let next: Preview | null = null;
     if (over) {
-      const c = Math.round((cx - w / 2 - m.left) / m.stride);
-      const r = Math.round((cy - h / 2 - m.top) / m.stride);
-      const snap = snapPlace(b, piece.cells, r, c);
+      const cf = (cx - w / 2 - m.left) / m.stride;
+      const rf = (cy - h / 2 - m.top) / m.stride;
+      const snap = snapPlace(b, piece.cells, Math.round(rf), Math.round(cf), rf, cf);
       if (snap) {
         const key = `${snap.r},${snap.c}`;
         if (key === previewKey.current) return;
@@ -378,8 +378,9 @@ export function PlayArea() {
       // Touch: hold the piece above the finger, its bottom edge clear of the fingertip.
       liftMax: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
       t0: performance.now(),
-      gx: e.pointerType === "mouse" ? 1 : 1.12,
-      gy: e.pointerType === "mouse" ? 1 : 1.3,
+      // Close to 1:1 so the piece stays right where the finger puts it.
+      gx: e.pointerType === "mouse" ? 1 : 1.0,
+      gy: e.pointerType === "mouse" ? 1 : 1.08,
       m,
       moved: false,
       slot: e.currentTarget.getBoundingClientRect(),
