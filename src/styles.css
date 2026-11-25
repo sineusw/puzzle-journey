@@ -4467,3 +4467,12 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-winhook-rank { margin-left: auto; font-family: var(--font-display); font-size: 1.25rem; }
 .pj-winhook span:last-child { margin-left: auto; opacity: 1; }
 .pj-tray .pj-slot { height: 94px !important; min-height: 0 !important; }
+
+/* ---- Lucky Spin fits on one screen: wheel sized to the screen height, compact result, close button at the bottom */
+.pj-wheel-wrap { width: min(74vw, 300px, 38vh) !important; margin: 4px auto 2px !important; }
+.pj-spin-won { margin: 4px 0 6px !important; }
+.pj-spin-won b { font-size: 1.3rem; }
+.pj-spin-done { margin-top: 8px; min-height: 46px; font-weight: 900; }
+/* Mode cards sit above the floating background blocks */
+.pj-modes-row, .pj-hooks { position: relative; z-index: 3; }
+.pj-lobby-floaters { z-index: 0; } .pj-lobby-tiles, .pj-lobby-card, .pj-lobby-ranks, .pj-lobby-logo { position: relative; z-index: 3; }

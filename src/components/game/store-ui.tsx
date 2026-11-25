@@ -533,6 +533,7 @@ function QuestRow(p: { title: string; blurb: string; value: number; target: numb
 /* ------------------------------------------------------------ lucky spin */
 
 export function SpinSheet() {
+  const setPanel = useGame((st) => st.setPanel);
   const rawLive = useGame((s) => s.profile.live);
   const live = useMemo(() => normalizeLive(rawLive), [rawLive]);
   const spinWheel = useGame((s) => s.spinWheel);
@@ -600,6 +601,11 @@ export function SpinSheet() {
           </span>
         </button>
       )}
+      {won !== null && !spinning ? (
+        <button type="button" className="pj-btn pj-btn-ghost w-full pj-spin-done" onClick={() => setPanel(null)}>
+          Collect &amp; close
+        </button>
+      ) : null}
     </ShopSheetFrame>
   );
 }
