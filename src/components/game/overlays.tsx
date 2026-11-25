@@ -39,8 +39,7 @@ import { GameIcon, type IconName } from "./icons";
 import * as audio from "@/lib/game/audio";
 import { cheer } from "@/lib/game/voice";
 import { PiggySheet, RaceSheet, WinHooks } from "./hooks-ui";
-import { nameFor, useBoard } from "@/lib/game/leaderboard";
-import { categories, dayKey, iqLabel, rank } from "@/lib/game/stats";
+import { iqLabel } from "@/lib/game/stats";
 import { OverlayFace, SpecialFace } from "./tile-art";
 import { ShapeGallery, SPECIAL_WORDS, SpecialDemo } from "./explainers";
 import { ChallengeScreen, RanksScreen } from "./competition";
@@ -830,17 +829,17 @@ function WonSheet() {
             Next: {UNLOCKS[nextNew].name}
           </p>
         ) : null}
-        {profile.levelStreak >= 2 ? (
+        {profile.levelStreak >= 3 ? (
           <div className="pj-streak-warn mt-2">
             🔥 {profile.levelStreak} wins in a row! Next level gives you a free{" "}
-            {profile.levelStreak >= 6
+            {profile.levelStreak >= 10
               ? "arrow, bomb and golden block"
-              : profile.levelStreak >= 4
+              : profile.levelStreak >= 6
                 ? "arrow and bomb"
                 : "arrow block"}
             .
           </div>
-        ) : profile.levelStreak === 1 ? (
+        ) : profile.levelStreak === 2 ? (
           <div className="pj-streak-warn mt-2">🔥 Win the next level for a free arrow block!</div>
         ) : null}
         <WinHooks />
@@ -977,7 +976,7 @@ export function openPlayMode(mode: PlayMode): void {
 
 function AdventureScreen() {
   const current = useGame((s) => s.match.mode);
-  const [mode, setMode] = useState<PlayMode>(() => {
+  const [mode] = useState<PlayMode>(() => {
     const want = pendingMode;
     pendingMode = null;
     void current;
@@ -992,7 +991,7 @@ function AdventureScreen() {
     {
       id: "classic",
       label: "Classic",
-      blurb: "Thirty levels with plain blocks only. No specials, no visitors.",
+      blurb: "500 levels with plain blocks only. No specials, no visitors.",
     },
     { id: "sandbox", label: "Sandbox", blurb: "Endless plain blocks. Chase your highest score." },
   ];

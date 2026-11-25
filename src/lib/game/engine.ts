@@ -1545,10 +1545,10 @@ export function placePiece(
     // The star is rare: only a perfect clear or a x10 combo (x20, x30...) makes one.
     const comboMilestone = next.combo >= 10 && next.combo % 10 === 0 && next.combo !== match.combo;
     if (((perfect && lines >= 2) || comboMilestone) && f.stars) earned.push("star");
-    // Power blocks are rarer now: 3 lines for an arrow, 4 for a bomb, 5+ for the golden blast.
-    if (lines >= 5 && f.specials.includes("blast")) earned.push("blast");
-    else if (lines >= 4 && f.specials.includes("bomb")) earned.push("bomb");
-    else if (lines >= 3 && hasArrow) {
+    // Power blocks are rare: 4 lines at once for an arrow, 5 for a bomb, 6+ for the golden blast.
+    if (lines >= 6 && f.specials.includes("blast")) earned.push("blast");
+    else if (lines >= 5 && f.specials.includes("bomb")) earned.push("bomb");
+    else if (lines >= 4 && hasArrow) {
       const dir: BlockSpecial = clear.rows.length >= clear.cols.length ? "rocketH" : "rocketV";
       earned.push(f.specials.includes(dir) ? dir : dir === "rocketH" ? "rocketV" : "rocketH");
     }

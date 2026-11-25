@@ -4466,3 +4466,4 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-winhook.is-spin { justify-content: flex-start; }
 .pj-winhook-rank { margin-left: auto; font-family: var(--font-display); font-size: 1.25rem; }
 .pj-winhook span:last-child { margin-left: auto; opacity: 1; }
+.pj-tray .pj-slot { height: 94px !important; min-height: 0 !important; }

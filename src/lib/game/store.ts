@@ -472,7 +472,7 @@ export const useGame = create<GameStore>((set, get) => ({
     let profile = settleProfileChallenges(loaded);
     // Welcome back: 4+ hours away earns a free bomb booster.
     const away = profile.lastActive > 0 ? Date.now() - profile.lastActive : 0;
-    if (away >= 4 * 3600_000 && profile.tutorialDone) {
+    if (away >= 12 * 3600_000 && profile.tutorialDone) {
       profile = { ...profile, powerups: { ...profile.powerups, bomb: profile.powerups.bomb + 1 } };
       window.setTimeout(() => notify({ icon: "🎁", title: "Welcome back!", sub: "Here's a free bomb booster.", tone: "win" }), 1200);
     }
@@ -1800,20 +1800,20 @@ function announceEarned(earned: BonusId[], perfect: boolean): void {
  * tray. 2 wins: an arrow. 4: + a bomb. 6+: + a board-wipe block.
  */
 export function withStreakBoosters(match: Match, streak: number): Match {
-  if (streak < 2) return match;
+  if (streak < 3) return match;
   // Held until the board has blocks for them to hit (see POWER_MIN_FILL).
   // Only power blocks this island has already unlocked.
   const sp = match.features.specials;
   const bonus: NonNullable<Match["bonus"]> = [];
   if (sp.includes("rocketH")) bonus.push(streak % 2 ? "rocketV" : "rocketH");
-  if (streak >= 4 && sp.includes("bomb")) bonus.push("bomb");
-  if (streak >= 6 && sp.includes("blast")) bonus.push("blast");
+  if (streak >= 6 && sp.includes("bomb")) bonus.push("bomb");
+  if (streak >= 10 && sp.includes("blast")) bonus.push("blast");
   return bonus.length ? { ...match, bonus } : match;
 }
 
 function streakBanner(set: (partial: Partial<GameStore>) => void, streak: number): void {
-  if (streak < 2) return;
-  const gift = streak >= 6 ? "arrow, bomb and golden block" : streak >= 4 ? "arrow and bomb" : "arrow block";
+  if (streak < 3) return;
+  const gift = streak >= 10 ? "arrow, bomb and golden block" : streak >= 6 ? "arrow and bomb" : "arrow block";
   set({ runBanner: { id: Date.now(), title: `🔥 ${streak} wins in a row!`, sub: `Free ${gift} once the board fills up. Don't lose your streak!` } });
 }
 

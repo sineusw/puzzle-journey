@@ -8,27 +8,6 @@ import { playClip, preloadClips } from "./audio";
 
 let enabled = true;
 let lastAt = 0;
-let chosen: SpeechSynthesisVoice | null | undefined;
-
-const PREFERRED = ["Samantha", "Ava", "Allison", "Google US English", "Microsoft Aria", "Karen", "Moira", "Tessa"];
-
-function available(): SpeechSynthesis | null {
-  return typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
-}
-
-function pickVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
-  if (chosen !== undefined) return chosen;
-  const voices = synth.getVoices();
-  if (!voices.length) return null;
-  const english = voices.filter((v) => v.lang?.toLowerCase().startsWith("en"));
-  chosen =
-    PREFERRED.map((n) => english.find((v) => v.name.includes(n))).find(Boolean) ??
-    english.find((v) => v.lang.toLowerCase() === "en-us") ??
-    english[0] ??
-    null;
-  return chosen;
-}
-
 export function setVoiceEnabled(on: boolean): void {
   enabled = on;
 }

@@ -96,7 +96,7 @@ export function LobbyScreen() {
         </button>
         <ChestBar />
         <div className="pj-lobby-chips">
-          {profile.levelStreak >= 1 ? <span>🔥 {profile.levelStreak} win streak</span> : <span>🔥 Win 2 in a row for a free booster</span>}
+          {profile.levelStreak >= 1 ? <span>🔥 {profile.levelStreak} win streak</span> : <span>🔥 Win 3 in a row for a free power block</span>}
           {profile.daily.streak >= 1 ? <span>📅 Day {profile.daily.streak}</span> : null}
         </div>
       </div>
@@ -218,7 +218,7 @@ export async function shareDaily(day: number, moves: number, stars: number, stre
 function ModesRow({ reached }: { reached: number }) {
   const modes: Array<{ id: PlayMode; icon: string; name: string; sub: string; at: number }> = [
     { id: "adventure", icon: "🏝️", name: "Adventure", sub: "Island map", at: 0 },
-    { id: "classic", icon: "🧩", name: "Classic", sub: "30 pure levels", at: FEATURE_AT.classic },
+    { id: "classic", icon: "🧩", name: "Classic", sub: "500 pure levels", at: FEATURE_AT.classic },
     { id: "sandbox", icon: "♾️", name: "Sandbox", sub: "Endless", at: FEATURE_AT.sandbox },
   ];
   return (

@@ -200,12 +200,12 @@ export function normalizeLive(raw: Partial<Live> | undefined, now = new Date()):
 
 export const DAILY_REWARDS: Grant[] = [
   { coins: 150 },
-  { powers: { hammer: 1, refresh: 1 } },
+  { powers: { hammer: 1 } },
   { gems: 25 },
   { coins: 400 },
-  { powers: { bomb: 2, freeze: 1 } },
+  { powers: { bomb: 1 } },
   { passes: 1, coins: 300 },
-  { coins: 1500, gems: 80, powers: { hammer: 2, refresh: 2, bomb: 2, freeze: 2 } },
+  { coins: 1500, gems: 80, powers: { hammer: 1, bomb: 1 } },
 ];
 
 export function calendarReady(l: Live, now = new Date()): boolean {
@@ -250,10 +250,10 @@ export function currentEvent(now = new Date()): { def: EventDef; endsAt: number;
 
 export const EVENT_TIERS: Array<{ pts: number; grant: Grant }> = [
   { pts: 15, grant: { coins: 200 } },
-  { pts: 40, grant: { powers: { hammer: 2 } } },
+  { pts: 40, grant: { powers: { hammer: 1 } } },
   { pts: 80, grant: { gems: 30 } },
   { pts: 130, grant: { passes: 1 } },
-  { pts: 200, grant: { coins: 1000, gems: 60, powers: { bomb: 2, freeze: 2 } } },
+  { pts: 200, grant: { coins: 1000, gems: 60, powers: { bomb: 1 } } },
 ];
 
 /** Event points earned by one move. */
@@ -271,7 +271,7 @@ export type WeeklyDef = { id: string; title: string; blurb: string; target: numb
 export const WEEKLY: WeeklyDef[] = [
   { id: "lines", title: "Line Legend", blurb: "Clear 150 lines this week.", target: 150, grant: { coins: 800, gems: 40 } },
   { id: "wins", title: "Island Hopper", blurb: "Win 10 levels this week.", target: 10, grant: { coins: 600, passes: 1 } },
-  { id: "specials", title: "Demolition Crew", blurb: "Set off 25 bombs, arrows or star blocks.", target: 25, grant: { powers: { bomb: 3, hammer: 3 } } },
+  { id: "specials", title: "Demolition Crew", blurb: "Set off 25 bombs, arrows or star blocks.", target: 25, grant: { powers: { bomb: 1, hammer: 1 } } },
   { id: "combos", title: "Combo King", blurb: "Hit a x3 combo or better 15 times.", target: 15, grant: { gems: 60 } },
 ];
 
@@ -289,10 +289,10 @@ export const SPIN_EXTRA_PER_DAY = 2;
 
 export const SPIN_PRIZES: Array<{ grant: Grant; weight: number; label: string; color: string }> = [
   { grant: { coins: 100 }, weight: 24, label: "100", color: "#ffc93c" },
-  { grant: { powers: { hammer: 1 } }, weight: 15, label: "Hammer", color: "#ff6b8a" },
+  { grant: { powers: { hammer: 1 } }, weight: 7, label: "Hammer", color: "#ff6b8a" },
   { grant: { coins: 250 }, weight: 16, label: "250", color: "#5fd2ff" },
   { grant: { gems: 15 }, weight: 12, label: "15", color: "#c26bff" },
-  { grant: { powers: { bomb: 1 } }, weight: 12, label: "Bomb", color: "#6fe05a" },
+  { grant: { powers: { bomb: 1 } }, weight: 5, label: "Bomb", color: "#6fe05a" },
   { grant: { passes: 1 }, weight: 8, label: "Pass", color: "#ff9a3c" },
   { grant: { coins: 1000 }, weight: 7, label: "1,000", color: "#4f8bff" },
   { grant: { gems: 100 }, weight: 2, label: "JACKPOT", color: "#ff3c5f" },

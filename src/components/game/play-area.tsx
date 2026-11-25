@@ -581,22 +581,6 @@ const BoardGrid = memo(function BoardGrid({
 }) {
   const tintUrl = preview ? colorTextureUrl(preview.color) : null;
   const hide = useMemo(() => new Set(hidden), [hidden]);
-  // A row or column one block from full: its last gap glows so the player can see the clear.
-  const almost = useMemo(() => {
-    const out = new Set<string>();
-    const n = board.length;
-    for (let i = 0; i < n; i++) {
-      const rowGaps: number[] = [];
-      const colGaps: number[] = [];
-      for (let j = 0; j < n; j++) {
-        if (board[i]![j]!.t === "e") rowGaps.push(j);
-        if (board[j]![i]!.t === "e") colGaps.push(j);
-      }
-      if (rowGaps.length === 1) out.add(`${i}-${rowGaps[0]}`);
-      if (colGaps.length === 1) out.add(`${colGaps[0]}-${i}`);
-    }
-    return out;
-  }, [board]);
   return (
     <div ref={gridRef} className="pj-grid" data-testid="board" onClick={onClick}>
       {board.flatMap((row, r) =>
