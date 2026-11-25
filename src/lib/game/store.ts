@@ -1935,3 +1935,22 @@ function shuffleIds(ids: VisitorId[]): VisitorId[] {
 }
 
 if (typeof window !== "undefined" && import.meta.env.DEV) (window as unknown as { __game: typeof useGame }).__game = useGame;
+
+/*
+ * Safety net: once a round's result screen (win or out-of-moves) has been shown,
+ * closing anything opened from it (bonus spin, race, shop, an ad) brings the
+ * result screen back, so the player is never stranded on a finished board.
+ */
+if (typeof window !== "undefined") {
+  let resultRun = -1;
+  useGame.subscribe((s, prev) => {
+    if (s.panel === "won" || s.panel === "over") resultRun = s.runStats.startedAt;
+    if (s.panel !== null || prev.panel === null) return;
+    if (s.tab !== "home" || resultRun !== s.runStats.startedAt) return;
+    const want = s.match.won ? "won" : s.match.over ? "over" : null;
+    if (want) window.setTimeout(() => {
+      const now = useGame.getState();
+      if (now.panel === null && now.runStats.startedAt === resultRun && (now.match.won || now.match.over)) useGame.setState({ panel: want });
+    }, 250);
+  });
+}
