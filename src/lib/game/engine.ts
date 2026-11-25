@@ -1145,6 +1145,74 @@ function clutchPiece(board: Cell[][], rng: () => number, f: Features, occ: numbe
   return null;
 }
 
+/* ------------------------------------------------ "fits together" deals */
+
+/** Quick boolean copy of the board: true = something is in that cell. */
+function occGrid(board: Cell[][]): boolean[] {
+  const g: boolean[] = new Array(SIZE * SIZE);
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) g[r * SIZE + c] = !isEmpty(board[r]![c]!);
+  return g;
+}
+
+/** Best spot for one piece on a boolean board: most lines cleared, then snuggest fit. */
+function bestDrop(g: boolean[], cells: CellPos[]): { lines: number; snug: number; next: boolean[] } | null {
+  let best: { lines: number; snug: number; next: boolean[] } | null = null;
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      let ok = true;
+      for (const [dr, dc] of cells) {
+        const rr = r + dr, cc = c + dc;
+        if (rr < 0 || cc < 0 || rr >= SIZE || cc >= SIZE || g[rr * SIZE + cc]) { ok = false; break; }
+      }
+      if (!ok) continue;
+      const n = g.slice();
+      let snug = 0;
+      for (const [dr, dc] of cells) n[(r + dr) * SIZE + (c + dc)] = true;
+      for (const [dr, dc] of cells) {
+        const rr = r + dr, cc = c + dc;
+        for (const [ar, ac] of [[rr - 1, cc], [rr + 1, cc], [rr, cc - 1], [rr, cc + 1]] as const) {
+          if (ar < 0 || ac < 0 || ar >= SIZE || ac >= SIZE || g[ar * SIZE + ac]) snug++;
+        }
+      }
+      const rows: number[] = [], cols: number[] = [];
+      for (let k = 0; k < SIZE; k++) {
+        let fr = true, fc = true;
+        for (let j = 0; j < SIZE; j++) { if (!n[k * SIZE + j]) fr = false; if (!n[j * SIZE + k]) fc = false; }
+        if (fr) rows.push(k);
+        if (fc) cols.push(k);
+      }
+      for (const k of rows) for (let j = 0; j < SIZE; j++) n[k * SIZE + j] = false;
+      for (const k of cols) for (let j = 0; j < SIZE; j++) n[j * SIZE + k] = false;
+      const lines = rows.length + cols.length;
+      if (!best || lines > best.lines || (lines === best.lines && snug > best.snug)) best = { lines, snug, next: n };
+    }
+  }
+  return best;
+}
+
+const ORDERS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+
+/**
+ * How nicely a set of three plays on this board: the most lines the player can
+ * clear placing them in a good order, plus how snugly they slot in. -1 if the set can't all be placed.
+ */
+export function setPlayScore(board: Cell[][], pieces: Piece[]): number {
+  const g0 = occGrid(board);
+  let best = -1;
+  for (const order of ORDERS) {
+    let g = g0, lines = 0, snug = 0, ok = true;
+    for (const i of order) {
+      const d = bestDrop(g, pieces[i]!.cells);
+      if (!d) { ok = false; break; }
+      lines += d.lines;
+      snug += d.snug;
+      g = d.next;
+    }
+    if (ok) best = Math.max(best, lines * 40 + snug);
+  }
+  return best;
+}
+
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const f = match.features;
   const occ = occupancy(match.board);
@@ -1190,8 +1258,23 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const normal = !easy && !(match.easy ?? 0);
   // Semi-predictable: the set shown as "Up next" is what you get, as long as it
   // can still be played on the board you left. If it can't, you get a fair set instead.
-  const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
-  const pieces = (queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting())).map(depower);
+  // Block-Blast-style deal: try a bunch of fair sets and hand over one of the ones
+  // that slot together best on this exact board (often finishing lines), with a
+  // little randomness so it never feels scripted.
+  let pieces: Piece[];
+  if (normal) {
+    const cands: Array<{ set: Piece[]; score: number }> = [];
+    for (let i = 0; i < 18; i++) {
+      const set = makeFitting();
+      if (set[0]!.shape === set[1]!.shape && set[1]!.shape === set[2]!.shape) continue;
+      cands.push({ set, score: setPlayScore(match.board, set) });
+    }
+    cands.sort((a, b) => b.score - a.score);
+    const top = cands.slice(0, Math.max(1, Math.ceil(cands.length / 4)));
+    pieces = sprinkle(top[Math.floor(rng() * top.length)]?.set ?? makeFitting()).map(depower);
+  } else {
+    pieces = sprinkle(makeFitting()).map(depower);
+  }
   // Fair and fun: if nothing in the tray can finish a line, most of the time the
   // last piece becomes one that can (only if the set stays playable).
   if (normal && occ > 0.2 && !pieces.some((p) => clearsALine(match.board, p.cells)) && rng() < 0.75) {
@@ -1206,14 +1289,8 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
     match.bonus.slice(0, 3).forEach((b, i) => (pieces[i] = b === "star" ? starPiece(rng) : specialPiece(b)));
     match.bonus = match.bonus.length > 3 ? match.bonus.slice(3) : undefined;
   }
-  // Line up the following set: varied shapes, never three alike.
-  if (normal) {
-    let upNext = [make(), make(), make()];
-    for (let i = 0; i < 6 && new Set(upNext.map((p) => p.shape)).size < 2; i++) upNext = [make(), make(), make()];
-    match.next = sprinkle(upNext);
-  } else {
-    match.next = null;
-  }
+  // Sets are now picked for the board as it is when they're dealt, so there's no fixed "up next".
+  match.next = null;
   match.tray = pieces;
   if ((match.easy ?? 0) > 0) match.easy = match.easy! - 1;
 }

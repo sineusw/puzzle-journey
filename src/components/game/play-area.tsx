@@ -612,7 +612,7 @@ const BoardGrid = memo(function BoardGrid({
               target={targeting}
               guide={Boolean(guide?.has(key))}
               hidden={hide.has(key)}
-              almost={!preview && almost.has(key)}
+              almost={false}
             />
           );
         }),

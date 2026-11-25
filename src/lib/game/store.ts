@@ -503,6 +503,13 @@ export const useGame = create<GameStore>((set, get) => ({
     if (profile.challenges !== loaded.challenges) get().persist();
     // A ranked run that ended before its result came back: send it now.
     if (match.ranked && match.over && !match.ranked.submitted && !match.ranked.void) void submitRanked(get, set);
+    // A round saved after it already ended (won, or out of moves) would come back
+    // with a locked tray. Start the next playable round instead.
+    else if (profile.tutorialDone && (match.won || (match.over && !match.ranked))) {
+      if (match.won && match.mode === "adventure" && match.levelId) get().startAdventure(Math.min(match.levelId + 1, profile.adventure.unlocked));
+      else get().newGame();
+      set({ tab: "lobby" });
+    }
     // New (and returning) players play through the tutorial once; Skip is always there.
     if (!profile.tutorialDone) get().startTutorial("basics", true);
   },
@@ -1916,6 +1923,12 @@ function startVisit(
       tab: "home",
       panel: forced ? null : s.panel,
     });
+    // Never let a visit that fails to finish (animation hiccup) lock the board.
+    const evId = event.id;
+    window.setTimeout(() => {
+      const now = useGame.getState();
+      if (now.visitorBusy && now.visitorEvent?.id === evId) useGame.setState({ visitorBusy: false, visitorEvent: null, visitorHide: [] });
+    }, 9000);
     return true;
   }
   set({ visitorNextAt: s.match.moves + 3, toast: forced ? "No safe visit right now." : s.toast });

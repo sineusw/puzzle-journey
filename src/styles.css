@@ -4312,7 +4312,6 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-oom-tag img { width: 16px; height: 16px; }
 .pj-oom-results { margin-top: 10px; font-size: 0.8rem; font-weight: 800; color: rgb(244 238 227 / 0.6); text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .pj-oom, .pj-oom-emoji, .pj-oom-btn.is-video { animation: none; } }
-.pj-tray:not(.is-tutorial) { padding-top: 26px !important; }
 /* out of moves: jungle wood sign */
 .pj-sheet.pj-oom { position: relative; overflow: visible; border-radius: 26px; border: 4px solid #5a3415;
   background:
