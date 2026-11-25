@@ -165,15 +165,36 @@ export function WinHooks() {
     <div className="pj-winhooks">
       {live.earned.spins > 0 ? (
         <button type="button" className="pj-winhook is-spin" onClick={() => setPanel("spin")}>
-          🎡 <b>Bonus spin earned!</b> <span>Spin ›</span>
+          <span className="pj-winhook-ico">🎡</span>
+          <span className="pj-winhook-txt">
+            <b>Bonus spin earned!</b>
+            <small>Tap to spin the Lucky Wheel</small>
+          </span>
+          <span className="pj-winhook-rank">›</span>
         </button>
       ) : (
         <div className="pj-winhook is-soft">
-          🎡 {SPIN_EVERY - live.earned.wins} more win{SPIN_EVERY - live.earned.wins === 1 ? "" : "s"} to a bonus spin
+          <span className="pj-winhook-ico">🎡</span>
+          <span className="pj-winhook-txt">
+            <b>Bonus spin</b>
+            <small>
+              {SPIN_EVERY - live.earned.wins} more win{SPIN_EVERY - live.earned.wins === 1 ? "" : "s"}
+            </small>
+          </span>
+          <span className="pj-winhook-dots" aria-hidden="true">
+            {Array.from({ length: SPIN_EVERY }, (_, i) => (
+              <i key={i} className={i < live.earned.wins ? "is-on" : ""} />
+            ))}
+          </span>
         </div>
       )}
       <button type="button" className="pj-winhook is-race" onClick={() => setPanel("race")}>
-        🏁 Race: <b>#{rank}</b> of {rows.length} <span>›</span>
+        <span className="pj-winhook-ico">🏁</span>
+        <span className="pj-winhook-txt">
+          <b>Island Race</b>
+          <small>You're #{rank} of {rows.length}</small>
+        </span>
+        <span className="pj-winhook-rank">{rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : `#${rank}`}</span>
       </button>
     </div>
   );

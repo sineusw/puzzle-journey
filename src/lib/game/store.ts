@@ -728,8 +728,9 @@ export const useGame = create<GameStore>((set, get) => ({
       newBest = true;
     }
     // Explain each kind of special the first time it fires in a run.
+    // (Captions turned off: players found the pop-up text annoying.)
     let caption: string | null = null;
-    for (const f of clear?.fired ?? []) {
+    for (const f of [] as NonNullable<typeof clear>["fired"]) {
       const seen = run.explained ?? [];
       if (!seen.includes(f.sp)) {
         caption = SPECIAL_CAPTION[f.sp];

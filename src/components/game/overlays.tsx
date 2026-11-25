@@ -858,7 +858,7 @@ function WonSheet() {
                 setTab("lobby");
               }}
             >
-              🏠
+              🏠 Home
             </button>
           ) : null}
           <button

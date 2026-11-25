@@ -216,7 +216,7 @@ type Shape = {
 };
 
 const SHAPES: Shape[] = [
-  { id: "o1", cells: [[0, 0]], weight: 5 },
+  { id: "o1", cells: [[0, 0]], weight: 9 },
   { id: "i2", cells: [[0, 0], [0, 1]], weight: 11 },
   { id: "i3", cells: [[0, 0], [0, 1], [0, 2]], weight: 11 },
   { id: "i4", cells: [[0, 0], [0, 1], [0, 2], [0, 3]], weight: 8 },

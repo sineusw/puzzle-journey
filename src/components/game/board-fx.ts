@@ -550,6 +550,9 @@ export class BoardFxRunner {
 
   /** A colored glow around the edges of the whole screen. */
   private screenGlow(color: string): void {
+    // Screen-edge color flashes are off: the edges stay calm during play.
+    void color;
+    return;
     const el = document.createElement("div");
     el.className = "pj-screen-glow";
     el.style.setProperty("--glow", color);
