@@ -845,6 +845,22 @@ function WonSheet() {
         ) : null}
         <WinHooks />
         <div className="pj-won-actions">
+          {!match.daily ? (
+            <button
+              type="button"
+              className="pj-btn pj-btn-ghost pj-won-home"
+              aria-label="Home screen"
+              onClick={() => {
+                // Line up the next island so Play picks up right where they left off.
+                if (nextOpen && nextId) (match.mode === "classic" ? startClassic : startAdventure)(nextId);
+                else newGame();
+                useGame.setState({ panel: null });
+                setTab("lobby");
+              }}
+            >
+              🏠
+            </button>
+          ) : null}
           <button
             type="button"
             className="pj-btn pj-btn-ghost"

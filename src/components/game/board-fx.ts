@@ -345,11 +345,7 @@ export class BoardFxRunner {
     for (let i = 0; i < 10; i++) window.setTimeout(() => this.firework(gridBox.left + gridBox.width * Math.random(), gridBox.top + gridBox.height * (0.05 + Math.random() * 0.6)), 150 + i * 180);
     // The screen flashes through the rainbow.
     rainbow.forEach((col, i) => window.setTimeout(() => this.screenGlow(col), i * 260));
-    // The board frame pulses.
-    this.frame.animate(
-      [{ scale: "1" }, { scale: "1.06" }, { scale: "0.98" }, { scale: "1.03" }, { scale: "1" }],
-      { duration: 900, easing: "ease-out" },
-    );
+    // (No frame pulse: the board itself never changes size.)
   }
 
   private finale(bonus: number, gridBox: DOMRect, reduce: boolean): void {

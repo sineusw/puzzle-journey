@@ -2,7 +2,7 @@ import { UndoResetBar } from "./hud-sheets";
 import { IntroSplash } from "./intro";
 import { useEffect, useRef, useState } from "react";
 import { JungleAmbience } from "./ambient";
-import { Crown, Gamepad2, Home, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
+import { Crown, Home, Map as MapIcon, MoreHorizontal, Music, Trophy, Volume2, VolumeX } from "lucide-react";
 import { ADVENTURE, FEATURE_AT, goalLabel, starMoves, xpForLevel, type StarMoves } from "@/lib/game/content";
 import { bindAudioLifecycle } from "@/lib/game/audio";
 import { useGame } from "@/lib/game/store";
@@ -94,7 +94,7 @@ export function GameShell() {
           {(
             [
               ["lobby", "Home", Home],
-              ["adventure", "Play", Gamepad2],
+              ["adventure", "Map", MapIcon],
               ["challenges", "Challenges", Trophy],
               ["ranks", "Ranks", Crown],
               ["more", "More", MoreHorizontal],

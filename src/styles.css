@@ -4425,3 +4425,7 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-title-row .pj-logo img { height: clamp(58px, 9vh, 92px); }
 .pj-title-row .pj-rail { min-height: 30px; padding-top: 2px; padding-bottom: 2px; }
 .pj-title-row .pj-rails { gap: 4px; }
+/* The board edge stays calm: no orange combo glow, no red danger pulse. */
+.pj-frame::after, .pj-frame[data-combo]::after { display: none !important; }
+.pj-frame.is-danger { animation: none !important; box-shadow: 0 16px 26px rgba(0, 0, 0, 0.5) !important; }
+.pj-won-home { flex: 0 0 auto !important; min-width: 56px; font-size: 1.4rem; }

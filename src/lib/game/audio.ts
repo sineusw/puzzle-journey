@@ -105,8 +105,8 @@ export function unlockAudio(): void {
     const wake = () => {
       const bb = bus;
       if (!bb) return;
-      if (bb.ctx.state !== "running") void bb.ctx.resume();
-      if (wantMusic && unlocked && !musicSrc) startMusic();
+      if (bb.ctx.state !== "running") recoverAudio();
+      else if (wantMusic && unlocked && !musicSrc) startMusic();
     };
     window.addEventListener("pointerdown", wake, { passive: true });
     b.ctx.addEventListener("statechange", () => {
@@ -115,6 +115,46 @@ export function unlockAudio(): void {
   }
 }
 let gestureBound = false;
+
+/**
+ * Coming back to the app: wake the sound. iOS sometimes leaves the old audio
+ * engine dead after the app was in the background; if it hasn't come back
+ * within a moment, throw it away and build a fresh one (music restarts).
+ */
+let recovering = false;
+export function recoverAudio(): void {
+  if (!bus || recovering) {
+    unlockAudio();
+    return;
+  }
+  recovering = true;
+  void bus.ctx.resume().catch(() => {});
+  unlockAudio();
+  window.setTimeout(() => {
+    recovering = false;
+    const b = bus;
+    if (!b || b.ctx.state === "running") {
+      if (wantMusic && unlocked && !musicSrc) startMusic();
+      return;
+    }
+    try {
+      musicSrc?.stop();
+    } catch {
+      /* already stopped */
+    }
+    musicSrc = null;
+    musicBuf = null;
+    musicLoading = false;
+    clipCache.clear();
+    void b.ctx.close().catch(() => {});
+    bus = null;
+    const nb = ensure();
+    nb?.ctx.addEventListener("statechange", () => {
+      if (nb.ctx.state === "running" && wantMusic && unlocked && !musicSrc) startMusic();
+    });
+    unlockAudio();
+  }, 700);
+}
 
 /**
  * Called once when the app opens: start the music right away. The iPhone app
@@ -140,10 +180,12 @@ export function bootAudio(): void {
     if (b && b.ctx.state === "running") void b.ctx.suspend();
   };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") unlockAudio();
+    if (document.visibilityState === "visible") recoverAudio();
     else pause();
   });
   window.addEventListener("pagehide", pause);
+  window.addEventListener("pageshow", () => recoverAudio());
+  window.addEventListener("focus", () => recoverAudio());
   window.addEventListener("blur", () => {
     if (document.visibilityState === "hidden") pause();
   });
