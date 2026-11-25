@@ -610,7 +610,7 @@ export function SpinSheet() {
 export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
   const coins = useGame((s) => s.profile.coins);
   const passes = useGame((s) => s.profile.live.passes);
-  const used = useGame((s) => s.videoContinueRun === s.runStats.startedAt);
+  const used = false; // ad continues are unlimited
   const busy = useGame((s) => s.videoBusy);
   const coinUses = useGame((s) => (s.coinContinues.run === s.runStats.startedAt ? s.coinContinues.n : 0));
   const goal = useGame((s) => s.match.goal);
@@ -646,7 +646,7 @@ export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
           <Play className="size-6" fill="currentColor" />
           <span className="flex-1 text-left">
             <b>{used ? "Ad already used" : busy ? "Loading ad…" : "Watch an ad"}</b>
-            <small>{used ? "One free continue per run" : "Continue free + easier blocks"}</small>
+            <small>Continue free + easier blocks</small>
           </span>
           <span className="pj-oom-tag">FREE</span>
         </button>
@@ -687,7 +687,7 @@ export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
 export function ContinueOptions() {
   const passes = useGame((s) => s.profile.live.passes);
   const gems = useGame((s) => s.profile.gems);
-  const used = useGame((s) => s.videoContinueRun === s.runStats.startedAt);
+  const used = false; // ad continues are unlimited
   const busy = useGame((s) => s.videoBusy);
   const continueWith = useGame((s) => s.continueWith);
   const buyMoney = useGame((s) => s.buyMoney);

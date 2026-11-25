@@ -1389,7 +1389,7 @@ export const useGame = create<GameStore>((set, get) => ({
     let easy = 3;
     let extra = 1;
     if (how === "video") {
-      if (get().videoContinueRun === get().runStats.startedAt || get().videoBusy) return;
+      if (get().videoBusy) return; // ad continues are unlimited
       set({ videoBusy: true });
       const ok = await showRewardedVideo("continue");
       set({ videoBusy: false });
