@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { HooksRow } from "./hooks-ui";
+import { openPlayMode, type PlayMode } from "./overlays";
 import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
 import { dailyNumber } from "@/lib/game/engine";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
@@ -100,6 +101,7 @@ export function LobbyScreen() {
         </div>
       </div>
 
+      <ModesRow reached={reached} />
       {reached >= 3 ? <HooksRow /> : null}
 
       <div className="pj-lobby-tiles" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)`, ["--n" as string]: shown.length }}>
@@ -210,4 +212,36 @@ export async function shareDaily(day: number, moves: number, stars: number, stre
   } catch {
     // Share sheet closed.
   }
+}
+
+/** The three ways to play, always visible on the home screen (locked ones say when they open). */
+function ModesRow({ reached }: { reached: number }) {
+  const modes: Array<{ id: PlayMode; icon: string; name: string; sub: string; at: number }> = [
+    { id: "adventure", icon: "🏝️", name: "Adventure", sub: "Island map", at: 0 },
+    { id: "classic", icon: "🧩", name: "Classic", sub: "30 pure levels", at: FEATURE_AT.classic },
+    { id: "sandbox", icon: "♾️", name: "Sandbox", sub: "Endless", at: FEATURE_AT.sandbox },
+  ];
+  return (
+    <div className="pj-modes-row">
+      <div className="pj-modes-title">3 ways to play</div>
+      <div className="pj-modes-cards">
+        {modes.map((m) => {
+          const locked = reached < m.at;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              className={`pj-modecard is-${m.id}${locked ? " is-locked" : ""}`}
+              onClick={() => (locked ? undefined : openPlayMode(m.id))}
+              aria-disabled={locked}
+            >
+              <span className="pj-modecard-ico">{m.icon}</span>
+              <b>{m.name}</b>
+              <small>{locked ? `🔒 Island ${m.at}` : m.sub}</small>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

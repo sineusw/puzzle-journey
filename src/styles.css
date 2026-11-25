@@ -4429,3 +4429,20 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .pj-frame::after, .pj-frame[data-combo]::after { display: none !important; }
 .pj-frame.is-danger { animation: none !important; box-shadow: 0 16px 26px rgba(0, 0, 0, 0.5) !important; }
 .pj-won-home { flex: 0 0 auto !important; min-width: 56px; font-size: 1.4rem; }
+
+/* ------------------------------------- 3 ways to play */
+.pj-modes-row { width: 100%; margin-top: 10px; }
+.pj-modes-title { text-align: center; font-family: var(--font-display); font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: #ffe08a; margin-bottom: 6px; text-shadow: 0 2px 0 rgb(0 0 0 / 0.4); }
+.pj-modes-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pj-modecard { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px 8px; border-radius: 18px; color: #fff; border: 3px solid rgb(0 0 0 / 0.22);
+  box-shadow: 0 5px 0 rgb(0 0 0 / 0.3), inset 0 2px 0 rgb(255 255 255 / 0.35); text-shadow: 0 2px 0 rgb(0 0 0 / 0.25); transition: transform 90ms; }
+.pj-modecard:active { transform: translateY(3px); box-shadow: 0 2px 0 rgb(0 0 0 / 0.3); }
+.pj-modecard.is-adventure { background: linear-gradient(180deg, #5fd36a, #23913a); }
+.pj-modecard.is-classic { background: linear-gradient(180deg, #ffc65a, #e07d12); }
+.pj-modecard.is-sandbox { background: linear-gradient(180deg, #8f8cff, #4b45d8); }
+.pj-modecard.is-locked { filter: grayscale(0.7) brightness(0.75); }
+.pj-modecard-ico { font-size: 30px; line-height: 1; filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.3)); }
+.pj-modecard b { font-family: var(--font-display); font-size: 1rem; }
+.pj-modecard small { font-size: 0.7rem; font-weight: 800; opacity: 0.95; }
+.pj-mode-tab { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 0.95rem !important; min-height: 40px; }
+.pj-mode-tab-ico { font-size: 1.1rem; }

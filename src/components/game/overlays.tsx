@@ -967,13 +967,21 @@ function IntroSheet() {
   );
 }
 
-type PlayMode = "adventure" | "classic" | "sandbox";
+export type PlayMode = "adventure" | "classic" | "sandbox";
+let pendingMode: PlayMode | null = null;
+/** Open the Map tab straight onto one game mode (used by the home screen's mode cards). */
+export function openPlayMode(mode: PlayMode): void {
+  pendingMode = mode;
+  useGame.getState().setTab("adventure");
+}
 
 function AdventureScreen() {
   const current = useGame((s) => s.match.mode);
-  const [mode, setMode] = useState<PlayMode>(
-    current === "classic" || current === "sandbox" ? current : "adventure",
-  );
+  const [mode, setMode] = useState<PlayMode>(() => {
+    const want = pendingMode;
+    pendingMode = null;
+    return want ?? (current === "classic" || current === "sandbox" ? current : "adventure");
+  });
   const modes: Array<{ id: PlayMode; label: string; blurb: string }> = [
     {
       id: "adventure",
@@ -1006,6 +1014,7 @@ function AdventureScreen() {
               className={`pj-mode-tab ${mode === m.id ? "is-on" : ""}`}
               onClick={() => setMode(m.id)}
             >
+              <span className="pj-mode-tab-ico" aria-hidden="true">{m.id === "adventure" ? "🏝️" : m.id === "classic" ? "🧩" : "♾️"}</span>
               {m.label}
             </button>
           ))}

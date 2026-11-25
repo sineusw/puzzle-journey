@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock, Play, Star } from "lucide-react";
 import { ADVENTURE, UNLOCKS, WORLD_SIZE, goalLabel, worldOf } from "@/lib/game/content";
 import { useGame } from "@/lib/game/store";
@@ -86,6 +86,8 @@ export function AdventureMap() {
     if (sel === id && !isLocked) startAdventure(id);
     else setSel(id);
   };
+  const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
+  const swallowClick = useRef(false);
   const flip = (d: number) => {
     const next = Math.max(0, Math.min(worlds - 1, page + d));
     if (next !== page) {
@@ -99,7 +101,30 @@ export function AdventureMap() {
   };
 
   return (
-    <div className="pj-advmap-wrap">
+    <div
+      className="pj-advmap-wrap"
+      onPointerDown={(e) => (swipe.current = { x: e.clientX, y: e.clientY, t: Date.now() })}
+      onPointerUp={(e) => {
+        const st = swipe.current;
+        swipe.current = null;
+        if (!st) return;
+        const dx = e.clientX - st.x;
+        const dy = e.clientY - st.y;
+        // A quick sideways swipe flips to the next / previous world.
+        if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3 && Date.now() - st.t < 700) {
+          swallowClick.current = true;
+          window.setTimeout(() => (swallowClick.current = false), 50);
+          flip(dx < 0 ? 1 : -1);
+        }
+      }}
+      onClickCapture={(e) => {
+        if (swallowClick.current) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      style={{ touchAction: "pan-y" }}
+    >
       <div className="pj-advmap-head is-paged" style={{ ["--c1" as string]: c1, ["--c2" as string]: c2 }}>
         <button type="button" className="pj-world-arrow" onClick={() => flip(-1)} disabled={page === 0} aria-label="Previous world">‹</button>
         <div className="pj-world-title">
