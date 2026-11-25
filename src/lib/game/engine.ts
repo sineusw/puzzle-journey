@@ -242,6 +242,9 @@ const SHAPES: Shape[] = [
   },
   { id: "l3", cells: [[0, 0], [1, 0], [1, 1]], weight: 11 },
   { id: "l4", cells: [[0, 0], [1, 0], [2, 0], [2, 1]], weight: 8 },
+  // 4-block Z / S (turned, they also make the upright "N" shapes).
+  { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
+  { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
   { id: "j4", cells: [[0, 1], [1, 1], [2, 0], [2, 1]], weight: 8 },
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
@@ -1249,7 +1252,7 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   // Power blocks are earned, never dealt at random; only stone obstacles ride in on pieces.
   const sprinkle = (pieces: Piece[]): Piece[] => {
     const out = pieces.map(depower);
-    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.3) {
+    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.12) {
       const i = Math.floor(rng() * out.length);
       out[i] = { ...out[i]!, special: "stone", specialAt: 0 };
     }
@@ -1264,13 +1267,14 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   let pieces: Piece[];
   if (normal) {
     const cands: Array<{ set: Piece[]; score: number }> = [];
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 26; i++) {
       const set = makeFitting();
       if (set[0]!.shape === set[1]!.shape && set[1]!.shape === set[2]!.shape) continue;
       cands.push({ set, score: setPlayScore(match.board, set) });
     }
     cands.sort((a, b) => b.score - a.score);
-    const top = cands.slice(0, Math.max(1, Math.ceil(cands.length / 4)));
+    // Hand over one of the top three: always a set that slots in easily.
+    const top = cands.slice(0, Math.min(3, cands.length));
     pieces = sprinkle(top[Math.floor(rng() * top.length)]?.set ?? makeFitting()).map(depower);
   } else {
     pieces = sprinkle(makeFitting()).map(depower);
@@ -1536,9 +1540,10 @@ export function placePiece(
     // The star is rare: only a perfect clear or a x10 combo (x20, x30...) makes one.
     const comboMilestone = next.combo >= 10 && next.combo % 10 === 0 && next.combo !== match.combo;
     if (((perfect && lines >= 2) || comboMilestone) && f.stars) earned.push("star");
-    if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
-    else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");
-    else if (lines >= 2 && hasArrow) {
+    // Power blocks are rarer now: 3 lines for an arrow, 4 for a bomb, 5+ for the golden blast.
+    if (lines >= 5 && f.specials.includes("blast")) earned.push("blast");
+    else if (lines >= 4 && f.specials.includes("bomb")) earned.push("bomb");
+    else if (lines >= 3 && hasArrow) {
       const dir: BlockSpecial = clear.rows.length >= clear.cols.length ? "rocketH" : "rocketV";
       earned.push(f.specials.includes(dir) ? dir : dir === "rocketH" ? "rocketV" : "rocketH");
     }
