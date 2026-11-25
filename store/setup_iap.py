@@ -59,7 +59,11 @@ for P in PRODUCTS:
         api('POST','/v1/inAppPurchaseAvailabilities',json={'data':{'type':'inAppPurchaseAvailabilities','attributes':{'availableInNewTerritories':True},'relationships':{'inAppPurchase':{'data':{'type':'inAppPurchases','id':iid}},'availableTerritories':{'data':[{'type':'territories','id':t} for t in terr]}}}})
     # review screenshot
     rs=api('GET',f'/v2/inAppPurchases/{iid}/appStoreReviewScreenshot')
-    if rs.status_code!=200 or not rs.json().get('data'):
+    rd=rs.json().get('data') if rs.status_code==200 else None
+    if rd:
+        stt=((rd.get('attributes') or {}).get('assetDeliveryState') or {}).get('state');print('shot state',stt)
+        if stt!='COMPLETE':api('DELETE',f"/v1/inAppPurchaseAppStoreReviewScreenshots/{rd['id']}");rd=None
+    if not rd:
         r=api('POST','/v1/inAppPurchaseAppStoreReviewScreenshots',json={'data':{'type':'inAppPurchaseAppStoreReviewScreenshots','attributes':{'fileName':'iap-review.png','fileSize':len(shotb)},'relationships':{'inAppPurchaseV2':{'data':{'type':'inAppPurchases','id':iid}}}}})
         if r.status_code<300:
             d=r.json()['data'];sid=d['id']
