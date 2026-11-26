@@ -108,6 +108,15 @@ def ipadshots():
         for op in r['attributes']['uploadOperations']:
             requests.request(op['method'],op['url'],headers={h['name']:h['value'] for h in op['requestHeaders']},data=b[op['offset']:op['offset']+op['length']])
         x=api('PATCH',f"/v1/appScreenshots/{r['id']}",json={'data':{'type':'appScreenshots','id':r['id'],'attributes':{'uploaded':True,'sourceFileChecksum':hashlib.md5(b).hexdigest()}}});print('ipad shot',f,x.status_code)
+def submitiaps():
+    # queue every unsubmitted in-app purchase so it is reviewed together with the app version
+    url=f'/v1/apps/{APP}/inAppPurchasesV2?limit=200'
+    for i in g(url)['data']:
+        st=i['attributes'].get('state');nm=i['attributes'].get('name')
+        if st not in('READY_TO_SUBMIT','PREPARE_FOR_SUBMISSION','MISSING_METADATA','DEVELOPER_ACTION_NEEDED','REJECTED'):print('skip',nm,st);continue
+        r=api('POST','/v1/inAppPurchaseSubmissions',json={'data':{'type':'inAppPurchaseSubmissions','relationships':{'inAppPurchaseV2':{'data':{'type':'inAppPurchases','id':i['id']}}}}})
+        print('iap',nm,st,r.status_code,'' if r.status_code<300 else r.text[:300])
+if MODE=='submitiaps':submitiaps()
 if MODE=='ipadshots':ipadshots()
 if MODE in('metadata','submit'):metadata()
 app=g(f'/v1/apps/{APP}')['data']['attributes'];print('APP',json.dumps(app)[:600])
