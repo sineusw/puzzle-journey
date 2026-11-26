@@ -4476,3 +4476,27 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 /* Mode cards sit above the floating background blocks */
 .pj-modes-row, .pj-hooks { position: relative; z-index: 3; }
 .pj-lobby-floaters { z-index: 0; } .pj-lobby-tiles, .pj-lobby-card, .pj-lobby-ranks, .pj-lobby-logo { position: relative; z-index: 3; }
+
+/* ---- home screen fits one phone screen: every block scales with the screen height, nothing hides under the nav */
+.pj-lobby { justify-content: space-evenly; gap: clamp(4px, 1.1dvh, 10px); padding: 2px 4px 4px; overflow: hidden; }
+.pj-lobby > * { flex-shrink: 0; width: min(100%, 380px); }
+.pj-lobby > .pj-lobby-floaters { width: auto; }
+.pj-lobby-logo span { font-size: clamp(30px, 6.4dvh, 60px); }
+.pj-lobby-card { padding: clamp(8px, 1.4dvh, 14px) 14px clamp(10px, 1.6dvh, 16px); }
+.pj-lobby-island { font-size: clamp(1.05rem, 2.6dvh, 1.35rem); }
+.pj-lobby-play { height: clamp(48px, 7.2dvh, 64px); margin-top: clamp(6px, 1.2dvh, 12px); font-size: clamp(1.5rem, 3.6dvh, 2rem); }
+.pj-lobby-chips { margin-top: clamp(4px, 0.9dvh, 10px); }
+.pj-modes-row, .pj-hooks { margin: 0; }
+.pj-modecard { padding: clamp(5px, 0.9dvh, 9px) 4px clamp(5px, 0.8dvh, 8px); }
+.pj-modecard-ico { font-size: clamp(22px, 3.4dvh, 30px); }
+.pj-hook { padding: clamp(5px, 0.9dvh, 8px) 4px clamp(5px, 0.8dvh, 7px); }
+.pj-hook-ico { font-size: clamp(20px, 3.2dvh, 28px); }
+.pj-lobby-tile { padding: clamp(5px, 0.8dvh, 8px) 2px clamp(4px, 0.6dvh, 6px); }
+.pj-lobby-tile-ico { width: clamp(26px, 3.8dvh, 34px); height: clamp(26px, 3.8dvh, 34px); }
+.pj-lobby-tile-ico > * { width: 100%; height: 100%; }
+.pj-lobby-tiles { max-width: min(380px, calc(var(--n, 5) * 84px)); }
+/* short phones (iPhone SE/mini): drop the secondary sub-lines and the streak chip */
+@media (max-height: 760px) {
+  .pj-modecard small, .pj-lobby-chips { display: none; }
+  .pj-chest { margin-top: 4px; }
+}

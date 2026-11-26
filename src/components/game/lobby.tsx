@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { HooksRow } from "./hooks-ui";
 import { openPlayMode, type PlayMode } from "./overlays";
-import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
+import { Lock, Palette, Play, Star } from "lucide-react";
 import { dailyNumber } from "@/lib/game/engine";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
 import { normalizeLive } from "@/lib/game/liveops";
 import { CHEST_SIZE, useGame } from "@/lib/game/store";
-import type { BoardRow } from "@/lib/game/ranked-service";
 import { GameIcon } from "./icons";
 
 const FLOATERS = ["#ff5d73", "#ffd23f", "#3ddc97", "#4cc9f0", "#b388ff", "#ff9f43"];
@@ -20,19 +19,10 @@ export function LobbyScreen() {
   const setPanel = useGame((s) => s.setPanel);
   const startDaily = useGame((s) => s.startDaily);
   const [now, setNow] = useState(() => Date.now());
-  const [top, setTop] = useState<BoardRow[] | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
-    let live = true;
-    import("@/lib/game/ranked-api")
-      .then(({ rankedBoard }) => rankedBoard())
-      .then((r) => live && setTop(r.available ? r.rows.slice(0, 3) : []))
-      .catch(() => live && setTop([]));
-    return () => {
-      live = false;
-      window.clearInterval(id);
-    };
+    return () => window.clearInterval(id);
   }, []);
 
   const unlocked = profile.adventure.unlocked;
@@ -64,8 +54,10 @@ export function LobbyScreen() {
   const nextLocked = tiles
     .filter((t) => t.f !== null && reached < FEATURE_AT[t.f])
     .sort((a, b) => FEATURE_AT[a.f!] - FEATURE_AT[b.f!])[0];
-  const shown = nextLocked ? [...open, nextLocked] : open;
-  const showBoard = reached >= 4;
+  // Spin lives in the big hooks row and Challenges in the bottom nav once unlocked: don't show them twice.
+  const dupes = new Set<string>([...(reached >= 3 ? ["Spin"] : []), ...(reached >= FEATURE_AT.challenges ? ["Challenges"] : [])]);
+  const visible = open.filter((t) => !dupes.has(t.label));
+  const shown = nextLocked ? [...visible, nextLocked] : visible;
 
   return (
     <div className="pj-lobby" data-testid="lobby">
@@ -122,26 +114,6 @@ export function LobbyScreen() {
         })}
       </div>
 
-      {showBoard ? <button type="button" className="pj-lobby-ranks" onClick={() => setTab("ranks")}>
-        <div className="pj-lobby-ranks-head">
-          <Trophy className="size-5" />
-          <b>Leaderboard</b>
-          <span>See all ›</span>
-        </div>
-        {top && top.length ? (
-          <ol>
-            {top.map((r) => (
-              <li key={r.rank} className={r.me ? "is-me" : ""}>
-                <span className={`pj-lobby-medal m${r.rank}`}>{r.rank === 1 ? <Crown className="size-4" /> : r.rank}</span>
-                <span className="pj-lobby-name">{r.name}</span>
-                <strong className="tabular-nums">{r.score.toLocaleString("en-US")}</strong>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>Your best score: <b className="tabular-nums">{profile.highScore.toLocaleString("en-US")}</b> · Play a ranked run to get on the board</p>
-        )}
-      </button> : null}
     </div>
   );
 }
@@ -223,7 +195,6 @@ function ModesRow({ reached }: { reached: number }) {
   ];
   return (
     <div className="pj-modes-row">
-      <div className="pj-modes-title">3 ways to play</div>
       <div className="pj-modes-cards">
         {modes.map((m) => {
           const locked = reached < m.at;
