@@ -3,14 +3,16 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { useEffect } from "react";
 import { isNative, patchFetchForNative } from "@/lib/game/native";
+import { inject } from "@vercel/analytics";
 import appCss from "../styles.css?url";
 
 /** Google H5 Games Ads (AdSense for games). Off until VITE_ADSENSE_CLIENT (ca-pub-...) is set. */
 function H5Ads() {
   useEffect(() => {
     patchFetchForNative();
-    // Web ads are for the website only; the iPhone app has none in v1.
+    // Web ads and analytics are for the website only; the iPhone app has neither in v1.
     if (isNative()) return;
+    inject({ mode: import.meta.env.PROD ? "production" : "development" });
     const client = import.meta.env.VITE_ADSENSE_CLIENT as string | undefined;
     if (!client || document.getElementById("h5ads")) return;
     const s = document.createElement("script");
