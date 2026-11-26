@@ -92,6 +92,23 @@ def metadata():
     bd=g(f'/v1/builds?filter[app]={APP}&filter[processingState]=VALID&sort=-uploadedDate&limit=1')['data'][0]
     if bd['attributes'].get('usesNonExemptEncryption') is None:api('PATCH',f"/v1/builds/{bd['id']}",json={'data':{'type':'builds','id':bd['id'],'attributes':{'usesNonExemptEncryption':False}}})
     print('attach build',bd['attributes']['version'],api('PATCH',f'/v1/appStoreVersions/{vid}/relationships/build',json={'data':{'type':'builds','id':bd['id']}}).status_code)
+def ipadshots():
+    # 13-inch iPad screenshots only: leaves notes, iPhone shots and build untouched
+    v=[x for x in g(f'/v1/apps/{APP}/appStoreVersions?limit=10')['data'] if x['attributes']['appStoreState'] in('PREPARE_FOR_SUBMISSION','DEVELOPER_REJECTED','REJECTED')][0]
+    loc=g(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")['data'][0]
+    T='APP_IPAD_PRO_3GEN_129'
+    sets=g(f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets")['data'];st=[s for s in sets if s['attributes']['screenshotDisplayType']==T]
+    if st:
+        sid=st[0]['id']
+        for old in g(f'/v1/appScreenshotSets/{sid}/appScreenshots')['data']:api('DELETE',f"/v1/appScreenshots/{old['id']}")
+    else:sid=api('POST','/v1/appScreenshotSets',json={'data':{'type':'appScreenshotSets','attributes':{'screenshotDisplayType':T},'relationships':{'appStoreVersionLocalization':{'data':{'type':'appStoreVersionLocalizations','id':loc['id']}}}}}).json()['data']['id']
+    for f in sorted(glob.glob('store/shots-ipad/ipad_*.png')):
+        b=open(f,'rb').read()
+        r=api('POST','/v1/appScreenshots',json={'data':{'type':'appScreenshots','attributes':{'fileName':os.path.basename(f),'fileSize':len(b)},'relationships':{'appScreenshotSet':{'data':{'type':'appScreenshotSets','id':sid}}}}}).json()['data']
+        for op in r['attributes']['uploadOperations']:
+            requests.request(op['method'],op['url'],headers={h['name']:h['value'] for h in op['requestHeaders']},data=b[op['offset']:op['offset']+op['length']])
+        x=api('PATCH',f"/v1/appScreenshots/{r['id']}",json={'data':{'type':'appScreenshots','id':r['id'],'attributes':{'uploaded':True,'sourceFileChecksum':hashlib.md5(b).hexdigest()}}});print('ipad shot',f,x.status_code)
+if MODE=='ipadshots':ipadshots()
 if MODE in('metadata','submit'):metadata()
 app=g(f'/v1/apps/{APP}')['data']['attributes'];print('APP',json.dumps(app)[:600])
 for v in g(f'/v1/apps/{APP}/appStoreVersions?limit=10')['data']:
