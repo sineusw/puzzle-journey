@@ -113,7 +113,8 @@ def submitiaps():
     url=f'/v1/apps/{APP}/inAppPurchasesV2?limit=200'
     for i in g(url)['data']:
         st=i['attributes'].get('state');nm=i['attributes'].get('name')
-        if st not in('READY_TO_SUBMIT','PREPARE_FOR_SUBMISSION','MISSING_METADATA','DEVELOPER_ACTION_NEEDED','REJECTED'):print('skip',nm,st);continue
+        if st not in('READY_TO_SUBMIT','MISSING_METADATA','DEVELOPER_ACTION_NEEDED','REJECTED'):print('skip',nm,st);continue
+        time.sleep(3)
         r=api('POST','/v1/inAppPurchaseSubmissions',json={'data':{'type':'inAppPurchaseSubmissions','relationships':{'inAppPurchaseV2':{'data':{'type':'inAppPurchases','id':i['id']}}}}})
         print('iap',nm,st,r.status_code,'' if r.status_code<300 else r.text[:300])
 if MODE=='submitiaps':submitiaps()
