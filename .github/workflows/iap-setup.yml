@@ -1,0 +1,22 @@
+name: IAP setup
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-polish]
+    paths: ['store/setup_iap.py','.github/workflows/iap-setup.yml']
+jobs:
+  iap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install pyjwt cryptography requests
+      - name: Create in-app purchases
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          if printf '%s' "$ASC_PRIVATE_KEY" | grep -q "BEGIN PRIVATE KEY"; then printf '%s\n' "$ASC_PRIVATE_KEY" > key.p8; else printf '%s' "$ASC_PRIVATE_KEY" | base64 --decode > key.p8; fi
+          ASC_KEY_PATH=key.p8 python store/setup_iap.py

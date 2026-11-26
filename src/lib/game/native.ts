@@ -71,3 +71,51 @@ export function haptic(style: "LIGHT" | "MEDIUM" | "HEAVY" = "LIGHT"): void {
   const H = cap()?.Plugins?.Haptics;
   void H?.impact?.({ style }).catch(() => {});
 }
+
+/* ---------------------------------------------------- reminder notifications */
+
+export type Reminder = { id: number; title: string; body: string; at: Date };
+
+function notes() {
+  return isNative() ? cap()?.Plugins?.LocalNotifications : undefined;
+}
+
+/** Ask once (after the player's first win, never on launch) to send reminders. */
+export async function askForReminders(): Promise<void> {
+  const n = notes();
+  if (!n) return;
+  try {
+    const cur = (await n.checkPermissions?.()) as { display?: string } | undefined;
+    if (cur?.display === "prompt" || cur?.display === "prompt-with-rationale") await n.requestPermissions?.();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Replace any pending reminders with these (called when the app goes to the background). */
+export async function scheduleReminders(list: Reminder[]): Promise<void> {
+  const n = notes();
+  if (!n) return;
+  try {
+    const cur = (await n.checkPermissions?.()) as { display?: string } | undefined;
+    if (cur?.display !== "granted") return;
+    const pending = (await n.getPending?.()) as { notifications?: Array<{ id: number }> } | undefined;
+    if (pending?.notifications?.length) await n.cancel?.({ notifications: pending.notifications.map((x) => ({ id: x.id })) });
+    const future = list.filter((r) => r.at.getTime() > Date.now() + 60_000);
+    if (future.length) await n.schedule?.({ notifications: future.map((r) => ({ id: r.id, title: r.title, body: r.body, schedule: { at: r.at, allowWhileIdle: true } })) });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Back in the app: clear what's pending (it'll be rescheduled next time they leave). */
+export async function clearReminders(): Promise<void> {
+  const n = notes();
+  if (!n) return;
+  try {
+    const pending = (await n.getPending?.()) as { notifications?: Array<{ id: number }> } | undefined;
+    if (pending?.notifications?.length) await n.cancel?.({ notifications: pending.notifications.map((x) => ({ id: x.id })) });
+  } catch {
+    /* ignore */
+  }
+}

@@ -5,6 +5,9 @@ import {
   praiseFor,
   continueMatch,
   hammerCell,
+  laserCell,
+  crossCell,
+  paintCell,
   newGoalMatch,
   newLevelMatch,
   newSandboxMatch,
@@ -26,7 +29,7 @@ import {
   ADVENTURE,
   CHALLENGES,
   CLASSIC,
-  CONTINUE_COST,
+  CONTINUE_COST, coinContinueCost,
   QUESTS,
   SKINS,
   adventureFeatures,
@@ -45,7 +48,7 @@ import {
   saveProfile,
   type Profile,
 } from "./save";
-import { isNative, nativeBuy, nativeRestore } from "./native";
+import { askForReminders, clearReminders, isNative, nativeBuy, nativeRestore, scheduleReminders, type Reminder } from "./native";
 import * as audio from "./audio";
 import { primeVoice, setVoiceEnabled, warmVoices } from "./voice";
 import { addRun, awardsFor, emptyRun, percentileOf, puzzleIq, type Award, type RunStats } from "./stats.ts";
@@ -61,6 +64,11 @@ import {
   QUEST_CHEST,
   SHOP,
   SPIN_EXTRA_PER_DAY,
+  SPIN_EVERY,
+  PIGGY_CAP,
+  PIGGY_MIN,
+  piggyDrop,
+  RACE_PRIZES,
   SPIN_PRIZES,
   rollSpin,
   WEEKLY,
@@ -88,10 +96,14 @@ import {
 } from "./visitors";
 
 export const CHEST_SIZE = 5;
+const RESET_BACKUP_KEY = "puzzle-journey-reset-backup";
+let resetBackup: Profile | null = null;
 
 export type Tab = "lobby" | "home" | "adventure" | "challenges" | "ranks" | "skins" | "more";
 export type Panel =
   | null
+  | "race"
+  | "piggy"
   | "shop"
   | "quests"
   | "daily"
@@ -103,7 +115,11 @@ export type Panel =
   | "won"
   | "levelup"
   | "intro"
-  | "spin";
+  | "spin"
+  | "coins"
+  | "gems"
+  | "level"
+  | "reset";
 
 export type FlashCell = { r: number; c: number; cell: Cell };
 export type LandedCell = { r: number; c: number };
@@ -257,11 +273,17 @@ type GameStore = {
   claimWeekly: (id: string) => void;
   claimQuestChest: () => void;
   /** Spin the lucky wheel (free once a day, or by video). Returns the prize index. */
-  spinWheel: (how: "free" | "video") => Promise<number | null>;
+  spinWheel: (how: "free" | "video" | "earned") => Promise<number | null>;
+  /** Collect last week's island race prize. */
+  claimRace: () => void;
+  /** Break the piggy bank open (a purchase). */
+  breakPiggy: () => void;
   /** Free coins for watching a video. */
   watchForCoins: () => Promise<void>;
   /** Keep a lost run going: by video (once per run), Continue Pass, or gems. */
-  continueWith: (how: "video" | "pass" | "gems") => Promise<void>;
+  continueWith: (how: "video" | "pass" | "gems" | "coins") => Promise<void>;
+  /** Jungle Coin continues used this run: { run start, count }. */
+  coinContinues: { run: number; n: number };
   /** Run (by start time) that already used its one video continue. */
   videoContinueRun: number;
   /** A rewarded video is playing. */
@@ -270,6 +292,9 @@ type GameStore = {
   /** Mark a one-time tip (e.g. a special block's explanation) as read. */
   dismissTip: (key: string) => void;
   resetProgress: () => void;
+  undoReset: () => void;
+  /** A reset just happened and can still be undone. */
+  canUndoReset: boolean;
   dismissLevelUp: () => void;
   setToast: (msg: string | null) => void;
   setPointerBusy: (busy: boolean) => void;
@@ -425,6 +450,7 @@ export const useGame = create<GameStore>((set, get) => ({
   lastResult: null,
   toast: null,
   videoContinueRun: 0,
+  coinContinues: { run: 0, n: 0 },
   videoBusy: false,
   levelUpTo: null,
   introUnlock: null,
@@ -446,12 +472,20 @@ export const useGame = create<GameStore>((set, get) => ({
     let profile = settleProfileChallenges(loaded);
     // Welcome back: 4+ hours away earns a free bomb booster.
     const away = profile.lastActive > 0 ? Date.now() - profile.lastActive : 0;
-    if (away >= 4 * 3600_000 && profile.tutorialDone) {
+    if (away >= 12 * 3600_000 && profile.tutorialDone) {
       profile = { ...profile, powerups: { ...profile.powerups, bomb: profile.powerups.bomb + 1 } };
       window.setTimeout(() => notify({ icon: "🎁", title: "Welcome back!", sub: "Here's a free bomb booster.", tone: "win" }), 1200);
     }
     profile = { ...profile, lastActive: Date.now() };
     audio.setMuted(profile.settings.sfx, profile.settings.music);
+    audio.bootAudio();
+    if (typeof document !== "undefined" && !remindersBound) {
+      remindersBound = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") void scheduleReminders(buildReminders(get().profile));
+        else void clearReminders();
+      });
+    }
     setVoiceEnabled(profile.settings.voice !== false && profile.settings.sfx);
     warmVoices();
     void connectBoard(profile.card);
@@ -469,6 +503,13 @@ export const useGame = create<GameStore>((set, get) => ({
     if (profile.challenges !== loaded.challenges) get().persist();
     // A ranked run that ended before its result came back: send it now.
     if (match.ranked && match.over && !match.ranked.submitted && !match.ranked.void) void submitRanked(get, set);
+    // A round saved after it already ended (won, or out of moves) would come back
+    // with a locked tray. Start the next playable round instead.
+    else if (profile.tutorialDone && (match.won || (match.over && !match.ranked))) {
+      if (match.won && match.mode === "adventure" && match.levelId) get().startAdventure(Math.min(match.levelId + 1, profile.adventure.unlocked));
+      else get().newGame();
+      set({ tab: "lobby" });
+    }
     // New (and returning) players play through the tutorial once; Skip is always there.
     if (!profile.tutorialDone) get().startTutorial("basics", true);
   },
@@ -687,8 +728,9 @@ export const useGame = create<GameStore>((set, get) => ({
       newBest = true;
     }
     // Explain each kind of special the first time it fires in a run.
+    // (Captions turned off: players found the pop-up text annoying.)
     let caption: string | null = null;
-    for (const f of clear?.fired ?? []) {
+    for (const f of [] as NonNullable<typeof clear>["fired"]) {
       const seen = run.explained ?? [];
       if (!seen.includes(f.sp)) {
         caption = SPECIAL_CAPTION[f.sp];
@@ -715,6 +757,25 @@ export const useGame = create<GameStore>((set, get) => ({
       } else {
         nextProfile = { ...nextProfile, chest: filled };
       }
+      if (!remindersAsked) {
+        remindersAsked = true;
+        window.setTimeout(() => void askForReminders(), 2500);
+      }
+      // Hooks that bring players back: a bonus spin every few wins, coins in the
+      // piggy bank, and a win on the board in this week's island race.
+      const l = normalizeLive(nextProfile.live);
+      const wins = l.earned.wins + 1;
+      const spinEarned = wins >= SPIN_EVERY;
+      const stars = starsFor(result.match.goal, result.match.moves, result.match.mode, result.match.levelId);
+      nextProfile = {
+        ...nextProfile,
+        live: {
+          ...l,
+          earned: { spins: l.earned.spins + (spinEarned ? 1 : 0), wins: spinEarned ? 0 : wins },
+          piggy: Math.min(PIGGY_CAP, l.piggy + piggyDrop(stars)),
+          race: { ...l.race, wins: l.race.wins + 1 },
+        },
+      };
     }
     const fx: BoardFx = {
       id: fxSeq++,
@@ -817,13 +878,24 @@ export const useGame = create<GameStore>((set, get) => ({
     const { targeting, match, profile, visitorBusy } = get();
     if (!targeting || visitorBusy) return false;
     const hit =
-      targeting === "hammer" ? hammerCell(match, row, col) : targeting === "bomb" ? bombCell(match, row, col) : null;
+      targeting === "hammer"
+        ? hammerCell(match, row, col)
+        : targeting === "bomb"
+          ? bombCell(match, row, col)
+          : targeting === "laser"
+            ? laserCell(match, row, col)
+            : targeting === "cross"
+              ? crossCell(match, row, col)
+              : targeting === "paint"
+                ? paintCell(match, row, col)
+                : null;
     const used = hit ? voidRanked(hit) : null;
     if (!used) {
       audio.sfxBad();
       return false;
     }
-    if (targeting === "bomb") audio.sfxBomb();
+    if (targeting === "bomb" || targeting === "cross" || targeting === "paint") audio.sfxBomb();
+    if (targeting !== "hammer") audio.vibrate([30, 40, 30]);
     else audio.sfxPlace();
     const nextProfile = trackChallenges(
       applyQuestScore({ ...profile, powerups: { ...profile.powerups, [targeting]: profile.powerups[targeting] - 1 } }, used, 1),
@@ -852,7 +924,7 @@ export const useGame = create<GameStore>((set, get) => ({
         milestone: null,
         newBest: false,
         comboWarning: false,
-        power: targeting,
+        power: targeting === "hammer" || targeting === "bomb" ? targeting : "bomb",
       },
     });
     persistSoon(get);
@@ -991,7 +1063,7 @@ export const useGame = create<GameStore>((set, get) => ({
         gems: profile.gems + gems,
         daily: { lastClaim: now, streak, nextAt: now + 8 * 3600 * 1000 },
       },
-      toast: `Daily gift: +${coins} coins, +${gems} gems`,
+      toast: `Daily gift: +${coins} Jungle Coins, +${gems} gems`,
     });
     persistSoon(get);
     window.setTimeout(() => set({ toast: null }), 1400);
@@ -1033,6 +1105,9 @@ export const useGame = create<GameStore>((set, get) => ({
             refresh: profile.powerups.refresh + 2,
             bomb: profile.powerups.bomb + 2,
             freeze: profile.powerups.freeze + 2,
+            laser: profile.powerups.laser ?? 0,
+            cross: profile.powerups.cross ?? 0,
+            paint: profile.powerups.paint ?? 0,
           },
         },
         toast: "Packed four tools.",
@@ -1048,7 +1123,7 @@ export const useGame = create<GameStore>((set, get) => ({
       audio.sfxCoin();
       set({
         profile: { ...profile, gems: profile.gems - 40, coins: profile.coins + 400 },
-        toast: "+400 coins",
+        toast: "+400 Jungle Coins",
       });
       persistSoon(get);
       return;
@@ -1058,11 +1133,14 @@ export const useGame = create<GameStore>((set, get) => ({
       refresh: { coins: 70, power: "refresh" },
       bomb: { coins: 140, power: "bomb" },
       freeze: { coins: 110, power: "freeze" },
+      laser: { coins: 160, power: "laser" },
+      cross: { coins: 220, power: "cross" },
+      paint: { coins: 260, power: "paint" },
     };
     const item = prices[itemId];
     if (!item) return;
     if (profile.coins < item.coins) {
-      set({ toast: "Not enough coins." });
+      set({ toast: "Not enough Jungle Coins." });
       return;
     }
     audio.sfxCoin();
@@ -1083,7 +1161,7 @@ export const useGame = create<GameStore>((set, get) => ({
     if (item.once && profile.live.bought.includes(item.id)) return;
     if (item.coins) {
       if (profile.coins < item.coins) {
-        set({ toast: "Not enough coins." });
+        set({ toast: "Not enough Jungle Coins." });
         window.setTimeout(() => set({ toast: null }), 1400);
         return;
       }
@@ -1152,6 +1230,11 @@ export const useGame = create<GameStore>((set, get) => ({
     const price = moneyPrice(sku);
     if (!price) return;
     let p = applyGrant(profile, price.grant);
+    if (sku === "piggy") {
+      const l = normalizeLive(p.live);
+      p = { ...p, coins: p.coins + l.piggy, live: { ...l, piggy: 0 } };
+      price.grant = { coins: l.piggy };
+    }
     const item = SHOP.find((i) => i.id === sku);
     p = {
       ...p,
@@ -1235,6 +1318,7 @@ export const useGame = create<GameStore>((set, get) => ({
   spinWheel: async (how) => {
     const live = normalizeLive(get().profile.live);
     if (how === "free" && live.spin.free) return null;
+    if (how === "earned" && live.earned.spins <= 0) return null;
     if (how === "video") {
       if (live.spin.extra >= SPIN_EXTRA_PER_DAY || get().videoBusy) return null;
       set({ videoBusy: true });
@@ -1246,10 +1330,39 @@ export const useGame = create<GameStore>((set, get) => ({
     const prize = SPIN_PRIZES[idx]!;
     const { profile } = get();
     const l = normalizeLive(profile.live);
+    if (how === "earned") {
+      set({ profile: applyGrant({ ...profile, live: { ...l, earned: { ...l.earned, spins: l.earned.spins - 1 } } }, prize.grant) });
+      persistSoon(get);
+      return idx;
+    }
     const spin = how === "free" ? { ...l.spin, free: true } : { ...l.spin, extra: l.spin.extra + 1 };
     set({ profile: applyGrant({ ...profile, live: { ...l, spin } }, prize.grant) });
     persistSoon(get);
     return idx;
+  },
+
+  claimRace: () => {
+    const { profile } = get();
+    const l = normalizeLive(profile.live);
+    const reward = l.race.reward;
+    if (!reward) return;
+    const prize = RACE_PRIZES[reward.rank - 1];
+    if (!prize) return;
+    audio.feelCoins(8);
+    audio.feelMilestone();
+    set({ profile: applyGrant({ ...profile, live: { ...l, race: { ...l.race, reward: null } } }, prize), toast: `Race prize: ${grantText(prize)}` });
+    persistSoon(get);
+    window.setTimeout(() => set({ toast: null }), 2600);
+  },
+
+  breakPiggy: () => {
+    const l = normalizeLive(get().profile.live);
+    if (l.piggy < PIGGY_MIN) {
+      set({ toast: `Fill it to ${PIGGY_MIN.toLocaleString()} Jungle Coins to break it open.` });
+      window.setTimeout(() => set({ toast: null }), 2200);
+      return;
+    }
+    void get().buyMoney("piggy");
   },
 
   watchForCoins: async () => {
@@ -1263,7 +1376,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const l = normalizeLive(profile.live);
     const p = applyGrant({ ...profile, live: { ...l, ads: { ...l.ads, n: l.ads.n + 1 } } }, { coins: AD_COINS });
     audio.feelCoins(6);
-    set({ profile: p, toast: `+${AD_COINS} coins` });
+    set({ profile: p, toast: `+${AD_COINS} Jungle Coins` });
     persistSoon(get);
     window.setTimeout(() => set({ toast: null }), 1400);
   },
@@ -1277,7 +1390,7 @@ export const useGame = create<GameStore>((set, get) => ({
     let easy = 3;
     let extra = 1;
     if (how === "video") {
-      if (get().videoContinueRun === get().runStats.startedAt || get().videoBusy) return;
+      if (get().videoBusy) return; // ad continues are unlimited
       set({ videoBusy: true });
       const ok = await showRewardedVideo("continue");
       set({ videoBusy: false });
@@ -1291,6 +1404,18 @@ export const useGame = create<GameStore>((set, get) => ({
         return;
       }
       p = { ...profile, live: { ...profile.live, passes: profile.live.passes - 1 } };
+    } else if (how === "coins") {
+      const run = get().runStats.startedAt;
+      const used = get().coinContinues.run === run ? get().coinContinues.n : 0;
+      const cost = coinContinueCost(used);
+      if (profile.coins < cost) {
+        set({ panel: "coins", toast: `Need ${cost.toLocaleString()} Jungle Coins to continue.` });
+        window.setTimeout(() => set({ toast: null }), 1800);
+        return;
+      }
+      p = { ...profile, coins: profile.coins - cost };
+      set({ coinContinues: { run, n: used + 1 } });
+      audio.feelCoins(4);
     } else {
       if (profile.gems < CONTINUE_COST) {
         set({ panel: "shop", toast: `Need ${CONTINUE_COST} gems to continue.` });
@@ -1365,11 +1490,44 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   resetProgress: () => {
+    // Keep a copy so the player can undo the reset.
+    const { profile, match: oldMatch } = get();
+    try {
+      localStorage.setItem(RESET_BACKUP_KEY, JSON.stringify({ ...profile, match: oldMatch }));
+    } catch {
+      /* storage full or blocked: undo just won't be offered after a reload */
+    }
+    resetBackup = { ...profile, match: oldMatch };
     const fresh = defaultProfile();
     const match = firstMatch();
-    set({ profile: fresh, match, panel: "how", selected: 0, tab: "home" });
+    set({ profile: fresh, match, panel: null, selected: 0, tab: "lobby", canUndoReset: true });
     saveProfile({ ...fresh, match });
   },
+
+  undoReset: () => {
+    let backup = resetBackup;
+    if (!backup) {
+      try {
+        const raw = localStorage.getItem(RESET_BACKUP_KEY);
+        if (raw) backup = JSON.parse(raw);
+      } catch {
+        backup = null;
+      }
+    }
+    if (!backup) return;
+    const restored = ensureMatch(backup as Profile);
+    set({ profile: restored, match: sanitizeMatch(restored.match ?? firstMatch()), canUndoReset: false, toast: "Progress restored!" });
+    saveProfile(restored);
+    resetBackup = null;
+    try {
+      localStorage.removeItem(RESET_BACKUP_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.setTimeout(() => set({ toast: null }), 1800);
+  },
+
+  canUndoReset: false,
 
   dismissLevelUp: () => set({ levelUpTo: null }),
 
@@ -1428,7 +1586,9 @@ export const useGame = create<GameStore>((set, get) => ({
             fired: clear.fired,
             swept: clear.swept ?? null,
           }
-        : get().fx,
+        : visitorEvent.action.kind === "move"
+          ? { ...(get().fx ?? ({} as NonNullable<GameStore["fx"]>)), id: fxSeq++, landed: [{ r: visitorEvent.action.to[0], c: visitorEvent.action.to[1] }], cleared: [], rows: [], cols: [], gained: 0, combo: 0, praise: null, perfect: false, shake: false, placedCells: 1, special: null, milestone: null, newBest: false, comboWarning: false, fired: [], swept: null, origin: { r: visitorEvent.action.to[0], c: visitorEvent.action.to[1] } }
+          : get().fx,
     });
     persistSoon(get);
   },
@@ -1451,6 +1611,23 @@ export const useGame = create<GameStore>((set, get) => ({
  * A run just ended: score it (Puzzle IQ), fold it into the player's card,
  * work out percentile and awards, and post the card to the leaderboard.
  */
+let remindersBound = false;
+let remindersAsked = false;
+
+/** Friendly nudges for when the player is away (only what's actually waiting for them). */
+function buildReminders(p: Profile): Reminder[] {
+  const out: Reminder[] = [];
+  const now = Date.now();
+  const l = normalizeLive(p.live);
+  if (p.daily.nextAt > now) out.push({ id: 101, title: "🎁 Your daily gift is ready!", body: "Free Jungle Coins are waiting on the island.", at: new Date(p.daily.nextAt) });
+  if (l.earned.spins > 0) out.push({ id: 102, title: "🎡 You have a bonus spin!", body: "Spin the Lucky Wheel. The jackpot is 100 gems.", at: new Date(now + 3 * 3600_000) });
+  if (p.levelStreak >= 2) out.push({ id: 103, title: `🔥 Keep your ${p.levelStreak}-win streak alive!`, body: "Win one island today to keep your free boosters coming.", at: new Date(now + 20 * 3600_000) });
+  out.push({ id: 104, title: "🏁 The Island Race is heating up", body: "Your rivals are winning islands. Jump back in and climb!", at: new Date(now + 26 * 3600_000) });
+  if (l.piggy >= PIGGY_MIN) out.push({ id: 105, title: "🐷 Your piggy bank is ready to break", body: `${l.piggy.toLocaleString("en-US")} Jungle Coins saved up inside.`, at: new Date(now + 48 * 3600_000) });
+  out.push({ id: 106, title: "🌴 The jungle misses you", body: "A new island is waiting. Can you get 3 stars?", at: new Date(now + 72 * 3600_000) });
+  return out;
+}
+
 function finishRun(rs: RunStats, match: Match, profile: Profile): { profile: Profile; result: RunResult } {
   const run: RunStats = { ...rs, endedAt: Date.now(), won: match.won, spacesLeft: match.board.flat().filter((c) => c.t === "e").length };
   const iq = puzzleIq(run);
@@ -1609,7 +1786,7 @@ const EARNED_INFO: Record<BonusId, { icon: string; name: string }> = {
 function announceEarned(earned: BonusId[], perfect: boolean): void {
   const top = earned.includes("star") ? "star" : earned[0]!;
   const info = EARNED_INFO[top];
-  const how = top === "star" ? (perfect ? "Perfect clear!" : "Combo ×5!") : top === "blast" ? "4 lines at once!" : top === "bomb" ? "3 lines at once!" : "2 lines at once!";
+  const how = top === "star" ? (perfect ? "Perfect clear!" : "Combo ×10!") : top === "blast" ? "4 lines at once!" : top === "bomb" ? "3 lines at once!" : "2 lines at once!";
   window.setTimeout(() => {
     audio.feelMilestone();
     notify({ icon: info.icon, title: `${how} You made ${/^[AEIOU]/.test(info.name) ? "an" : "a"} ${info.name}`, sub: "It comes in your tray. Use it!", tone: "win" });
@@ -1623,17 +1800,20 @@ function announceEarned(earned: BonusId[], perfect: boolean): void {
  * tray. 2 wins: an arrow. 4: + a bomb. 6+: + a board-wipe block.
  */
 export function withStreakBoosters(match: Match, streak: number): Match {
-  if (streak < 2) return match;
+  if (streak < 3) return match;
   // Held until the board has blocks for them to hit (see POWER_MIN_FILL).
-  const bonus: NonNullable<Match["bonus"]> = [streak % 2 ? "rocketV" : "rocketH"];
-  if (streak >= 4) bonus.push("bomb");
-  if (streak >= 6) bonus.push("blast");
-  return { ...match, bonus };
+  // Only power blocks this island has already unlocked.
+  const sp = match.features.specials;
+  const bonus: NonNullable<Match["bonus"]> = [];
+  if (sp.includes("rocketH")) bonus.push(streak % 2 ? "rocketV" : "rocketH");
+  if (streak >= 6 && sp.includes("bomb")) bonus.push("bomb");
+  if (streak >= 10 && sp.includes("blast")) bonus.push("blast");
+  return bonus.length ? { ...match, bonus } : match;
 }
 
 function streakBanner(set: (partial: Partial<GameStore>) => void, streak: number): void {
-  if (streak < 2) return;
-  const gift = streak >= 6 ? "arrow, bomb and golden block" : streak >= 4 ? "arrow and bomb" : "arrow block";
+  if (streak < 3) return;
+  const gift = streak >= 10 ? "arrow, bomb and golden block" : streak >= 6 ? "arrow and bomb" : "arrow block";
   set({ runBanner: { id: Date.now(), title: `🔥 ${streak} wins in a row!`, sub: `Free ${gift} once the board fills up. Don't lose your streak!` } });
 }
 
@@ -1714,6 +1894,9 @@ function startVisit(
   if (s.visitorBusy || s.visitorEvent) return false;
   if (s.match.over || s.match.won) return false;
   if (!forced && (s.tab !== "home" || s.panel)) return false;
+  // Surprise visits (a character moving, breaking or swapping blocks mid-turn) read as
+  // blocks glitching around, so visitors only appear for their own introduction now.
+  if (!forced) return false;
   const mood = pickMood(s.profile.level, s.match.moves, Math.random);
   const allowed = VISITOR_IDS.filter((id) => s.match.features.visitors.includes(id));
   const pool = allowed.length > 1 ? allowed.filter((id) => id !== s.visitorLast) : allowed;
@@ -1741,6 +1924,12 @@ function startVisit(
       tab: "home",
       panel: forced ? null : s.panel,
     });
+    // Never let a visit that fails to finish (animation hiccup) lock the board.
+    const evId = event.id;
+    window.setTimeout(() => {
+      const now = useGame.getState();
+      if (now.visitorBusy && now.visitorEvent?.id === evId) useGame.setState({ visitorBusy: false, visitorEvent: null, visitorHide: [] });
+    }, 9000);
     return true;
   }
   set({ visitorNextAt: s.match.moves + 3, toast: forced ? "No safe visit right now." : s.toast });
@@ -1760,3 +1949,22 @@ function shuffleIds(ids: VisitorId[]): VisitorId[] {
 }
 
 if (typeof window !== "undefined" && import.meta.env.DEV) (window as unknown as { __game: typeof useGame }).__game = useGame;
+
+/*
+ * Safety net: once a round's result screen (win or out-of-moves) has been shown,
+ * closing anything opened from it (bonus spin, race, shop, an ad) brings the
+ * result screen back, so the player is never stranded on a finished board.
+ */
+if (typeof window !== "undefined") {
+  let resultRun = -1;
+  useGame.subscribe((s, prev) => {
+    if (s.panel === "won" || s.panel === "over") resultRun = s.runStats.startedAt;
+    if (s.panel !== null || prev.panel === null) return;
+    if (s.tab !== "home" || resultRun !== s.runStats.startedAt) return;
+    const want = s.match.won ? "won" : s.match.over ? "over" : null;
+    if (want) window.setTimeout(() => {
+      const now = useGame.getState();
+      if (now.panel === null && now.runStats.startedAt === resultRun && (now.match.won || now.match.over)) useGame.setState({ panel: want });
+    }, 250);
+  });
+}

@@ -3,14 +3,16 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { useEffect } from "react";
 import { isNative, patchFetchForNative } from "@/lib/game/native";
+import { inject } from "@vercel/analytics";
 import appCss from "../styles.css?url";
 
 /** Google H5 Games Ads (AdSense for games). Off until VITE_ADSENSE_CLIENT (ca-pub-...) is set. */
 function H5Ads() {
   useEffect(() => {
     patchFetchForNative();
-    // Web ads are for the website only; the iPhone app has none in v1.
+    // Web ads and analytics are for the website only; the iPhone app has neither in v1.
     if (isNative()) return;
+    inject({ mode: import.meta.env.PROD ? "production" : "development" });
     const client = import.meta.env.VITE_ADSENSE_CLIENT as string | undefined;
     if (!client || document.getElementById("h5ads")) return;
     const s = document.createElement("script");
@@ -38,7 +40,7 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" },
       { title: APP_NAME },
       { name: "theme-color", content: "#071428" },
       { name: "description", content: "Drop blocks, clear lines, and chase combos on a tropical night island." },

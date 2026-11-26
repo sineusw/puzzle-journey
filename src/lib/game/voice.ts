@@ -4,89 +4,48 @@
  * off in Settings or mutes sound effects. Rate-limited so cheers never stack.
  */
 
+import { playClip, preloadClips } from "./audio";
+
 let enabled = true;
 let lastAt = 0;
-let chosen: SpeechSynthesisVoice | null | undefined;
-
-const PREFERRED = ["Samantha", "Ava", "Allison", "Google US English", "Microsoft Aria", "Karen", "Moira", "Tessa"];
-
-function available(): SpeechSynthesis | null {
-  return typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
-}
-
-function pickVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
-  if (chosen !== undefined) return chosen;
-  const voices = synth.getVoices();
-  if (!voices.length) return null;
-  const english = voices.filter((v) => v.lang?.toLowerCase().startsWith("en"));
-  chosen =
-    PREFERRED.map((n) => english.find((v) => v.name.includes(n))).find(Boolean) ??
-    english.find((v) => v.lang.toLowerCase() === "en-us") ??
-    english[0] ??
-    null;
-  return chosen;
-}
-
 export function setVoiceEnabled(on: boolean): void {
   enabled = on;
-  if (!on) available()?.cancel();
 }
 
 /**
- * Say a short cheer. `priority` cheers (level complete, perfect) interrupt a
- * cheer in progress; ordinary ones are skipped if one was said very recently.
+ * Recorded announcer lines (deep, punchy, a little echo). Only big moments get
+ * one; anything else stays silent. No robotic text-to-speech anymore.
  */
-export function cheer(text: string, opts: { delayMs?: number; priority?: boolean } = {}): void {
-  const synth = available();
-  if (!synth || !enabled) return;
+const CLIPS: Record<string, string> = {
+  "perfect!": "perfect",
+  "unbelievable!": "unbelievable",
+  "amazing!": "amazing",
+  "excellent!": "excellent",
+  "great!": "great",
+  "level complete!": "level-complete",
+  "new best score!": "new-best",
+  "new personal record!": "new-best",
+  "level up!": "level-up",
+};
+const clipUrl = (key: string) => `/voice/${key}.mp3`;
+
+export function cheer(text: string | null, opts: { delayMs?: number; priority?: boolean } = {}): void {
+  if (!enabled || !text) return;
+  const key = CLIPS[text.trim().toLowerCase()];
+  if (!key) return;
   const now = Date.now();
   if (!opts.priority && now - lastAt < 1800) return;
   lastAt = now;
-  const speak = () => {
-    try {
-      if (opts.priority) synth.cancel();
-      const u = new SpeechSynthesisUtterance(text.replace(/!+$/, "!"));
-      const v = pickVoice(synth);
-      if (v) u.voice = v;
-      u.lang = v?.lang ?? "en-US";
-      u.rate = 1.04;
-      u.pitch = 1.2;
-      u.volume = 0.9;
-      synth.speak(u);
-    } catch {
-      /* speech not allowed here */
-    }
-  };
-  if (opts.delayMs) window.setTimeout(speak, opts.delayMs);
-  else speak();
+  const say = () => playClip(clipUrl(key));
+  if (opts.delayMs) window.setTimeout(say, opts.delayMs);
+  else say();
 }
 
-/** Voices load asynchronously on some browsers; warm the list early. */
+/** Load the announcer clips early. */
 export function warmVoices(): void {
-  const synth = available();
-  if (!synth) return;
-  synth.getVoices();
-  synth.addEventListener?.("voiceschanged", () => {
-    chosen = undefined;
-    pickVoice(synth);
-  });
+  if (typeof window === "undefined") return;
+  preloadClips([...new Set(Object.values(CLIPS))].map(clipUrl));
 }
 
-let primed = false;
-
-/**
- * iOS only lets speech start from inside a tap. Speak a silent, empty cue on
- * the player's first tap so later cheers (fired after animations) can play.
- */
-export function primeVoice(): void {
-  const synth = available();
-  if (!synth || primed) return;
-  primed = true;
-  try {
-    const u = new SpeechSynthesisUtterance(" ");
-    u.volume = 0;
-    synth.speak(u);
-  } catch {
-    /* ignore */
-  }
-}
+/** Kept for callers; clips need no priming. */
+export function primeVoice(): void {}

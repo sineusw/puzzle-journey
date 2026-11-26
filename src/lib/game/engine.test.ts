@@ -647,9 +647,9 @@ describe("Block Blast scoring rules", () => {
     });
 
     it("leans toward small pieces as the board fills (board state only)", () => {
-      assert.equal(bulkyFactor(0.1), 1);
-      assert.equal(bulkyFactor(0.45), 0.6);
-      assert.equal(bulkyFactor(0.7), 0.3);
+      assert.equal(bulkyFactor(0.1), 0.6);
+      assert.equal(bulkyFactor(0.45), 0.35);
+      assert.equal(bulkyFactor(0.7), 0.15);
     });
 
     it("Continue always empties the two fullest rows", () => {

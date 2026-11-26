@@ -1,0 +1,25 @@
+name: App Store Connect
+on:
+  workflow_dispatch:
+    inputs:
+      mode: {description: 'status | metadata | submit', default: 'status'}
+  push:
+    branches: [ios-polish]
+    paths: ['store/asc.py','store/meta/**','store/shots-ipad/**','.github/workflows/asc.yml']
+jobs:
+  asc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install pyjwt cryptography requests
+      - name: Run
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          MODE: ${{ github.event.inputs.mode || 'status' }}
+        run: |
+          if printf '%s' "$ASC_PRIVATE_KEY" | grep -q "BEGIN PRIVATE KEY"; then printf '%s\n' "$ASC_PRIVATE_KEY" > key.p8; else printf '%s' "$ASC_PRIVATE_KEY" | base64 --decode > key.p8; fi
+          ASC_KEY_PATH=key.p8 python store/asc.py

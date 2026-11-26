@@ -1,6 +1,8 @@
+import { celebrateClaim } from "./claim-fx";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, Clock, Lock, Play, X } from "lucide-react";
-import { CONTINUE_COST, QUESTS, SKINS, type SkinId } from "@/lib/game/content";
+import { CONTINUE_COST, QUESTS, SKINS, coinContinueCost, type SkinId } from "@/lib/game/content";
+import * as audioFx from "@/lib/game/audio";
 import {
   AD_COINS,
   AD_DAILY_CAP,
@@ -46,7 +48,7 @@ function countdown(ms: number): string {
   return `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
-function ShopSheetFrame({ title, sub, children, wide }: { title: string; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
+export function ShopSheetFrame({ title, sub, children, wide }: { title: string; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
   const setPanel = useGame((s) => s.setPanel);
   return (
     <div className={`pj-sheet pj-store-sheet${wide ? " is-wide" : ""}`}>
@@ -150,7 +152,7 @@ const SECTION_TITLE: Record<ShopSection, string> = {
   offers: "Special offers",
   boosters: "Boosters",
   passes: "Continue Passes",
-  coins: "Coins",
+  coins: "Jungle Coins",
   gems: "Gems",
 };
 
@@ -167,7 +169,7 @@ export function ShopSheet() {
           <Play className="size-4" fill="currentColor" />
         </span>
         <span className="flex-1 text-left">
-          <b>Free coins</b>
+          <b>Free Jungle Coins</b>
           <small>{adsLeft > 0 ? `Watch a short video · ${adsLeft} left today` : "Come back tomorrow for more"}</small>
         </span>
         <span className="pj-free-amt">
@@ -208,7 +210,7 @@ function OfferCard({ item }: { item: ShopItem }) {
   );
 }
 
-function ItemCard({ item }: { item: ShopItem }) {
+export function ItemCard({ item }: { item: ShopItem }) {
   const buyItem = useGame((s) => s.buyItem);
   const buyMoney = useGame((s) => s.buyMoney);
   return (
@@ -350,7 +352,7 @@ export function DailySheet() {
         })}
       </div>
       {ready ? <RewardChips grant={DAILY_REWARDS[live.calendar.claimed]!} /> : null}
-      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" disabled={!ready} onClick={claimCalendar}>
+      <button type="button" className="pj-btn pj-btn-primary mt-3 w-full" disabled={!ready} onClick={(e) => { celebrateClaim(e, true); claimCalendar(); }}>
         {ready ? `Claim day ${live.calendar.claimed + 1}` : "Come back tomorrow"}
       </button>
       <div className="pj-gift-row">
@@ -359,7 +361,7 @@ export function DailySheet() {
           <b>Free gift</b>
           <small>{giftReady ? "Ready to open!" : `Next gift in ${countdown(profile.daily.nextAt - now)}`}</small>
         </div>
-        <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!giftReady} onClick={claimDaily}>
+        <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!giftReady} onClick={(e) => { celebrateClaim(e); claimDaily(); }}>
           {giftReady ? "Open" : <Clock className="size-4" />}
         </button>
       </div>
@@ -410,7 +412,7 @@ export function EventsSheet() {
                 {def.token} {t.pts}
               </div>
               <RewardChips grant={t.grant} small />
-              <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!can} onClick={() => claimEventTier(i)}>
+              <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!can} onClick={(e) => { celebrateClaim(e, true); claimEventTier(i); }}>
                 {got ? <Check className="size-4" /> : can ? "Claim" : <Lock className="size-4" />}
               </button>
             </div>
@@ -465,7 +467,7 @@ export function QuestSheet() {
               </div>
               <RewardChips grant={QUEST_CHEST} small />
             </div>
-            <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!chestReady} onClick={claimQuestChest}>
+            <button type="button" className="pj-btn pj-btn-primary text-sm" disabled={!chestReady} onClick={(e) => { celebrateClaim(e, true); claimQuestChest(); }}>
               {live.questChest.claimed ? <Check className="size-4" /> : chestReady ? "Open" : `${doneCount}/${QUESTS.length}`}
             </button>
           </div>
@@ -517,7 +519,7 @@ function QuestRow(p: { title: string; blurb: string; value: number; target: numb
           <div className="text-xs text-muted">{p.blurb}</div>
           <RewardChips grant={p.grant} small />
         </div>
-        <button type="button" className="pj-btn pj-btn-primary shrink-0 text-sm" disabled={p.state !== "ready"} onClick={p.onClaim}>
+        <button type="button" className="pj-btn pj-btn-primary shrink-0 text-sm" disabled={p.state !== "ready"} onClick={(e) => { celebrateClaim(e); p.onClaim(); }}>
           {p.state === "done" ? <Check className="size-4" /> : p.state === "ready" ? "Claim" : `${formatInt(Math.min(p.value, p.target))}/${formatInt(p.target)}`}
         </button>
       </div>
@@ -531,6 +533,7 @@ function QuestRow(p: { title: string; blurb: string; value: number; target: numb
 /* ------------------------------------------------------------ lucky spin */
 
 export function SpinSheet() {
+  const setPanel = useGame((st) => st.setPanel);
   const rawLive = useGame((s) => s.profile.live);
   const live = useMemo(() => normalizeLive(rawLive), [rawLive]);
   const spinWheel = useGame((s) => s.spinWheel);
@@ -540,7 +543,7 @@ export function SpinSheet() {
   const [won, setWon] = useState<number | null>(null);
   const n = SPIN_PRIZES.length;
   const seg = 360 / n;
-  const go = async (how: "free" | "video") => {
+  const go = async (how: "free" | "video" | "earned") => {
     if (spinning) return;
     setWon(null);
     const idx = await spinWheel(how);
@@ -579,7 +582,11 @@ export function SpinSheet() {
           <RewardChips grant={SPIN_PRIZES[won]!.grant} />
         </div>
       ) : null}
-      {!live.spin.free ? (
+      {live.earned.spins > 0 ? (
+        <button type="button" className="pj-btn pj-btn-primary w-full pj-spin-earned" disabled={spinning} onClick={() => void go("earned")}>
+          🎡 Bonus spin! ({live.earned.spins})
+        </button>
+      ) : !live.spin.free ? (
         <button type="button" className="pj-btn pj-btn-primary w-full" disabled={spinning} onClick={() => void go("free")}>
           Free spin!
         </button>
@@ -594,17 +601,99 @@ export function SpinSheet() {
           </span>
         </button>
       )}
+      {won !== null && !spinning ? (
+        <button type="button" className="pj-btn pj-btn-ghost w-full pj-spin-done" onClick={() => setPanel(null)}>
+          Collect &amp; close
+        </button>
+      ) : null}
     </ShopSheetFrame>
   );
 }
 
 /* -------------------------------------------------------------- continue */
 
+/** First thing a player sees when no block fits: watch an ad, pay Jungle Coins, or start over. */
+export function OutOfMovesPrompt({ onResults }: { onResults: () => void }) {
+  const coins = useGame((s) => s.profile.coins);
+  const passes = useGame((s) => s.profile.live.passes);
+  const used = false; // ad continues are unlimited
+  const busy = useGame((s) => s.videoBusy);
+  const coinUses = useGame((s) => (s.coinContinues.run === s.runStats.startedAt ? s.coinContinues.n : 0));
+  const goal = useGame((s) => s.match.goal);
+  const progress = useGame((s) => s.match.goalProgress);
+  const continueWith = useGame((s) => s.continueWith);
+  const newGame = useGame((s) => s.newGame);
+  const cost = coinContinueCost(coinUses);
+  const streak = useGame((s) => (s.match.mode === "adventure" || s.match.mode === "classic" ? s.profile.levelStreak : 0));
+  const left = goal ? Math.max(0, goal.value - progress) : 0;
+  useEffect(() => {
+    audioFx.feelRoundOver();
+    audioFx.vibrate([30, 60, 30]);
+  }, []);
+  return (
+    <div className="pj-sheet pj-oom text-center" data-testid="out-of-moves">
+      <span className="pj-oom-vine is-l" aria-hidden="true" />
+      <span className="pj-oom-vine is-r" aria-hidden="true" />
+      <span className="pj-oom-leaf is-tl" aria-hidden="true">🌿</span>
+      <span className="pj-oom-leaf is-tr" aria-hidden="true">🍃</span>
+      <span className="pj-oom-leaf is-bl" aria-hidden="true">🌺</span>
+      <span className="pj-oom-leaf is-br" aria-hidden="true">🌴</span>
+      <div className="pj-oom-emoji" aria-hidden="true">🙈</div>
+      <h2 className="pj-oom-title font-display">Out of moves!</h2>
+      <p className="pj-oom-sub">{goal && left > 0 ? `So close. Only ${formatInt(left)} to go!` : "No room left for these blocks."}</p>
+      {goal ? (
+        <div className="pj-result-progress" aria-hidden="true">
+          <span style={{ width: `${Math.round(Math.min(1, progress / goal.value) * 100)}%` }} />
+        </div>
+      ) : null}
+      {streak >= 2 ? <div className="pj-oom-streak">🔥 Your {streak}-win streak ends if you stop now!</div> : null}
+      <div className="pj-oom-actions">
+        <button type="button" className="pj-oom-btn is-video" disabled={used || busy} onClick={() => void continueWith("video")}>
+          <Play className="size-6" fill="currentColor" />
+          <span className="flex-1 text-left">
+            <b>{used ? "Ad already used" : busy ? "Loading ad…" : "Watch an ad"}</b>
+            <small>Continue free + easier blocks</small>
+          </span>
+          <span className="pj-oom-tag">FREE</span>
+        </button>
+        <button type="button" className={`pj-oom-btn is-coins${coins < cost ? " is-short" : ""}`} onClick={() => void continueWith("coins")}>
+          <img src="/icons/coin.webp" alt="" className="pj-oom-ico" />
+          <span className="flex-1 text-left">
+            <b>Continue with Jungle Coins</b>
+            <small>{coins < cost ? `You have ${formatInt(coins)}. Tap to get more` : "Clears your two fullest rows"}</small>
+          </span>
+          <span className="pj-oom-tag is-coin">
+            <img src="/icons/coin.webp" alt="" /> {formatInt(cost)}
+          </span>
+        </button>
+        {passes > 0 ? (
+          <button type="button" className="pj-oom-btn is-pass" onClick={() => void continueWith("pass")}>
+            <img src="/icons/refresh.webp" alt="" className="pj-oom-ico" />
+            <span className="flex-1 text-left">
+              <b>Use a Continue Pass</b>
+              <small>You have {passes}</small>
+            </span>
+          </button>
+        ) : null}
+        <button type="button" className="pj-oom-btn is-restart" onClick={newGame}>
+          <span className="pj-oom-restart-ico" aria-hidden="true">↻</span>
+          <span className="flex-1 text-left">
+            <b>Start over</b>
+          </span>
+        </button>
+      </div>
+      <button type="button" className="pj-oom-results" onClick={onResults}>
+        See results
+      </button>
+    </div>
+  );
+}
+
 /** The "keep going" box on the game-over sheet. */
 export function ContinueOptions() {
   const passes = useGame((s) => s.profile.live.passes);
   const gems = useGame((s) => s.profile.gems);
-  const used = useGame((s) => s.videoContinueRun === s.runStats.startedAt);
+  const used = false; // ad continues are unlimited
   const busy = useGame((s) => s.videoBusy);
   const continueWith = useGame((s) => s.continueWith);
   const buyMoney = useGame((s) => s.buyMoney);

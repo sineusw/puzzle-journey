@@ -216,7 +216,7 @@ type Shape = {
 };
 
 const SHAPES: Shape[] = [
-  { id: "o1", cells: [[0, 0]], weight: 5 },
+  { id: "o1", cells: [[0, 0]], weight: 9 },
   { id: "i2", cells: [[0, 0], [0, 1]], weight: 11 },
   { id: "i3", cells: [[0, 0], [0, 1], [0, 2]], weight: 11 },
   { id: "i4", cells: [[0, 0], [0, 1], [0, 2], [0, 3]], weight: 8 },
@@ -242,12 +242,12 @@ const SHAPES: Shape[] = [
   },
   { id: "l3", cells: [[0, 0], [1, 0], [1, 1]], weight: 11 },
   { id: "l4", cells: [[0, 0], [1, 0], [2, 0], [2, 1]], weight: 8 },
+  // 4-block Z / S (turned, they also make the upright "N" shapes).
+  { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
+  { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
   { id: "j4", cells: [[0, 1], [1, 1], [2, 0], [2, 1]], weight: 8 },
   { id: "l5", cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], weight: 5 },
-  { id: "s4", cells: [[0, 1], [0, 2], [1, 0], [1, 1]], weight: 6 },
-  { id: "z4", cells: [[0, 0], [0, 1], [1, 1], [1, 2]], weight: 6 },
   { id: "corner5", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], weight: 5 },
-  { id: "z5", cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], weight: 3 },
   { id: "diag2", cells: [[0, 0], [1, 1]], weight: 2 },
 ];
 
@@ -259,7 +259,7 @@ export function shapeCells(id: string): CellPos[] {
 }
 
 /** Shapes a Tetris player won't expect: gaps, diagonals, pentominoes. */
-export const UNUSUAL_SHAPES = ["diag2", "corner5", "z5", "i5", "o9"] as const;
+export const UNUSUAL_SHAPES = ["diag2", "corner5", "i5", "o9"] as const;
 
 let seq = 1;
 export function uid(prefix = "p"): string {
@@ -414,16 +414,16 @@ export function findHint(
 }
 
 /** Shapes that are hard to fit: five-block pieces, the 3×3, and gap shapes. */
-const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "z5", "h3", "diag2", "r23"]);
+const BULKY = new Set(["i5", "o9", "l5", "t5", "u5", "plus", "corner5", "h3", "diag2", "r23"]);
 
 /**
  * How often bulky shapes appear, by how full the board is. A documented,
  * fixed curve based only on the board: the fuller it gets, the more the
  * deal leans on small, easy-to-read pieces.
- *   under 35% full → normal mix · 35–55% → bulky ×0.6 · over 55% → bulky ×0.3
+ *   under 35% full → bulky ×0.6 · 35–55% → bulky ×0.35 · over 55% → bulky ×0.15
  */
 export function bulkyFactor(occupancy: number): number {
-  return occupancy < 0.35 ? 1 : occupancy < 0.55 ? 0.6 : 0.3;
+  return occupancy < 0.35 ? 0.6 : occupancy < 0.55 ? 0.35 : 0.15;
 }
 
 function pickShape(rng: () => number, occupancy = 0): Shape {
@@ -1108,6 +1108,119 @@ function depower(p: Piece): Piece {
   return p.starAt !== null ? { ...p, starAt: null, gold: false } : p;
 }
 
+/** Can these cells be dropped somewhere that completes at least one row or column? */
+export function clearsALine(board: Cell[][], cells: CellPos[]): boolean {
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (!canPlace(board, cells, r, c)) continue;
+      const hit = new Set(cells.map(([dr, dc]) => (r + dr) * SIZE + (c + dc)));
+      const full = (rr: number, cc: number) => hit.has(rr * SIZE + cc) || !isEmpty(board[rr]![cc]!);
+      for (const [dr] of cells) {
+        let ok = true;
+        for (let k = 0; k < SIZE && ok; k++) ok = full(r + dr, k);
+        if (ok) return true;
+      }
+      for (const [, dc] of cells) {
+        let ok = true;
+        for (let k = 0; k < SIZE && ok; k++) ok = full(k, c + dc);
+        if (ok) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * A "clutch" piece: a small, friendly shape (already turned the right way) that
+ * finishes a line on this board, or null when none does. Keeps the game feeling
+ * fair and lets players chain clears instead of slowly drowning.
+ */
+function clutchPiece(board: Cell[][], rng: () => number, f: Features, occ: number): Piece | null {
+  const FRIENDLY = ["i3", "i3v", "i4", "i2", "i2v", "l3", "o4", "o1", "i5", "l4", "t4"].filter((id) => SHAPE_MAP.has(id));
+  const order = [...FRIENDLY].sort(() => rng() - 0.5);
+  for (const id of order) {
+    const base = makePiece(rng, id, f, occ);
+    for (let t = 0; t < 4; t++) {
+      const cells = rotateN(SHAPE_MAP.get(id)!.cells, t);
+      if (clearsALine(board, cells)) return { ...base, cells };
+    }
+  }
+  return null;
+}
+
+/* ------------------------------------------------ "fits together" deals */
+
+/** Quick boolean copy of the board: true = something is in that cell. */
+function occGrid(board: Cell[][]): boolean[] {
+  const g: boolean[] = new Array(SIZE * SIZE);
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) g[r * SIZE + c] = !isEmpty(board[r]![c]!);
+  return g;
+}
+
+/** Best spot for one piece on a boolean board: most lines cleared, then snuggest fit. */
+function bestDrop(g: boolean[], cells: CellPos[]): { lines: number; snug: number; next: boolean[] } | null {
+  let best: { lines: number; snug: number; next: boolean[] } | null = null;
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      let ok = true;
+      for (const [dr, dc] of cells) {
+        const rr = r + dr, cc = c + dc;
+        if (rr < 0 || cc < 0 || rr >= SIZE || cc >= SIZE || g[rr * SIZE + cc]) { ok = false; break; }
+      }
+      if (!ok) continue;
+      const n = g.slice();
+      let snug = 0;
+      for (const [dr, dc] of cells) n[(r + dr) * SIZE + (c + dc)] = true;
+      for (const [dr, dc] of cells) {
+        const rr = r + dr, cc = c + dc;
+        for (const [ar, ac] of [[rr - 1, cc], [rr + 1, cc], [rr, cc - 1], [rr, cc + 1]] as const) {
+          if (ar < 0 || ac < 0 || ar >= SIZE || ac >= SIZE || g[ar * SIZE + ac]) snug++;
+        }
+      }
+      const rows: number[] = [], cols: number[] = [];
+      for (let k = 0; k < SIZE; k++) {
+        let fr = true, fc = true;
+        for (let j = 0; j < SIZE; j++) { if (!n[k * SIZE + j]) fr = false; if (!n[j * SIZE + k]) fc = false; }
+        if (fr) rows.push(k);
+        if (fc) cols.push(k);
+      }
+      for (const k of rows) for (let j = 0; j < SIZE; j++) n[k * SIZE + j] = false;
+      for (const k of cols) for (let j = 0; j < SIZE; j++) n[j * SIZE + k] = false;
+      const lines = rows.length + cols.length;
+      if (!best || lines > best.lines || (lines === best.lines && snug > best.snug)) best = { lines, snug, next: n };
+    }
+  }
+  return best;
+}
+
+const ORDERS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+
+/**
+ * How nicely a set of three plays on this board: the most lines the player can
+ * clear placing them in a good order, plus how snugly they slot in. -1 if the set can't all be placed.
+ */
+export function setPlayScore(board: Cell[][], pieces: Piece[]): number {
+  const g0 = occGrid(board);
+  let best = -1;
+  for (const order of ORDERS) {
+    let g = g0, lines = 0, snug = 0, ok = true;
+    for (const i of order) {
+      const d = bestDrop(g, pieces[i]!.cells);
+      if (!d) { ok = false; break; }
+      lines += d.lines;
+      snug += d.snug;
+      g = d.next;
+    }
+    if (ok) {
+      // Favor sets that clean the board up, with a big bonus for wiping it completely.
+      const left = g.reduce((n, x) => n + (x ? 1 : 0), 0);
+      const g0n = g0.reduce((n, x) => n + (x ? 1 : 0), 0);
+      best = Math.max(best, lines * 40 + snug + (g0n > 0 && left === 0 ? 600 : 0) - left * 3);
+    }
+  }
+  return best;
+}
+
 function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const f = match.features;
   const occ = occupancy(match.board);
@@ -1144,7 +1257,7 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   // Power blocks are earned, never dealt at random; only stone obstacles ride in on pieces.
   const sprinkle = (pieces: Piece[]): Piece[] => {
     const out = pieces.map(depower);
-    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.3) {
+    if (f.stones && !(match.easy ?? 0) && !out.some((p) => p.special) && rng() < 0.12) {
       const i = Math.floor(rng() * out.length);
       out[i] = { ...out[i]!, special: "stone", specialAt: 0 };
     }
@@ -1153,21 +1266,40 @@ function fillTray(match: Match, rng: () => number, easy: boolean): void {
   const normal = !easy && !(match.easy ?? 0);
   // Semi-predictable: the set shown as "Up next" is what you get, as long as it
   // can still be played on the board you left. If it can't, you get a fair set instead.
-  const queued = normal && match.next?.length === 3 ? match.next.map((p) => ({ ...clonePiece(p), id: uid() })) : null;
-  const pieces = (queued && setIsPlayable(match.board, queued) ? queued : sprinkle(makeFitting())).map(depower);
+  // Block-Blast-style deal: try a bunch of fair sets and hand over one of the ones
+  // that slot together best on this exact board (often finishing lines), with a
+  // little randomness so it never feels scripted.
+  let pieces: Piece[];
+  if (normal) {
+    const cands: Array<{ set: Piece[]; score: number }> = [];
+    for (let i = 0; i < 26; i++) {
+      const set = makeFitting();
+      if (set[0]!.shape === set[1]!.shape && set[1]!.shape === set[2]!.shape) continue;
+      cands.push({ set, score: setPlayScore(match.board, set) });
+    }
+    cands.sort((a, b) => b.score - a.score);
+    // Hand over one of the top three: always a set that slots in easily.
+    const top = cands.slice(0, Math.min(3, cands.length));
+    pieces = sprinkle(top[Math.floor(rng() * top.length)]?.set ?? makeFitting()).map(depower);
+  } else {
+    pieces = sprinkle(makeFitting()).map(depower);
+  }
+  // Fair and fun: if nothing in the tray can finish a line, most of the time the
+  // last piece becomes one that can (only if the set stays playable).
+  if (normal && occ > 0.2 && !pieces.some((p) => clearsALine(match.board, p.cells)) && rng() < 0.75) {
+    const clutch = clutchPiece(match.board, rng, f, occ);
+    if (clutch) {
+      const trial = [...pieces.slice(0, 2), clutch];
+      if (setIsPlayable(match.board, trial)) pieces[2] = clutch;
+    }
+  }
   if (occ >= POWER_MIN_FILL && match.bonus?.length) {
     // Earned power blocks land now that there are blocks for them to hit.
     match.bonus.slice(0, 3).forEach((b, i) => (pieces[i] = b === "star" ? starPiece(rng) : specialPiece(b)));
     match.bonus = match.bonus.length > 3 ? match.bonus.slice(3) : undefined;
   }
-  // Line up the following set: varied shapes, never three alike.
-  if (normal) {
-    let upNext = [make(), make(), make()];
-    for (let i = 0; i < 6 && new Set(upNext.map((p) => p.shape)).size < 2; i++) upNext = [make(), make(), make()];
-    match.next = sprinkle(upNext);
-  } else {
-    match.next = null;
-  }
+  // Sets are now picked for the board as it is when they're dealt, so there's no fixed "up next".
+  match.next = null;
   match.tray = pieces;
   if ((match.easy ?? 0) > 0) match.easy = match.easy! - 1;
 }
@@ -1410,11 +1542,13 @@ export function placePiece(
     const f = next.features;
     const hasArrow = f.specials.includes("rocketH") || f.specials.includes("rocketV");
     const lines = clear.lines;
-    const comboMilestone = next.combo >= 5 && next.combo % 5 === 0 && next.combo !== match.combo;
-    if ((perfect || comboMilestone) && f.stars) earned.push("star");
-    if (lines >= 4 && f.specials.includes("blast")) earned.push("blast");
-    else if (lines >= 3 && f.specials.includes("bomb")) earned.push("bomb");
-    else if (lines >= 2 && hasArrow) {
+    // The star is rare: only a perfect clear or a x10 combo (x20, x30...) makes one.
+    const comboMilestone = next.combo >= 10 && next.combo % 10 === 0 && next.combo !== match.combo;
+    if (((perfect && lines >= 2) || comboMilestone) && f.stars) earned.push("star");
+    // Power blocks are rare: 4 lines at once for an arrow, 5 for a bomb, 6+ for the golden blast.
+    if (lines >= 6 && f.specials.includes("blast")) earned.push("blast");
+    else if (lines >= 5 && f.specials.includes("bomb")) earned.push("bomb");
+    else if (lines >= 4 && hasArrow) {
       const dir: BlockSpecial = clear.rows.length >= clear.cols.length ? "rocketH" : "rocketV";
       earned.push(f.specials.includes(dir) ? dir : dir === "rocketH" ? "rocketV" : "rocketH");
     }
@@ -1470,6 +1604,49 @@ export function bombCell(match: Match, row: number, col: number): Match | null {
   next.over = false;
   checkOver(next);
   return next;
+}
+
+/** Peel every breakable cell in a set of cells; null if nothing was hit. */
+function peelMany(match: Match, cells: Array<[number, number]>): Match | null {
+  const next = cloneMatch(match);
+  let hit = false;
+  for (const [r, c] of cells) {
+    const cell = next.board[r]?.[c];
+    if (!cell || isEmpty(cell) || isUnbreakable(cell)) continue;
+    next.board[r]![c] = { t: "e" };
+    hit = true;
+  }
+  if (!hit) return null;
+  next.over = false;
+  checkOver(next);
+  return next;
+}
+
+/** Laser booster: clears the whole row of the tapped block. */
+export function laserCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  return peelMany(match, Array.from({ length: SIZE }, (_, c) => [row, c] as [number, number]));
+}
+
+/** Cross Blast booster: clears the tapped block's row and column. */
+export function crossCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  const cells: Array<[number, number]> = [];
+  for (let i = 0; i < SIZE; i++) cells.push([row, i], [i, col]);
+  return peelMany(match, cells);
+}
+
+/** Color Clear booster: every block the same color as the tapped one disappears. */
+export function paintCell(match: Match, row: number, col: number): Match | null {
+  if (row < 0 || col < 0 || row >= SIZE || col >= SIZE) return null;
+  const target = match.board[row][col];
+  if (isEmpty(target) || target.t !== "b") return null;
+  const cells: Array<[number, number]> = [];
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+    const cell = match.board[r][c];
+    if (cell.t === "b" && cell.c === target.c) cells.push([r, c]);
+  }
+  return peelMany(match, cells);
 }
 
 export function refreshTray(match: Match): Match {
@@ -1546,6 +1723,9 @@ export function snapPlace(
   cells: CellPos[],
   row: number,
   col: number,
+  /** Exact (fractional) spot under the finger, so a near-miss snaps to the closest real fit. */
+  rowF = row,
+  colF = col,
 ): { r: number; c: number } | null {
   if (canPlace(board, cells, row, col)) return { r: row, c: col };
   let best: { r: number; c: number; d: number } | null = null;
@@ -1555,7 +1735,8 @@ export function snapPlace(
       const r = row + dr;
       const c = col + dc;
       if (!canPlace(board, cells, r, c)) continue;
-      const d = dr * dr + dc * dc;
+      const d = (r - rowF) ** 2 + (c - colF) ** 2;
+      if (d > 2.05) continue; // never more than one cell (diagonal included) from the finger
       if (!best || d < best.d) best = { r, c, d };
     }
   }
@@ -1603,9 +1784,9 @@ export function dailyNumber(now = new Date()): number {
 /** The daily puzzle's goal: a weekly rhythm of lines, score and combo days. */
 export function dailyGoal(day: number): Goal {
   const kind = day % 3;
-  if (kind === 0) return { type: "combo", value: 4 };
-  if (kind === 1) return { type: "lines", value: 8 };
-  return { type: "score", value: 1500 };
+  if (kind === 0) return { type: "combo", value: 6 };
+  if (kind === 1) return { type: "lines", value: 14 };
+  return { type: "score", value: 3200 };
 }
 
 /**
@@ -1617,8 +1798,8 @@ export function newDailyMatch(day: number): Match {
   const features = cloneFeatures(PLAIN_FEATURES);
   features.stones = true;
   const board = emptyBoard();
-  applyLayout(board, { fill: 0.18 + (day % 4) * 0.03, gems: 0 }, rng);
-  sprinkleStones(board, 2 + (day % 3), rng);
+  applyLayout(board, { fill: 0.3 + (day % 4) * 0.04, gems: 0 }, rng);
+  sprinkleStones(board, 4 + (day % 3), rng);
   const match = blankMatch(features);
   match.board = board;
   match.mode = "challenge";

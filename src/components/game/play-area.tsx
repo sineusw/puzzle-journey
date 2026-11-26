@@ -133,6 +133,13 @@ export function PlayArea() {
   const live = useRef({ board, tray, over, selected, targeting, visitorBusy });
   live.current = { board, tray, over, selected, targeting, visitorBusy };
 
+  // A new round (level, mode) gets one fresh measurement; then the size is locked again.
+  const refit = useRef<() => void>(() => {});
+  const runKey = useGame((s) => s.runStats.startedAt);
+  useEffect(() => {
+    refit.current();
+  }, [runKey]);
+
   // Size the board to the largest square that fits the space left for it.
   // Done in JS so every browser (Safari included) gets the same result.
   useLayoutEffect(() => {
@@ -148,12 +155,43 @@ export function PlayArea() {
       const h = row.clientHeight;
       const max = parseFloat(getComputedStyle(frame).getPropertyValue("--pj-board-max")) || 480;
       const size = Math.max(160, Math.floor(Math.min(w, h, max)));
+      // Only resize for real layout changes (rotation, window size), not for
+      // banners and pop-ups coming and going, so the board never "breathes".
+      // The size settles during the first moments after the screen opens (taking the
+      // smallest fit seen, so nothing overflows), then is locked: banners, pop-ups and
+      // toasts can never make the board grow and shrink mid-game.
+      // While settling, follow the latest measurement; once settled it is locked.
+      const prev = parseFloat(frame.style.getPropertyValue("--bs")) || 0;
+      if (prev && performance.now() > settleUntil) return;
       frame.style.setProperty("--bs", `${size}px`);
     };
+    let settleUntil = performance.now() + 1600;
+    refit.current = () => {
+      frame.style.removeProperty("--bs");
+      settleUntil = performance.now() + 1600;
+      fit();
+      // Measure again once the screen has finished animating in.
+      window.setTimeout(fit, 700);
+      window.setTimeout(fit, 1500);
+    };
     fit();
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+    const onWin = () => {
+      if (Math.abs(window.innerWidth - lastW) < 2 && Math.abs(window.innerHeight - lastH) < 40) return;
+      lastW = window.innerWidth;
+      lastH = window.innerHeight;
+      frame.style.removeProperty("--bs");
+      settleUntil = performance.now() + 1200;
+      fit();
+    };
+    window.addEventListener("resize", onWin);
     const ro = new ResizeObserver(fit);
     ro.observe(row);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onWin);
+    };
   }, []);
 
   // Board effects layer.
@@ -195,9 +233,9 @@ export function PlayArea() {
     const over = cx >= m.left - m.cell && cx <= m.right + m.cell && cy >= m.top - m.cell && cy <= m.bottom + m.cell;
     let next: Preview | null = null;
     if (over) {
-      const c = Math.round((cx - w / 2 - m.left) / m.stride);
-      const r = Math.round((cy - h / 2 - m.top) / m.stride);
-      const snap = snapPlace(b, piece.cells, r, c);
+      const cf = (cx - w / 2 - m.left) / m.stride;
+      const rf = (cy - h / 2 - m.top) / m.stride;
+      const snap = snapPlace(b, piece.cells, Math.round(rf), Math.round(cf), rf, cf);
       if (snap) {
         const key = `${snap.r},${snap.c}`;
         if (key === previewKey.current) return;
@@ -319,7 +357,8 @@ export function PlayArea() {
   const onPieceDown = useCallback((index: number, e: PE<HTMLButtonElement>) => {
     const { tray: t, over: o, visitorBusy: busy } = live.current;
     const piece = t[index];
-    if (o || busy || dropping.current || !piece || !gridRef.current) return;
+    // After a win the tray is locked: the pieces are part of the celebration.
+    if (o || busy || dropping.current || !piece || !gridRef.current || useGame.getState().match.won) return;
     const m = measure(gridRef.current);
     if (!m) return;
     e.preventDefault();
@@ -339,8 +378,9 @@ export function PlayArea() {
       // Touch: hold the piece above the finger, its bottom edge clear of the fingertip.
       liftMax: e.pointerType === "mouse" ? 0 : Math.max(64, m.cell * 1.9, (bounds(piece.cells).rows * m.stride) / 2 + m.cell * 0.8),
       t0: performance.now(),
-      gx: e.pointerType === "mouse" ? 1 : 1.12,
-      gy: e.pointerType === "mouse" ? 1 : 1.3,
+      // Close to 1:1 so the piece stays right where the finger puts it.
+      gx: e.pointerType === "mouse" ? 1 : 1.0,
+      gy: e.pointerType === "mouse" ? 1 : 1.08,
       m,
       moved: false,
       slot: e.currentTarget.getBoundingClientRect(),
@@ -541,22 +581,6 @@ const BoardGrid = memo(function BoardGrid({
 }) {
   const tintUrl = preview ? colorTextureUrl(preview.color) : null;
   const hide = useMemo(() => new Set(hidden), [hidden]);
-  // A row or column one block from full: its last gap glows so the player can see the clear.
-  const almost = useMemo(() => {
-    const out = new Set<string>();
-    const n = board.length;
-    for (let i = 0; i < n; i++) {
-      const rowGaps: number[] = [];
-      const colGaps: number[] = [];
-      for (let j = 0; j < n; j++) {
-        if (board[i]![j]!.t === "e") rowGaps.push(j);
-        if (board[j]![i]!.t === "e") colGaps.push(j);
-      }
-      if (rowGaps.length === 1) out.add(`${i}-${rowGaps[0]}`);
-      if (colGaps.length === 1) out.add(`${colGaps[0]}-${i}`);
-    }
-    return out;
-  }, [board]);
   return (
     <div ref={gridRef} className="pj-grid" data-testid="board" onClick={onClick}>
       {board.flatMap((row, r) =>
@@ -573,7 +597,7 @@ const BoardGrid = memo(function BoardGrid({
               target={targeting}
               guide={Boolean(guide?.has(key))}
               hidden={hide.has(key)}
-              almost={!preview && almost.has(key)}
+              almost={false}
             />
           );
         }),
@@ -716,7 +740,7 @@ const TraySlot = memo(function TraySlot({
       onPointerDown={(e) => onDown(index, e)}
       onClick={(e) => {
         if (e.detail !== 0 || !piece) return;
-        useGame.getState().selectPiece(index);
+        if (!useGame.getState().match.won) useGame.getState().selectPiece(index);
       }}
       aria-label={piece ? `Next block ${index + 1}. Drag onto the board, or tap to select then tap a cell.` : `Empty slot ${index + 1}`}
     >

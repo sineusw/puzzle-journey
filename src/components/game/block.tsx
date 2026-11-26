@@ -110,7 +110,7 @@ export function BlockFace({
       data-sp={kind}
     >
       {tex ? (
-        <span className="pj-tex" style={{ backgroundImage: `url(${tileUrl(tex, skin)})` }} />
+        <span className="pj-tex" data-skin={skin} style={{ backgroundImage: `url(${tileUrl(tex, skin)})` }} />
       ) : (
         <CubeMesh color={color} />
       )}

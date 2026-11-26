@@ -215,8 +215,12 @@ function tryAction(match: Match, action: VisitorAction): VisitorAction | null {
 
 function planMilo(match: Match, rng: () => number): VisitorAction | null {
   const board = match.board;
-  const froms = shuffled(plains(board), rng);
-  const tos = shuffled(empties(board), rng);
+  // Milo moves a loner block into the fullest gap, so his visit reads as a helpful nudge
+  // (often finishing a line) instead of a block vanishing at random.
+  const lineFill = (r: number, c: number) =>
+    board[r]!.filter((x) => !isEmpty(x)).length + board.reduce((n, row) => n + (isEmpty(row[c]!) ? 0 : 1), 0);
+  const froms = shuffled(plains(board), rng).sort((x, y) => lineFill(x[0], x[1]) - lineFill(y[0], y[1])).slice(0, 12);
+  const tos = shuffled(empties(board), rng).sort((x, y) => lineFill(y[0], y[1]) - lineFill(x[0], x[1])).slice(0, 16);
   for (const from of froms) {
     const cell = cloneCell(board[from[0]]![from[1]]!);
     for (const to of tos) {
@@ -385,6 +389,6 @@ export function pickMood(level: number, moves: number, rng: () => number): Visit
 }
 
 export function nextVisitAt(moves: number, rng: () => number): number {
-  const gap = 8 + Math.floor(rng() * 5);
+  const gap = 13 + Math.floor(rng() * 6);
   return moves + gap;
 }

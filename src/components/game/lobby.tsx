@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Crown, Lock, Palette, Play, Star, Trophy } from "lucide-react";
+import { HooksRow } from "./hooks-ui";
+import { openPlayMode, type PlayMode } from "./overlays";
+import { Lock, Palette, Play, Star } from "lucide-react";
 import { dailyNumber } from "@/lib/game/engine";
 import { ADVENTURE, FEATURE_AT, worldOf, type FeatureId } from "@/lib/game/content";
 import { normalizeLive } from "@/lib/game/liveops";
 import { CHEST_SIZE, useGame } from "@/lib/game/store";
-import type { BoardRow } from "@/lib/game/ranked-service";
 import { GameIcon } from "./icons";
 
 const FLOATERS = ["#ff5d73", "#ffd23f", "#3ddc97", "#4cc9f0", "#b388ff", "#ff9f43"];
@@ -18,19 +19,10 @@ export function LobbyScreen() {
   const setPanel = useGame((s) => s.setPanel);
   const startDaily = useGame((s) => s.startDaily);
   const [now, setNow] = useState(() => Date.now());
-  const [top, setTop] = useState<BoardRow[] | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
-    let live = true;
-    import("@/lib/game/ranked-api")
-      .then(({ rankedBoard }) => rankedBoard())
-      .then((r) => live && setTop(r.available ? r.rows.slice(0, 3) : []))
-      .catch(() => live && setTop([]));
-    return () => {
-      live = false;
-      window.clearInterval(id);
-    };
+    return () => window.clearInterval(id);
   }, []);
 
   const unlocked = profile.adventure.unlocked;
@@ -62,8 +54,10 @@ export function LobbyScreen() {
   const nextLocked = tiles
     .filter((t) => t.f !== null && reached < FEATURE_AT[t.f])
     .sort((a, b) => FEATURE_AT[a.f!] - FEATURE_AT[b.f!])[0];
-  const shown = nextLocked ? [...open, nextLocked] : open;
-  const showBoard = reached >= 4;
+  // Spin lives in the big hooks row and Challenges in the bottom nav once unlocked: don't show them twice.
+  const dupes = new Set<string>([...(reached >= 3 ? ["Spin"] : []), ...(reached >= FEATURE_AT.challenges ? ["Challenges"] : [])]);
+  const visible = open.filter((t) => !dupes.has(t.label));
+  const shown = nextLocked ? [...visible, nextLocked] : visible;
 
   return (
     <div className="pj-lobby" data-testid="lobby">
@@ -94,10 +88,13 @@ export function LobbyScreen() {
         </button>
         <ChestBar />
         <div className="pj-lobby-chips">
-          {profile.levelStreak >= 1 ? <span>🔥 {profile.levelStreak} win streak</span> : <span>🔥 Win 2 in a row for a free booster</span>}
+          {profile.levelStreak >= 1 ? <span>🔥 {profile.levelStreak} win streak</span> : <span>🔥 Win 3 in a row for a free power block</span>}
           {profile.daily.streak >= 1 ? <span>📅 Day {profile.daily.streak}</span> : null}
         </div>
       </div>
+
+      <ModesRow reached={reached} />
+      {reached >= 3 ? <HooksRow /> : null}
 
       <div className="pj-lobby-tiles" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)`, ["--n" as string]: shown.length }}>
         {shown.map((t) => {
@@ -117,26 +114,6 @@ export function LobbyScreen() {
         })}
       </div>
 
-      {showBoard ? <button type="button" className="pj-lobby-ranks" onClick={() => setTab("ranks")}>
-        <div className="pj-lobby-ranks-head">
-          <Trophy className="size-5" />
-          <b>Leaderboard</b>
-          <span>See all ›</span>
-        </div>
-        {top && top.length ? (
-          <ol>
-            {top.map((r) => (
-              <li key={r.rank} className={r.me ? "is-me" : ""}>
-                <span className={`pj-lobby-medal m${r.rank}`}>{r.rank === 1 ? <Crown className="size-4" /> : r.rank}</span>
-                <span className="pj-lobby-name">{r.name}</span>
-                <strong className="tabular-nums">{r.score.toLocaleString("en-US")}</strong>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>Your best score: <b className="tabular-nums">{profile.highScore.toLocaleString("en-US")}</b> · Play a ranked run to get on the board</p>
-        )}
-      </button> : null}
     </div>
   );
 }
@@ -169,6 +146,91 @@ export function ChestBar() {
 }
 
 /** Share a run: the phone's share sheet, or copy to the clipboard. */
+/** A 1080×1350 score card image (logo, score, island, combo) to attach to the share sheet. */
+export async function scoreCard(score: number, combo: number, levelId: number | null): Promise<File | null> {
+  try {
+    const W = 1080, H = 1350;
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext("2d");
+    if (!g) return null;
+    const bgGrad = g.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, "#14524a");
+    bgGrad.addColorStop(0.55, "#0f2f45");
+    bgGrad.addColorStop(1, "#0b1a2e");
+    g.fillStyle = bgGrad;
+    g.fillRect(0, 0, W, H);
+    // light rays
+    g.save();
+    g.translate(W / 2, 430);
+    g.fillStyle = "rgba(255,236,170,0.07)";
+    for (let i = 0; i < 18; i++) {
+      g.rotate((Math.PI * 2) / 18);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(1400, -110);
+      g.lineTo(1400, 110);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    // a few candy blocks
+    const cols = ["#ff5d73", "#ffc93c", "#4fd06a", "#4f9dff", "#b86bff", "#ff9a3c"];
+    for (let i = 0; i < 14; i++) {
+      const x = (i * 173) % W, y = 820 + ((i * 97) % 480), s = 46 + (i % 3) * 18;
+      g.save();
+      g.translate(x, y);
+      g.rotate(((i % 5) - 2) * 0.2);
+      g.globalAlpha = 0.35;
+      g.fillStyle = cols[i % cols.length]!;
+      g.beginPath();
+      g.roundRect(-s / 2, -s / 2, s, s, 10);
+      g.fill();
+      g.restore();
+    }
+    g.globalAlpha = 1;
+    const logo = new Image();
+    logo.src = "/art/logo-hd.webp";
+    await logo.decode().catch(() => undefined);
+    if (logo.naturalWidth) {
+      const lw = 820, lh = (logo.naturalHeight / logo.naturalWidth) * lw;
+      g.drawImage(logo, (W - lw) / 2, 90, lw, lh);
+    }
+    g.textAlign = "center";
+    const font = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim() || "system-ui";
+    g.fillStyle = "rgba(255,255,255,0.75)";
+    g.font = `800 52px ${font}`;
+    g.fillText(levelId ? `ISLAND ${levelId}` : "MY SCORE", W / 2, 700);
+    g.lineJoin = "round";
+    g.lineWidth = 22;
+    g.strokeStyle = "#5a3415";
+    g.font = `900 210px ${font}`;
+    g.strokeText(score.toLocaleString("en-US"), W / 2, 905);
+    g.fillStyle = "#ffd45a";
+    g.fillText(score.toLocaleString("en-US"), W / 2, 905);
+    if (combo >= 3) {
+      g.fillStyle = "#ff8a3c";
+      g.beginPath();
+      g.roundRect(W / 2 - 190, 960, 380, 92, 46);
+      g.fill();
+      g.fillStyle = "#fff";
+      g.font = `900 56px ${font}`;
+      g.fillText(`COMBO x${combo}`, W / 2, 1025);
+    }
+    g.fillStyle = "#fff";
+    g.font = `900 66px ${font}`;
+    g.fillText("Can you beat me? 🌴", W / 2, 1170);
+    g.fillStyle = "rgba(255,255,255,0.6)";
+    g.font = `700 38px ${font}`;
+    g.fillText("Block Journey · Island Puzzle", W / 2, 1255);
+    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, "image/png"));
+    return blob ? new File([blob], "block-journey-score.png", { type: "image/png" }) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function shareRun(score: number, combo: number, levelId: number | null): Promise<void> {
   const url = typeof location !== "undefined" ? location.origin : "";
   const brag = combo >= 3 ? ` with a x${combo} combo` : "";
@@ -176,6 +238,12 @@ export async function shareRun(score: number, combo: number, levelId: number | n
   const text = `I scored ${score.toLocaleString("en-US")}${brag}${where} in Block Journey 🌴 Can you beat me?`;
   try {
     if (navigator.share) {
+      // Attach the score card image where the device supports sharing files.
+      const card = await scoreCard(score, combo, levelId);
+      if (card && navigator.canShare?.({ files: [card] })) {
+        await navigator.share({ title: "Block Journey", text: `${text} ${url}`, files: [card] });
+        return;
+      }
       await navigator.share({ title: "Block Journey", text, url });
       return;
     }
@@ -207,4 +275,35 @@ export async function shareDaily(day: number, moves: number, stars: number, stre
   } catch {
     // Share sheet closed.
   }
+}
+
+/** The three ways to play, always visible on the home screen (locked ones say when they open). */
+function ModesRow({ reached }: { reached: number }) {
+  const modes: Array<{ id: PlayMode; icon: string; name: string; sub: string; at: number }> = [
+    { id: "adventure", icon: "🏝️", name: "Adventure", sub: "Island map", at: 0 },
+    { id: "classic", icon: "🧩", name: "Classic", sub: "500 pure levels", at: FEATURE_AT.classic },
+    { id: "sandbox", icon: "♾️", name: "Sandbox", sub: "Endless", at: FEATURE_AT.sandbox },
+  ];
+  return (
+    <div className="pj-modes-row">
+      <div className="pj-modes-cards">
+        {modes.map((m) => {
+          const locked = reached < m.at;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              className={`pj-modecard is-${m.id}${locked ? " is-locked" : ""}`}
+              onClick={() => (locked ? undefined : openPlayMode(m.id))}
+              aria-disabled={locked}
+            >
+              <span className="pj-modecard-ico">{m.icon}</span>
+              <b>{m.name}</b>
+              <small>{locked ? `🔒 Island ${m.at}` : m.sub}</small>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
